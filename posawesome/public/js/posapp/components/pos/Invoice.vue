@@ -1115,14 +1115,90 @@ export default {
       evntBus.$emit("set_pos_coupons", []);
       this.posa_coupons = [];
       this.return_doc = "";
+
       const doc = this.get_invoice_doc();
-      if (doc.name) {
+
+      // Check if doc has name or items
+      if (doc.name || doc.items.length) {
         old_invoice = this.update_invoice(doc);
-      } else {
-        if (doc.items.length) {
-          old_invoice = this.update_invoice(doc);
+
+        // ✅ Only show dialog if docstatus is 0 (Draft)
+        if (old_invoice && old_invoice.docstatus === 0) {
+          const token = old_invoice.name.slice(-5);
+          const posting_date = frappe.datetime.str_to_user(old_invoice.posting_date);
+          const posting_time = old_invoice.posting_time?.split('.')[0] || frappe.datetime.now_time();
+
+          const d = new frappe.ui.Dialog({
+            title: 'Token',
+            fields: [
+              {
+                fieldname: 'token',
+                fieldtype: 'HTML',
+                options: `<div style="text-align:center;font-size:48px;padding:1rem 0;"><b>${token}</b></div>`
+              }
+            ],
+            primary_action_label: 'Print',
+            primary_action() {
+              const print_window = window.open('', '', 'height=600,width=400');
+
+              print_window.document.write(`
+                <html>
+                  <head>
+                    <title>Token Print</title>
+                    <style>
+                      @media screen {
+                        body {
+                          width: 4in;
+                          padding: 0.25in;
+                          min-height: 8in;
+                          font-family: Arial, sans-serif;
+                          text-align: center;
+                          margin: 0 auto;
+                        }
+                      }
+                      @media print {
+                        body {
+                          width: 4in;
+                          padding: 0.25in;
+                          min-height: 8in;
+                          font-family: Arial, sans-serif;
+                          text-align: center;
+                          margin: 0 auto;
+                        }
+                      }
+                      .token {
+                        font-size: 60px;
+                        font-weight: bold;
+                        margin: 2rem 0;
+                      }
+                      .meta {
+                        font-size: 16px;
+                        margin-bottom: 1.5rem;
+                      }
+                    </style>
+                  </head>
+                  <body>
+                    <div class="meta">
+                      <p><b>Date:</b> ${posting_date}</p>
+                      <p><b>Time:</b> ${posting_time}</p>
+                    </div>
+                    <div class="token">${token}</div>
+                  </body>
+                </html>
+              `);
+
+              print_window.document.close();
+              print_window.focus();
+              print_window.print();
+              print_window.close();
+            }
+          });
+
+          d.show();
         }
       }
+
+      // Continue resetting form if it's not a return
       if (!data.name && !data.is_return) {
         this.items = [];
         this.customer = this.pos_profile.customer;
@@ -1144,31 +1220,26 @@ export default {
         this.update_items_details(this.items);
         this.posa_offers = data.posa_offers || [];
         this.items.forEach((item) => {
-          if (!item.posa_row_id) {
-            item.posa_row_id = this.makeid(20);
-          }
-          if (item.batch_no) {
-            this.set_batch_qty(item, item.batch_no);
-          }
+          if (!item.posa_row_id) item.posa_row_id = this.makeid(20);
+          if (item.batch_no) this.set_batch_qty(item, item.batch_no);
         });
         this.customer = data.customer;
         this.posting_date = data.posting_date || frappe.datetime.nowdate();
         this.discount_amount = data.discount_amount;
-        this.additional_discount_percentage =
-          data.additional_discount_percentage;
+        this.additional_discount_percentage = data.additional_discount_percentage;
+
         this.items.forEach((item) => {
           if (item.serial_no) {
             item.serial_no_selected = [];
             const serial_list = item.serial_no.split("\n");
             serial_list.forEach((element) => {
-              if (element.length) {
-                item.serial_no_selected.push(element);
-              }
+              if (element.length) item.serial_no_selected.push(element);
             });
             item.serial_no_selected_count = item.serial_no_selected.length;
           }
         });
       }
+
       return old_invoice;
     },
 
@@ -1401,9 +1472,7 @@ export default {
       const vm = this;
       frappe.call({
         method: "posawesome.posawesome.api.posapp.update_invoice",
-        args: {
-          data: doc,
-        },
+        args: { data: doc },
         async: false,
         callback: function (r) {
           if (r.message) {
