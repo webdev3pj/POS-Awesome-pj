@@ -1122,24 +1122,28 @@ export default {
       if (doc.name || doc.items.length) {
         old_invoice = this.update_invoice(doc);
 
-        // ✅ Only show dialog if docstatus is 0 (Draft)
-        if (old_invoice && old_invoice.docstatus === 0) {
+        if (
+          old_invoice &&
+          old_invoice.docstatus === 0 &&
+          this.pos_profile.custom_have_token === 1
+        ) {
           const token = old_invoice.name.slice(-5);
           const posting_date = frappe.datetime.str_to_user(old_invoice.posting_date);
-          const posting_time = old_invoice.posting_time?.split('.')[0] || frappe.datetime.now_time();
+          const posting_time =
+            old_invoice.posting_time?.split(".")[0] || frappe.datetime.now_time();
 
           const d = new frappe.ui.Dialog({
-            title: 'Token',
+            title: "Token",
             fields: [
               {
-                fieldname: 'token',
-                fieldtype: 'HTML',
-                options: `<div style="text-align:center;font-size:48px;padding:1rem 0;"><b>${token}</b></div>`
-              }
+                fieldname: "token",
+                fieldtype: "HTML",
+                options: `<div style="text-align:center;font-size:48px;padding:1rem 0;"><b>${token}</b></div>`,
+              },
             ],
-            primary_action_label: 'Print',
+            primary_action_label: "Print",
             primary_action() {
-              const print_window = window.open('', '', 'height=600,width=400');
+              const print_window = window.open("", "", "height=600,width=400");
 
               print_window.document.write(`
                 <html>
@@ -1191,7 +1195,7 @@ export default {
               print_window.focus();
               print_window.print();
               print_window.close();
-            }
+            },
           });
 
           d.show();
