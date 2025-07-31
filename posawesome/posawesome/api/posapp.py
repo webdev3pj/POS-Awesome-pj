@@ -495,6 +495,7 @@ def update_invoice_from_order(data):
 @frappe.whitelist()
 def update_invoice(data):
     data = json.loads(data)
+
     if data.get("name"):
         invoice_doc = frappe.get_doc("Sales Invoice", data.get("name"))
         invoice_doc.update(data)
@@ -514,14 +515,6 @@ def update_invoice(data):
 
         if len(invoice_doc.payments) == 0:
             invoice_doc.payments = ref_doc.payments
-
-        invoice_doc.paid_amount = (
-            invoice_doc.rounded_total or invoice_doc.grand_total or invoice_doc.total
-        )
-
-        for payment in invoice_doc.payments:
-            if payment.default:
-                payment.amount = invoice_doc.paid_amount
 
         # ✅ Match return items with original invoice items
         for return_item in invoice_doc.items:
@@ -579,8 +572,26 @@ def update_invoice(data):
     ):
         invoice_doc.set_posting_time = 1
 
+    # ✅ Enforce payment/reset again just before saving
+    if invoice_doc.is_return:
+        invoice_doc.paid_amount = 0.0
+        invoice_doc.write_off_amount = 0.0
+        for payment in invoice_doc.payments:
+            payment.amount = 0.0
+
+    # 🔍 Debug logs
+    print("====== RETURN INVOICE DEBUG ======")
+    print("is_return:", invoice_doc.is_return)
+    print("paid_amount:", invoice_doc.paid_amount)
+    print("write_off_amount:", invoice_doc.write_off_amount)
+    print("grand_total:", invoice_doc.grand_total)
+    print("total:", invoice_doc.total)
+    print("payments:", [p.amount for p in invoice_doc.payments])
+    print("==================================")
+
     invoice_doc.save()
     return invoice_doc
+
 
 
 

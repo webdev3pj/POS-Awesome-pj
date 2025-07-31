@@ -93,6 +93,9 @@ after_uninstall = "posawesome.uninstall.after_uninstall"
 # ---------------
 # Hook on document methods and events
 
+override_doctype_class = {
+    "Sales Invoice": "posawesome.overrides.custom_sales_invoice.SalesInvoice"
+}
 doc_events = {
     "Sales Invoice": {
         "validate": "posawesome.posawesome.api.invoice.validate",
