@@ -135,22 +135,28 @@ export default {
         const return_doc = this.selected[0];
         const invoice_doc = {};
         const items = [];
+
         return_doc.items.forEach((item) => {
           const new_item = { ...item };
-          new_item.qty = item.qty * -1;
-          new_item.stock_qty = item.stock_qty * -1;
-          new_item.amount = item.amount * -1;
+
+          new_item.qty = item.qty;
+          new_item.stock_qty = item.stock_qty;
+          new_item.amount = item.amount;
+
           items.push(new_item);
         });
+
         invoice_doc.items = items;
         invoice_doc.is_return = 1;
         invoice_doc.return_against = return_doc.name;
         invoice_doc.customer = return_doc.customer;
+
         const data = { invoice_doc, return_doc };
         evntBus.$emit('load_return_invoice', data);
         this.invoicesDialog = false;
       }
     },
+
   },
   created: function () {
     evntBus.$on('open_returns', (data) => {

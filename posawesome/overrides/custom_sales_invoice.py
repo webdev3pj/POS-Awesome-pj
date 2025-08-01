@@ -1,3 +1,5 @@
+# Custom override of Sales Invoice to bypass POS validation error on returns
+# ERPNext core validation (validate_pos) throws error for Paid + Write-off > Grand Total (even for returns)
 from erpnext.accounts.doctype.sales_invoice.sales_invoice import SalesInvoice as BaseSalesInvoice
 from frappe.utils import flt
 from frappe import _
