@@ -517,7 +517,6 @@ def update_invoice(data):
         if len(invoice_doc.payments) == 0:
             invoice_doc.payments = ref_doc.payments
 
-        # ✅ Match return items with original invoice items
         for return_item in invoice_doc.items:
             match_found = False
             for original_item in ref_doc.items:
@@ -573,25 +572,21 @@ def update_invoice(data):
     ):
         invoice_doc.set_posting_time = 1
 
-    # ✅ Enforce payment/reset again just before saving
+    # Enforce payment reset
     if invoice_doc.is_return:
         invoice_doc.paid_amount = 0.0
         invoice_doc.write_off_amount = 0.0
         for payment in invoice_doc.payments:
             payment.amount = 0.0
 
-    # 🔍 Debug logs
-    print("====== RETURN INVOICE DEBUG ======")
-    print("is_return:", invoice_doc.is_return)
-    print("paid_amount:", invoice_doc.paid_amount)
-    print("write_off_amount:", invoice_doc.write_off_amount)
-    print("grand_total:", invoice_doc.grand_total)
-    print("total:", invoice_doc.total)
-    print("payments:", [p.amount for p in invoice_doc.payments])
-    print("==================================")
+        # ✅ Show message (not throw) if no payment selected
+        has_payment = any(flt(p.amount) > 0 for p in invoice_doc.payments)
+        if not has_payment:
+            frappe.msgprint(_("Please select a Mode of Payment before submitting the document."))
 
     invoice_doc.save()
     return invoice_doc
+
 
 
 
