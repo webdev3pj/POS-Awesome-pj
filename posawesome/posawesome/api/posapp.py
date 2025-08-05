@@ -451,6 +451,14 @@ def get_sales_person_names():
     )
     return sales_persons
 
+@frappe.whitelist()
+def get_sales_partner_names():
+    sales_partners = frappe.get_list(
+        "Sales Partner",
+        fields=["name", "partner_name"],
+        limit_page_length=100000,
+    )
+    return sales_partners
 
 def add_taxes_from_tax_template(item, parent_doc):
     accounts_settings = frappe.get_cached_doc("Accounts Settings")
