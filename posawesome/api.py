@@ -9,7 +9,7 @@ def pay_commission(sales_invoice):
         frappe.throw(_("Sales Invoice is required."))
 
     # Update the commission_paid check field
-    frappe.db.set_value("Sales Invoice", sales_invoice, "custom_commisstion_paid", 1)
+    frappe.db.set_value("Sales Invoice", sales_invoice, "custom_commission_paid", 1)
     frappe.db.commit()
 
 @frappe.whitelist()

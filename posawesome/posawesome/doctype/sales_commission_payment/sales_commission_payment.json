@@ -1,6 +1,7 @@
 {
  "actions": [],
  "allow_rename": 1,
+ "autoname": "format:SCP-{DD}-{MM}-{YYYY}-{####}",
  "creation": "2025-08-04 15:10:14.047579",
  "default_view": "List",
  "doctype": "DocType",
@@ -39,10 +40,11 @@
  ],
  "index_web_pages_for_search": 1,
  "links": [],
- "modified": "2025-08-04 15:25:48.953724",
+ "modified": "2025-08-06 11:35:30.451377",
  "modified_by": "Administrator",
  "module": "POSAwesome",
  "name": "Sales Commission Payment",
+ "naming_rule": "Expression",
  "owner": "Administrator",
  "permissions": [
   {
@@ -60,5 +62,6 @@
  ],
  "sort_field": "modified",
  "sort_order": "DESC",
- "states": []
+ "states": [],
+ "track_changes": 1
 }

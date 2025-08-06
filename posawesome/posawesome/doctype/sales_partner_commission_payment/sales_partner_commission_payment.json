@@ -1,6 +1,7 @@
 {
  "actions": [],
  "allow_rename": 1,
+ "autoname": "format:SPCP-{DD}-{MM}-{YYYY}-{####}",
  "creation": "2025-08-05 11:49:17.435603",
  "default_view": "List",
  "doctype": "DocType",
@@ -39,10 +40,11 @@
  ],
  "index_web_pages_for_search": 1,
  "links": [],
- "modified": "2025-08-05 12:03:47.980553",
+ "modified": "2025-08-06 11:34:27.692598",
  "modified_by": "Administrator",
  "module": "POSAwesome",
  "name": "Sales Partner Commission Payment",
+ "naming_rule": "Expression",
  "owner": "Administrator",
  "permissions": [
   {
@@ -60,5 +62,6 @@
  ],
  "sort_field": "modified",
  "sort_order": "DESC",
- "states": []
+ "states": [],
+ "track_changes": 1
 }
