@@ -1,0 +1,48 @@
+{
+ "charts": [],
+ "content": "[{\"id\":\"lU9NipQWyV\",\"type\":\"header\",\"data\":{\"text\":\"<span class=\\\"h4\\\">Pages</span>\",\"col\":12}},{\"id\":\"llDoOLlb48\",\"type\":\"card\",\"data\":{\"card_name\":\"Commission\",\"col\":4}}]",
+ "creation": "2025-08-07 12:42:45.893772",
+ "custom_blocks": [],
+ "docstatus": 0,
+ "doctype": "Workspace",
+ "for_user": "",
+ "hide_custom": 0,
+ "icon": "table_2",
+ "idx": 0,
+ "is_hidden": 0,
+ "label": "Pages",
+ "links": [
+  {
+   "hidden": 0,
+   "is_query_report": 0,
+   "label": "Commission",
+   "link_count": 1,
+   "link_type": "DocType",
+   "onboard": 0,
+   "type": "Card Break"
+  },
+  {
+   "hidden": 0,
+   "is_query_report": 0,
+   "label": "Sales Person",
+   "link_count": 0,
+   "link_to": "sales-person-commiss",
+   "link_type": "Page",
+   "onboard": 0,
+   "type": "Link"
+  }
+ ],
+ "modified": "2025-08-07 14:20:43.830822",
+ "modified_by": "Administrator",
+ "module": "POSAwesome",
+ "name": "Pages",
+ "number_cards": [],
+ "owner": "Administrator",
+ "parent_page": "",
+ "public": 1,
+ "quick_lists": [],
+ "roles": [],
+ "sequence_id": 43.0,
+ "shortcuts": [],
+ "title": "Pages"
+}
