@@ -74,56 +74,76 @@ frappe.pages['sales-person-commiss'].on_page_load = function (wrapper) {
 						...row,
 						commission: typeof row.commission === "object" ? row.commission.parsedValue || row.commission.source : row.commission
 					}));
-
+	
 					result_container.empty();
-
+	
+					// Build table header dynamically
+					let headerHTML = `
+						<tr>
+							<th>Sr No.</th>
+							<th>
+								<input type="checkbox" id="select_all_rows" title="Select All" />
+								<label for="select_all_rows" class="ml-1">Select</label>
+							</th>
+							<th>Sales Person</th>
+							<th>Commission</th>
+							<th>Mode of Payment</th>
+							<th>Reference Sales Invoice</th>
+					`;
+	
+					if (payment_status === "Paid") {
+						headerHTML += `
+							<th>BPO Name</th>
+							<th>BPO Date/Time</th>
+						`;
+					}
+	
+					headerHTML += `</tr>`;
+	
 					const table = $(`
 						<table class="table table-bordered">
 							<thead class="thead-light">
-								<tr>
-									<th>Sr No.</th>
-									<th>
-										<input type="checkbox" id="select_all_rows" title="Select All" />
-										<label for="select_all_rows" class="ml-1">Select</label>
-									</th>
-									<th>Sales Person</th>
-									<th>Commission</th>
-									<th>Mode of Payment</th>
-									<th>Reference Sales Invoice</th>
-								</tr>
+								${headerHTML}
 							</thead>
 							<tbody></tbody>
 						</table>
 					`).appendTo(result_container);
-
+	
 					const tbody = table.find("tbody");
-
+	
 					all_commission_data.forEach((row, index) => {
 						const sr_no = index + 1;
-						const tr = $('<tr></tr>');
-						tr.append(`<td>${sr_no}</td>`);
-						tr.append(`<td><input type="checkbox" class="select-row" data-index="${index}"></td>`);
-						tr.append(`<td>${row.sales_person || ''}</td>`);
-						tr.append(`<td>${row.commission || ''}</td>`);
-						tr.append(`<td>${row.mode_of_payment || ''}</td>`);
-						tr.append(`<td>${row.reference_sales_invoice || ''}</td>`);
-						tbody.append(tr);
+						let trHTML = `
+							<td>${sr_no}</td>
+							<td><input type="checkbox" class="select-row" data-index="${index}"></td>
+							<td>${row.sales_person || ''}</td>
+							<td>${row.commission || ''}</td>
+							<td>${row.mode_of_payment || ''}</td>
+							<td>${row.reference_sales_invoice || ''}</td>
+						`;
+	
+						if (payment_status === "Paid") {
+							trHTML += `
+								<td>${row.bpo_name || ''}</td>
+								<td>${row.bpo_datetime || ''}</td>
+							`;
+						}
+	
+						tbody.append(`<tr>${trHTML}</tr>`);
 					});
-
-					// Handle "Select All" checkbox
+	
+					// Handle "Select All"
 					$('#select_all_rows').on('change', function () {
 						const checked = $(this).is(':checked');
 						$('.select-row').prop('checked', checked);
 					});
-
-					// Sync "Select All" if any individual checkbox is changed
+	
 					result_container.on('change', '.select-row', function () {
 						const total = $('.select-row').length;
 						const checked = $('.select-row:checked').length;
 						$('#select_all_rows').prop('checked', total === checked);
 					});
-
-					// Bulk Payout Button (only if status is Pending)
+	
 					if (payment_status === "Pending") {
 						const bulkButtonRow = $(`
 							<div class="text-right mt-3">
@@ -133,20 +153,20 @@ frappe.pages['sales-person-commiss'].on_page_load = function (wrapper) {
 							</div>
 						`);
 						result_container.append(bulkButtonRow);
-
+	
 						$('#bulk_payout_btn').on('click', function () {
 							const selectedIndexes = $('.select-row:checked').map(function () {
 								return $(this).data('index');
 							}).get();
-
+	
 							if (selectedIndexes.length === 0) {
 								frappe.msgprint(__('Please select at least one record to proceed with bulk payout.'));
 								return;
 							}
-
+	
 							const selectedData = selectedIndexes.map(index => all_commission_data[index]);
 							window.selected_commission_rows = selectedData;
-
+	
 							frappe.confirm(
 								__('Are you sure you want to create a Bulk Payout for the selected records?'),
 								function () {
@@ -180,6 +200,7 @@ frappe.pages['sales-person-commiss'].on_page_load = function (wrapper) {
 			}
 		});
 	}
+	
 
 	// Search button
 	$('#search_btn').on('click', function () {

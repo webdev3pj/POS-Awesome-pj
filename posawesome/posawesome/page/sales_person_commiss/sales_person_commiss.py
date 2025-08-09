@@ -16,16 +16,41 @@ def get_commission_data(sales_person=None, payment_status="Pending"):
         order_by="creation desc"
     )
 
-    # Filter by custom_commission_paid in linked Sales Invoice
     filtered_data = []
     for row in data:
         si = frappe.get_doc("Sales Invoice", row["reference_sales_invoice"])
         if (payment_status == "Pending" and not si.custom_commission_paid) or \
            (payment_status == "Paid" and si.custom_commission_paid):
             row["commission"] = float(row["commission"])
+
+            # For Paid, find the BPO record containing this invoice
+            if payment_status == "Paid":
+                # First find the parent BPO linked to this invoice
+                bpo = frappe.db.sql("""
+                    SELECT parent
+                    FROM `tabSales Person Commission Bulk Pay Out Items`
+                    WHERE reference_sales_invoice = %s
+                    LIMIT 1
+                """, row["reference_sales_invoice"], as_dict=True)
+
+                if bpo:
+                    row["bpo_name"] = bpo[0].parent
+                    # Now fetch posting_datetime from the parent doctype
+                    row["bpo_datetime"] = frappe.db.get_value(
+                        "Sales Person Commission Bulk Pay Out",
+                        bpo[0].parent,
+                        "posting_datetime"
+                    )
+                else:
+                    row["bpo_name"] = ""
+                    row["bpo_datetime"] = ""
+
+
             filtered_data.append(row)
 
     return filtered_data
+
+
 
 
 
