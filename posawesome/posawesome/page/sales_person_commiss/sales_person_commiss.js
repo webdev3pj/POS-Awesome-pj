@@ -7,6 +7,9 @@ frappe.pages['sales-person-commiss'].on_page_load = function (wrapper) {
 
 	$(page.body).addClass("page-layout-main-section");
 
+	// ✅ Check if user has Sales Commission Admin role
+	const is_admin = frappe.user_roles.includes("Sales Commission Admin");
+
 	// Add filters
 	const filters = [
 		{
@@ -14,7 +17,7 @@ frappe.pages['sales-person-commiss'].on_page_load = function (wrapper) {
 			label: __("Sales Person"),
 			fieldtype: "Link",
 			options: "Sales Person",
-			reqd: 1,
+			reqd: is_admin ? 0 : 1,   // required only if NOT admin
 		},
 		{
 			fieldname: "payment_status",
@@ -207,7 +210,8 @@ frappe.pages['sales-person-commiss'].on_page_load = function (wrapper) {
 		const sales_person = page.sales_person.get_value();
 		const payment_status = page.payment_status.get_value();
 
-		if (!sales_person) {
+		// ✅ Only enforce required if NOT admin
+		if (!is_admin && !sales_person) {
 			frappe.msgprint({
 				title: __('Missing Required Field'),
 				message: __('Please select a Sales Person to search.'),

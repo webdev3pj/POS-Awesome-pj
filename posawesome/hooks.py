@@ -269,7 +269,9 @@ fixtures = [
         "filters": [["name", "in", ("Sales Invoice-posa_pos_opening_shift-no_copy")]],
     },
     {
-        "doctype": "Role",
-        "filters": [["role_name", "=", "Sales Commission"]],
+    "doctype": "Role",
+    "filters": [
+        ["role_name", "in", ["Sales Commission", "Sales Commission Admin"]]
+        ],
     },
 ]
