@@ -1,0 +1,23 @@
+{
+ "content": null,
+ "creation": "2025-08-21 12:05:56.508918",
+ "docstatus": 0,
+ "doctype": "Page",
+ "idx": 0,
+ "modified": "2025-08-21 12:06:13.526660",
+ "modified_by": "Administrator",
+ "module": "POSAwesome",
+ "name": "sales-partner-commis",
+ "owner": "Administrator",
+ "page_name": "sales-partner-commis",
+ "roles": [
+  {
+   "role": "Sales Commission"
+  }
+ ],
+ "script": null,
+ "standard": "Yes",
+ "style": null,
+ "system_page": 0,
+ "title": "Sales Partner Commission"
+}

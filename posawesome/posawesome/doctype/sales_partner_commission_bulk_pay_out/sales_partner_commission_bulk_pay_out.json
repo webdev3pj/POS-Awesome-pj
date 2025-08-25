@@ -1,0 +1,105 @@
+{
+ "actions": [],
+ "allow_rename": 1,
+ "autoname": "format:SPAR-BPO-{DD}-{MM}-{YYYY}-{####}",
+ "creation": "2025-08-21 11:28:05.247787",
+ "default_view": "List",
+ "doctype": "DocType",
+ "editable_grid": 1,
+ "engine": "InnoDB",
+ "field_order": [
+  "sales_partner",
+  "column_break_3bewg",
+  "mode_of_payment",
+  "posting_datetime",
+  "section_break_15rbm",
+  "items",
+  "total_commission",
+  "amended_from"
+ ],
+ "fields": [
+  {
+   "fieldname": "amended_from",
+   "fieldtype": "Link",
+   "label": "Amended From",
+   "no_copy": 1,
+   "options": "Sales Partner Commission Bulk Pay Out",
+   "print_hide": 1,
+   "read_only": 1,
+   "search_index": 1
+  },
+  {
+   "fieldname": "column_break_3bewg",
+   "fieldtype": "Column Break"
+  },
+  {
+   "fieldname": "mode_of_payment",
+   "fieldtype": "Link",
+   "label": "Mode Of Payment",
+   "options": "Mode of Payment"
+  },
+  {
+   "fieldname": "posting_datetime",
+   "fieldtype": "Datetime",
+   "label": "Posting Date/Time"
+  },
+  {
+   "fieldname": "section_break_15rbm",
+   "fieldtype": "Section Break"
+  },
+  {
+   "fieldname": "items",
+   "fieldtype": "Table",
+   "label": "Items",
+   "options": "Sales Partner Commission Bulk Pay Out Items"
+  },
+  {
+   "fieldname": "total_commission",
+   "fieldtype": "Currency",
+   "label": "Total Commission"
+  },
+  {
+   "fieldname": "amended_from",
+   "fieldtype": "Link",
+   "label": "Amended From",
+   "no_copy": 1,
+   "options": "Sales Partner Commission Bulk Pay Out",
+   "print_hide": 1,
+   "read_only": 1,
+   "search_index": 1
+  },
+  {
+   "fieldname": "sales_partner",
+   "fieldtype": "Link",
+   "label": "Sales Partner",
+   "options": "Sales Partner"
+  }
+ ],
+ "index_web_pages_for_search": 1,
+ "is_submittable": 1,
+ "links": [],
+ "modified": "2025-08-21 12:25:12.927539",
+ "modified_by": "Administrator",
+ "module": "POSAwesome",
+ "name": "Sales Partner Commission Bulk Pay Out",
+ "naming_rule": "Expression",
+ "owner": "Administrator",
+ "permissions": [
+  {
+   "create": 1,
+   "delete": 1,
+   "email": 1,
+   "export": 1,
+   "print": 1,
+   "read": 1,
+   "report": 1,
+   "role": "System Manager",
+   "share": 1,
+   "write": 1
+  }
+ ],
+ "sort_field": "modified",
+ "sort_order": "DESC",
+ "states": [],
+ "track_changes": 1
+}
