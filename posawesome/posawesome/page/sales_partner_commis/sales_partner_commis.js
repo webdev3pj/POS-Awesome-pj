@@ -52,14 +52,14 @@ frappe.pages['sales-partner-commis'].on_page_load = function (wrapper) {
 	const button_group = $(`
 		<div class="form-group row mt-4">
 			<div class="col-sm-12 text-right">
-				<button class="btn btn-outline-danger border border-danger clear-btn btn-md px-5 mr-2" id="clear_btn">Clear</button>
-				<button class="btn btn-primary search-btn btn-md px-5" id="search_btn">Search</button>
+				<button class="btn btn-outline-danger border border-danger clear-btn btn-md px-5 mr-2" id="clear_btn_spc">Clear</button>
+				<button class="btn btn-primary search-btn btn-md px-5" id="search_btn_spc">Search</button>
 			</div>
 		</div>
 	`).appendTo(page.body);
 
 	// Result container
-	const result_container = $('<div class="result-container mt-4"></div>').appendTo(page.body);
+	const result_container = $('<div class="result-container-spc mt-4"></div>').appendTo(page.body);
 
 	let all_commission_data = [];
 
@@ -86,8 +86,8 @@ frappe.pages['sales-partner-commis'].on_page_load = function (wrapper) {
 						<tr>
 							<th>Sr No.</th>
 							<th>
-								<input type="checkbox" id="select_all_rows" title="Select All" />
-								<label for="select_all_rows" class="ml-1">Select</label>
+								<input type="checkbox" id="select_all_rows_spc" title="Select All" />
+								<label for="select_all_rows_spc" class="ml-1">Select</label>
 							</th>
 							<th>Sales Partner</th>
 							<th>Commission</th>
@@ -137,7 +137,7 @@ frappe.pages['sales-partner-commis'].on_page_load = function (wrapper) {
 					});
 	
 					// Handle "Select All"
-					$('#select_all_rows').on('change', function () {
+					$('#select_all_rows_spc').on('change', function () {
 						const checked = $(this).is(':checked');
 						$('.select-row').prop('checked', checked);
 					});
@@ -145,20 +145,20 @@ frappe.pages['sales-partner-commis'].on_page_load = function (wrapper) {
 					result_container.on('change', '.select-row', function () {
 						const total = $('.select-row').length;
 						const checked = $('.select-row:checked').length;
-						$('#select_all_rows').prop('checked', total === checked);
+						$('#select_all_rows_spc').prop('checked', total === checked);
 					});
 	
 					if (payment_status === "Pending") {
 						const bulkButtonRow = $(`
 							<div class="text-right mt-3">
-								<button class="btn btn-success" id="bulk_payout_btn">
+								<button class="btn btn-success" id="bulk_payout_btn_spc">
 									<i class="fa fa-money-bill-wave mr-2"></i> Bulk Payout
 								</button>
 							</div>
 						`);
 						result_container.append(bulkButtonRow);
 	
-						$('#bulk_payout_btn').on('click', function () {
+						$('#bulk_payout_btn_spc').on('click', function () {
 							const selectedIndexes = $('.select-row:checked').map(function () {
 								return $(this).data('index');
 							}).get();
@@ -207,7 +207,7 @@ frappe.pages['sales-partner-commis'].on_page_load = function (wrapper) {
 	
 
 	// Search button
-	$('#search_btn').on('click', function () {
+	$('#search_btn_spc').on('click', function () {
 		const sales_partner = page.sales_partner.get_value();
 		const payment_status = page.payment_status.get_value();
 
@@ -225,7 +225,7 @@ frappe.pages['sales-partner-commis'].on_page_load = function (wrapper) {
 	});
 
 	// Clear button
-	$('#clear_btn').on('click', function () {
+	$('#clear_btn_spc').on('click', function () {
 		result_container.empty();
 		all_commission_data = [];
 		window.selected_commission_rows = [];
