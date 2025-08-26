@@ -586,77 +586,80 @@
           </v-row>
         </div>
         <v-divider></v-divider>
-        <v-row
-            v-if="this.pos_profile.custom_commission_enabled"
-            class="pb-0 mb-2"
-            align="start"
+        <v-row class="pb-0 mb-2" align="start">
+          <v-col
+            cols="12"
+            v-if="pos_profile.custom_commission_enabled && invoice_doc.grand_total >= pos_profile.custom_sales_person_grand_total_limit"
           >
-            <v-col cols="12">
-              <v-autocomplete
-                dense
-                clearable
-                auto-select-first
-                outlined
-                color="primary"
-                :label="frappe._('Sales Person')"
-                v-model="sales_person"
-                :items="sales_persons"
-                item-text="sales_person_name"
-                item-value="name"
-                background-color="white"
-                :no-data-text="__('Sales Person not found')"
-                hide-details
-                :filter="salesPersonFilter"
-                :disabled="readonly"
-              >
-                <template v-slot:item="data">
-                  <v-list-item-content>
-                    <v-list-item-title
-                      class="primary--text subtitle-1"
-                      v-html="data.item.sales_person_name"
-                    ></v-list-item-title>
-                    <v-list-item-subtitle
-                      v-if="data.item.sales_person_name != data.item.name"
-                      v-html="`ID: ${data.item.name}`"
-                    ></v-list-item-subtitle>
-                  </v-list-item-content>
-                </template>
-              </v-autocomplete>
-            </v-col>
+            <v-autocomplete
+              dense
+              clearable
+              auto-select-first
+              outlined
+              color="primary"
+              :label="frappe._('Sales Person')"
+              v-model="sales_person"
+              :items="sales_persons"
+              item-text="sales_person_name"
+              item-value="name"
+              background-color="white"
+              :no-data-text="__('Sales Person not found')"
+              hide-details
+              :filter="salesPersonFilter"
+              :disabled="readonly"
+            >
+              <template v-slot:item="data">
+                <v-list-item-content>
+                  <v-list-item-title
+                    class="primary--text subtitle-1"
+                    v-html="data.item.sales_person_name"
+                  ></v-list-item-title>
+                  <v-list-item-subtitle
+                    v-if="data.item.sales_person_name != data.item.name"
+                    v-html="`ID: ${data.item.name}`"
+                  ></v-list-item-subtitle>
+                </v-list-item-content>
+              </template>
+            </v-autocomplete>
+          </v-col>
 
-            <v-col cols="12">
-              <v-autocomplete
-                dense
-                clearable
-                auto-select-first
-                outlined
-                color="primary"
-                :label="frappe._('Sales Partner')"
-                v-model="sales_partner"
-                :items="sales_partners"
-                item-text="name"
-                item-value="name"
-                background-color="white"
-                :no-data-text="__('Sales Partner not found')"
-                hide-details
-                :filter="salesPartnerFilter"
-                :disabled="readonly"
-              >
-                <template v-slot:item="data">
-                  <v-list-item-content>
-                    <v-list-item-title
-                      class="primary--text subtitle-1"
-                      v-html="data.item.sales_partner_name"
-                    ></v-list-item-title>
-                    <v-list-item-subtitle
-                      v-if="data.item.sales_partner_name != data.item.name"
-                      v-html="`ID: ${data.item.name}`"
-                    ></v-list-item-subtitle>
-                  </v-list-item-content>
-                </template>
-              </v-autocomplete>
-            </v-col>
-          </v-row>
+          <v-col
+            cols="12"
+            v-if="pos_profile.custom_commission_enabled && invoice_doc.grand_total >= pos_profile.custom_sales_partner_grand_total_limit"
+          >
+            <v-autocomplete
+              dense
+              clearable
+              auto-select-first
+              outlined
+              color="primary"
+              :label="frappe._('Sales Partner')"
+              v-model="sales_partner"
+              :items="sales_partners"
+              item-text="name"
+              item-value="name"
+              background-color="white"
+              :no-data-text="__('Sales Partner not found')"
+              hide-details
+              :filter="salesPartnerFilter"
+              :disabled="readonly"
+            >
+              <template v-slot:item="data">
+                <v-list-item-content>
+                  <v-list-item-title
+                    class="primary--text subtitle-1"
+                    v-html="data.item.sales_partner_name"
+                  ></v-list-item-title>
+                  <v-list-item-subtitle
+                    v-if="data.item.sales_partner_name != data.item.name"
+                    v-html="`ID: ${data.item.name}`"
+                  ></v-list-item-subtitle>
+                </v-list-item-content>
+              </template>
+            </v-autocomplete>
+          </v-col>
+        </v-row>
+
 
 
       </div>
