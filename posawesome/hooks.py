@@ -20,6 +20,9 @@ app_license = "GPLv3"
 app_include_js = [
     "/assets/posawesome/node_modules/vuetify/dist/vuetify.js",
     "posawesome.bundle.js",
+    "/assets/posawesome/js/xlsx.full.min.js",
+    "/assets/posawesome/js/sales_person_commiss.js",
+    "/assets/posawesome/js/sales_partner_commis.js"
 ]
 
 # include js, css files in header of web template
@@ -32,6 +35,8 @@ app_include_js = [
 
 # include js in page
 # page_js = {"page" : "public/js/file.js"}
+
+
 
 # include js in doctype views
 doctype_js = {
