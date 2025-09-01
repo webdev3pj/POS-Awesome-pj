@@ -17,7 +17,7 @@ frappe.pages['sales-person-commiss'].on_page_load = function (wrapper) {
 			label: __("Sales Person"),
 			fieldtype: "Link",
 			options: "Sales Person",
-			reqd: is_admin ? 0 : 1,   // required only if NOT admin
+			reqd: is_admin ? 0 : 1,
 		},
 		{
 			fieldname: "payment_status",
@@ -40,7 +40,6 @@ frappe.pages['sales-person-commiss'].on_page_load = function (wrapper) {
 		page[filter.fieldname] = field;
 	});
 
-	// Set default value for Payment Status manually
 	setTimeout(() => {
 		if (page.payment_status) {
 			page.payment_status.set_value("Pending");
@@ -51,8 +50,11 @@ frappe.pages['sales-person-commiss'].on_page_load = function (wrapper) {
 	const button_group = $(`
 		<div class="form-group row mt-4">
 			<div class="col-sm-12 text-right">
-				<button class="btn btn-outline-danger border border-danger clear-btn btn-md px-5 mr-2" id="clear_btn_sprc">Clear</button>
-				<button class="btn btn-primary search-btn btn-md px-5" id="search_btn_sprc">Search</button>
+				<button class="btn btn-outline-danger border border-danger btn-md px-5 mr-2" id="clear_btn_sprc">Clear</button>
+				<button class="btn btn-primary btn-md px-5 mr-2" id="search_btn_sprc">Search</button>
+				<button class="btn btn-outline-success btn-md px-5" id="export_btn_sprc">
+					<i class="fa fa-file-excel-o mr-2"></i> Export
+				</button>
 			</div>
 		</div>
 	`).appendTo(page.body);
@@ -204,13 +206,49 @@ frappe.pages['sales-person-commiss'].on_page_load = function (wrapper) {
 		});
 	}
 	
+	// ✅ Export button
+	$('#export_btn_sprc').on('click', function () {
+		if (!all_commission_data || all_commission_data.length === 0) {
+			frappe.msgprint(__('No data to export. Please search first.'));
+			return;
+		}
+
+		const payment_status = page.payment_status.get_value();
+
+		// Build headers
+		const headers = ["Sales Person", "Commission", "Mode of Payment", "Reference Sales Invoice"];
+		if (payment_status === "Paid") {
+			headers.push("BPO Name", "BPO Date/Time");
+		}
+
+		// Build rows
+		const rows = all_commission_data.map((row, index) => {
+			const r = [
+				row.sales_person || "",
+				row.commission || "",
+				row.mode_of_payment || "",
+				row.reference_sales_invoice || ""
+			];
+			if (payment_status === "Paid") {
+				r.push(row.bpo_name || "", row.bpo_datetime || "");
+			}
+			return r;
+		});
+
+		// Generate Excel in browser
+		const wb = XLSX.utils.book_new();
+		const ws = XLSX.utils.aoa_to_sheet([headers, ...rows]);
+		XLSX.utils.book_append_sheet(wb, ws, "Commission Data");
+
+		// Download
+		XLSX.writeFile(wb, `Sales_person_commission_${payment_status}.xlsx`);
+	});
 
 	// Search button
 	$('#search_btn_sprc').on('click', function () {
 		const sales_person = page.sales_person.get_value();
 		const payment_status = page.payment_status.get_value();
 
-		// ✅ Only enforce required if NOT admin
 		if (!is_admin && !sales_person) {
 			frappe.msgprint({
 				title: __('Missing Required Field'),
@@ -245,12 +283,10 @@ frappe.pages['sales-person-commiss'].on_page_load = function (wrapper) {
 			padding: 8px 12px;
 			font-size: 14px;
 		}
-
 		input[data-fieldname="sales_person"]::placeholder {
 			color: #999 !important;
 			opacity: 1 !important;
 		}
-
 		.table td, .table th {
 			padding: 6px 8px !important;
 			font-size: 13px;

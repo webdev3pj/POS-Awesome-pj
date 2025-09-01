@@ -1,4 +1,3 @@
-
 frappe.pages['sales-partner-commis'].on_page_load = function (wrapper) {
 	const page = frappe.ui.make_app_page({
 		parent: wrapper,
@@ -53,7 +52,10 @@ frappe.pages['sales-partner-commis'].on_page_load = function (wrapper) {
 		<div class="form-group row mt-4">
 			<div class="col-sm-12 text-right">
 				<button class="btn btn-outline-danger border border-danger clear-btn btn-md px-5 mr-2" id="clear_btn_spc">Clear</button>
-				<button class="btn btn-primary search-btn btn-md px-5" id="search_btn_spc">Search</button>
+				<button class="btn btn-primary search-btn btn-md px-5 mr-2" id="search_btn_spc">Search</button>
+				<button class="btn btn-outline-success btn-md px-5" id="export_btn_spc">
+					<i class="fa fa-file-excel-o mr-2"></i> Export
+				</button>
 			</div>
 		</div>
 	`).appendTo(page.body);
@@ -78,9 +80,9 @@ frappe.pages['sales-partner-commis'].on_page_load = function (wrapper) {
 						...row,
 						commission: typeof row.commission === "object" ? row.commission.parsedValue || row.commission.source : row.commission
 					}));
-	
+
 					result_container.empty();
-	
+
 					// Build table header dynamically
 					let headerHTML = `
 						<tr>
@@ -94,16 +96,16 @@ frappe.pages['sales-partner-commis'].on_page_load = function (wrapper) {
 							<th>Mode of Payment</th>
 							<th>Reference Sales Invoice</th>
 					`;
-	
+
 					if (payment_status === "Paid") {
 						headerHTML += `
 							<th>BPO Name</th>
 							<th>BPO Date/Time</th>
 						`;
 					}
-	
+
 					headerHTML += `</tr>`;
-	
+
 					const table = $(`
 						<table class="table table-bordered">
 							<thead class="thead-light">
@@ -112,9 +114,9 @@ frappe.pages['sales-partner-commis'].on_page_load = function (wrapper) {
 							<tbody></tbody>
 						</table>
 					`).appendTo(result_container);
-	
+
 					const tbody = table.find("tbody");
-	
+
 					all_commission_data.forEach((row, index) => {
 						const sr_no = index + 1;
 						let trHTML = `
@@ -125,29 +127,29 @@ frappe.pages['sales-partner-commis'].on_page_load = function (wrapper) {
 							<td>${row.mode_of_payment || ''}</td>
 							<td>${row.reference_sales_invoice || ''}</td>
 						`;
-	
+
 						if (payment_status === "Paid") {
 							trHTML += `
 								<td>${row.bpo_name || ''}</td>
 								<td>${row.bpo_datetime || ''}</td>
 							`;
 						}
-	
+
 						tbody.append(`<tr>${trHTML}</tr>`);
 					});
-	
+
 					// Handle "Select All"
 					$('#select_all_rows_spc').on('change', function () {
 						const checked = $(this).is(':checked');
 						$('.select-row').prop('checked', checked);
 					});
-	
+
 					result_container.on('change', '.select-row', function () {
 						const total = $('.select-row').length;
 						const checked = $('.select-row:checked').length;
 						$('#select_all_rows_spc').prop('checked', total === checked);
 					});
-	
+
 					if (payment_status === "Pending") {
 						const bulkButtonRow = $(`
 							<div class="text-right mt-3">
@@ -157,20 +159,20 @@ frappe.pages['sales-partner-commis'].on_page_load = function (wrapper) {
 							</div>
 						`);
 						result_container.append(bulkButtonRow);
-	
+
 						$('#bulk_payout_btn_spc').on('click', function () {
 							const selectedIndexes = $('.select-row:checked').map(function () {
 								return $(this).data('index');
 							}).get();
-	
+
 							if (selectedIndexes.length === 0) {
 								frappe.msgprint(__('Please select at least one record to proceed with bulk payout.'));
 								return;
 							}
-	
+
 							const selectedData = selectedIndexes.map(index => all_commission_data[index]);
 							window.selected_commission_rows = selectedData;
-	
+
 							frappe.confirm(
 								__('Are you sure you want to create a Bulk Payout for the selected records?'),
 								function () {
@@ -204,8 +206,6 @@ frappe.pages['sales-partner-commis'].on_page_load = function (wrapper) {
 			}
 		});
 	}
-	
-
 	// Search button
 	$('#search_btn_spc').on('click', function () {
 		const sales_partner = page.sales_partner.get_value();
@@ -233,6 +233,46 @@ frappe.pages['sales-partner-commis'].on_page_load = function (wrapper) {
 		page.payment_status.set_value("Pending");
 	});
 
+	// ✅ Export button (Excel via SheetJS)
+	$('#export_btn_spc').on('click', function () {
+		if (!all_commission_data.length) {
+			frappe.msgprint(__('No data available to export. Please search first.'));
+			return;
+		}
+
+		// Dynamically prepare rows
+		const payment_status = page.payment_status.get_value();
+		let headers = ["Sales Partner", "Commission", "Mode of Payment", "Reference Sales Invoice"];
+		if (payment_status === "Paid") {
+			headers.push("BPO Name", "BPO Date/Time");
+		}
+
+		const rows = all_commission_data.map((row, index) => {
+			const baseRow = [
+				row.sales_partner || "",
+				row.commission || "",
+				row.mode_of_payment || "",
+				row.reference_sales_invoice || ""
+			];
+			if (payment_status === "Paid") {
+				baseRow.push(row.bpo_name || "", row.bpo_datetime || "");
+			}
+			return baseRow;
+		});
+
+		// Build worksheet
+		const worksheet_data = [headers, ...rows];
+		const ws = XLSX.utils.aoa_to_sheet(worksheet_data);
+
+		// Build workbook
+		const wb = XLSX.utils.book_new();
+		XLSX.utils.book_append_sheet(wb, ws, "Commission Data");
+
+		// Export to file
+		const filename = `Sales_partner_commission_export_${payment_status}.xlsx`;
+		XLSX.writeFile(wb, filename);
+	});
+
 	// Style override
 	$(`<style>
 		input[data-fieldname="sales_partner"],
@@ -258,4 +298,11 @@ frappe.pages['sales-partner-commis'].on_page_load = function (wrapper) {
 			vertical-align: middle;
 		}
 	</style>`).appendTo("head");
+
+	// ✅ Load SheetJS dynamically (if not already loaded)
+	if (typeof XLSX === "undefined") {
+		const script = document.createElement("script");
+		script.src = "https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js";
+		document.head.appendChild(script);
+	}
 };
