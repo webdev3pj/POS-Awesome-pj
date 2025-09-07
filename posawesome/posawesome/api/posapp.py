@@ -1892,9 +1892,26 @@ def delete_sales_invoice(sales_invoice):
 
 
 @frappe.whitelist()
-def get_sales_invoice_child_table(sales_invoice, sales_invoice_item):
+def get_sales_invoice_child_table(sales_invoice, sales_invoice_item=None):
     parent_doc = frappe.get_doc("Sales Invoice", sales_invoice)
-    child_doc = frappe.get_doc(
-        "Sales Invoice Item", {"parent": parent_doc.name, "name": sales_invoice_item}
-    )
-    return child_doc
+
+    if sales_invoice_item:
+        # fetch specific item row
+        return frappe.get_doc(
+            "Sales Invoice Item", {"parent": parent_doc.name, "name": sales_invoice_item}
+        )
+    else:
+        # fetch all child rows for that invoice
+        return frappe.get_all(
+            "Sales Invoice Item",
+            filters={"parent": parent_doc.name},
+            fields=["*"]
+        )
+
+# @frappe.whitelist()
+# def get_sales_invoice_child_table(sales_invoice, sales_invoice_item):
+#     parent_doc = frappe.get_doc("Sales Invoice", sales_invoice)
+#     child_doc = frappe.get_doc(
+#         "Sales Invoice Item", {"parent": parent_doc.name, "name": sales_invoice_item}
+#     )
+#     return child_doc
