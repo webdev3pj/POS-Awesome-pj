@@ -66,6 +66,9 @@ def custom_calculate_contribution(self):
 
     # clear breakdown table
     self.set("custom_sales_person_commission_breakdown", [])
+    self.amount_eligible_for_commission = sum(
+			item.base_net_amount for item in self.items if item.grant_commission
+		)
 
     for sales_person in sales_team:
         self.round_floats_in(sales_person)
