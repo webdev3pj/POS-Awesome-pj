@@ -26,11 +26,6 @@ app_include_js = [
 ]
 
 
-doc_events = {
-    "Sales Invoice": {
-        
-    }
-}
 # include js, css files in header of web template
 # web_include_css = "/assets/posawesome/css/posawesome.css"
 # web_include_js = "/assets/posawesome/js/posawesome.js"
@@ -110,6 +105,7 @@ override_doctype_class = {
 doc_events = {
     "Sales Invoice": {
         "before_save": "posawesome.overrides.selling_commission.run_custom_commission",
+        "before_save": "posawesome.overrides.selling_commission.run_custom_contribution",
         "validate": "posawesome.posawesome.api.invoice.validate",
         "before_submit": "posawesome.posawesome.api.invoice.before_submit",
         "before_cancel": "posawesome.posawesome.api.invoice.before_cancel",
