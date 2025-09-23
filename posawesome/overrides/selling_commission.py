@@ -34,13 +34,16 @@ def custom_calculate_commission(self):
         item_cap_rate = flt(item.custom_max_commission_rate) or partner_rate
         applied_rate = partner_rate if partner_rate < item_cap_rate else item_cap_rate
 
-        commission_amount = (item.base_net_amount or 0) * applied_rate / 100
+        # ✅ Calculate base amount using qty * price_list_rate
+        item_amount = (flt(item.qty) * flt(item.price_list_rate))
+
+        commission_amount = item_amount * applied_rate / 100
         total_commission += commission_amount
-        eligible_amount += item.base_net_amount or 0
+        eligible_amount += item_amount
 
         self.append("custom_commission_breakdown", {
             "item_code": item.item_code,
-            "base_net_amount": item.base_net_amount,
+            "base_net_amount": item_amount,
             "applied_rate": applied_rate,
             "commission_amount": commission_amount
         })
