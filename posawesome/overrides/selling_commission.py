@@ -21,6 +21,9 @@ def custom_calculate_commission(self):
         )
 
     partner_rate = flt(self.commission_rate)
+    customer_rate = flt(self.custom_discount_ or 0)   # ✅ take customer share
+    effective_rate = max(partner_rate - customer_rate, 0)  # ✅ ensure not negative
+
     total_commission = 0
     eligible_amount = 0
 
@@ -31,10 +34,10 @@ def custom_calculate_commission(self):
         if not item.grant_commission:
             continue
 
-        item_cap_rate = flt(item.custom_max_commission_rate) or partner_rate
-        applied_rate = partner_rate if partner_rate < item_cap_rate else item_cap_rate
+        item_cap_rate = flt(item.custom_max_commission_rate) or effective_rate
+        applied_rate = effective_rate if effective_rate < item_cap_rate else item_cap_rate
 
-        # ✅ Calculate base amount using qty * price_list_rate
+        # ✅ Calculate base amount using qty * price_list_rate (before discount)
         item_amount = (flt(item.qty) * flt(item.price_list_rate))
 
         commission_amount = item_amount * applied_rate / 100
@@ -50,6 +53,12 @@ def custom_calculate_commission(self):
 
     self.amount_eligible_for_commission = eligible_amount
     self.total_commission = flt(total_commission, self.precision("total_commission"))
+
+    # ✅ Set the additional fields
+    self.custom_effective_commission_rate = applied_rate
+    self.custom_effective_commission = eligible_amount
+
+
 
 
 def run_custom_commission(doc, method):
