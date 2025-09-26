@@ -37,8 +37,8 @@ def custom_calculate_commission(self):
         item_cap_rate = flt(item.custom_max_commission_rate) or effective_rate
         applied_rate = effective_rate if effective_rate < item_cap_rate else item_cap_rate
 
-        # ✅ Calculate base amount using qty * price_list_rate (before discount)
-        item_amount = (flt(item.qty) * flt(item.price_list_rate))
+        # ✅ Calculate base amount using qty * net_rate (before discount)
+        item_amount = (flt(item.qty) * flt(item.net_rate))
 
         commission_amount = item_amount * applied_rate / 100
         total_commission += commission_amount
