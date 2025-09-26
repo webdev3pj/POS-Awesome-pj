@@ -39,17 +39,17 @@ def custom_calculate_commission(self):
             tax_rows = frappe.get_all(
                 "Sales Taxes and Charges",
                 filters={"parent": self.taxes_and_charges},
-                fields=["tax"]
+                fields=["rate"]
             )
             if tax_rows:
-                tax_rate = flt(tax_rows[0].tax)  # or sum if multiple
+                tax_rate = flt(tax_rows[0].rate)  # or sum if multiple
 
-        # ✅ Excluding GST from price_list_rate
+        # ✅ Exclude tax from Price List Rate
         base_rate_excl_tax = flt(item.price_list_rate) / (1 + (tax_rate / 100))
         item_amount = flt(item.qty) * base_rate_excl_tax
 
         item_cap_rate = flt(item.custom_max_commission_rate) or effective_rate
-        applied_rate = effective_rate if effective_rate < item_cap_rate else item_cap_rate
+        applied_rate = min(effective_rate, item_cap_rate)
 
         commission_amount = item_amount * applied_rate / 100
         total_commission += commission_amount
