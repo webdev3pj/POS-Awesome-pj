@@ -1,6 +1,6 @@
 {
  "charts": [],
- "content": "[{\"id\":\"lU9NipQWyV\",\"type\":\"header\",\"data\":{\"text\":\"<span class=\\\"h4\\\">Pages</span>\",\"col\":12}},{\"id\":\"llDoOLlb48\",\"type\":\"card\",\"data\":{\"card_name\":\"Commission\",\"col\":4}}]",
+ "content": "[{\"id\":\"lU9NipQWyV\",\"type\":\"header\",\"data\":{\"text\":\"<span class=\\\"h4\\\">Pages</span>\",\"col\":12}},{\"id\":\"llDoOLlb48\",\"type\":\"card\",\"data\":{\"card_name\":\"Commission\",\"col\":4}},{\"id\":\"4YE_b21ijS\",\"type\":\"card\",\"data\":{\"card_name\":\"Day Wise Item Report\",\"col\":4}}]",
  "creation": "2025-08-07 12:42:45.893772",
  "custom_blocks": [],
  "docstatus": 0,
@@ -40,9 +40,28 @@
    "link_type": "Page",
    "onboard": 0,
    "type": "Link"
+  },
+  {
+   "hidden": 0,
+   "is_query_report": 0,
+   "label": "Day Wise Item Report",
+   "link_count": 1,
+   "link_type": "DocType",
+   "onboard": 0,
+   "type": "Card Break"
+  },
+  {
+   "hidden": 0,
+   "is_query_report": 0,
+   "label": "PJB Day Wise Item Report",
+   "link_count": 0,
+   "link_to": "pjb-itemwise-ds",
+   "link_type": "Page",
+   "onboard": 0,
+   "type": "Link"
   }
  ],
- "modified": "2025-09-16 13:51:01.906077",
+ "modified": "2025-10-10 12:12:11.616914",
  "modified_by": "Administrator",
  "module": "POSAwesome",
  "name": "Pages",
