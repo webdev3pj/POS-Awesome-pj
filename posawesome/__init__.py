@@ -1,6 +1,6 @@
 # -*- coding: utf-8 -*-
 from __future__ import unicode_literals
-import frappe
+# import frappe
 
 __version__ = "6.3.0"
 # commission/__init__.py
@@ -12,5 +12,5 @@ selling_controller.SellingController.calculate_commission = custom_calculate_com
 selling_controller.SellingController.calculate_contribution = custom_calculate_contribution
 
 
-def console(*data):
-    frappe.publish_realtime("toconsole", data, user=frappe.session.user)
+# def console(*data):
+#     frappe.publish_realtime("toconsole", data, user=frappe.session.user)
