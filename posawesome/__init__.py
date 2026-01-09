@@ -4,12 +4,12 @@ from __future__ import unicode_literals
 
 __version__ = "6.3.0"
 # commission/__init__.py
-from erpnext.controllers import selling_controller
-from posawesome.overrides.selling_commission import custom_calculate_commission, custom_calculate_contribution
+# from erpnext.controllers import selling_controller
+# from posawesome.overrides.selling_commission import custom_calculate_commission, custom_calculate_contribution
 
 # Replace ERPNext’s function with yours
-selling_controller.SellingController.calculate_commission = custom_calculate_commission
-selling_controller.SellingController.calculate_contribution = custom_calculate_contribution
+# selling_controller.SellingController.calculate_commission = custom_calculate_commission
+# selling_controller.SellingController.calculate_contribution = custom_calculate_contribution
 
 
 # def console(*data):
