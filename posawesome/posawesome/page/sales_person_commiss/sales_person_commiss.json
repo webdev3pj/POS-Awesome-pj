@@ -1,0 +1,23 @@
+{
+ "content": null,
+ "creation": "2025-08-06 13:54:18.871426",
+ "docstatus": 0,
+ "doctype": "Page",
+ "idx": 0,
+ "modified": "2025-08-07 14:25:40.719199",
+ "modified_by": "Administrator",
+ "module": "POSAwesome",
+ "name": "sales-person-commiss",
+ "owner": "Administrator",
+ "page_name": "sales-person-commiss",
+ "roles": [
+  {
+   "role": "Sales Commission"
+  }
+ ],
+ "script": null,
+ "standard": "Yes",
+ "style": null,
+ "system_page": 0,
+ "title": "Sales Person Commission"
+}

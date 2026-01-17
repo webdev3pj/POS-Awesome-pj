@@ -1,0 +1,92 @@
+{
+ "charts": [],
+ "content": "[{\"id\":\"cdsDdcieUh\",\"type\":\"header\",\"data\":{\"text\":\"<span class=\\\"h4\\\">BPO Commission</span>\",\"col\":12}},{\"id\":\"bjN-dQAWPD\",\"type\":\"spacer\",\"data\":{\"col\":12}},{\"id\":\"_tUXf0Dnwh\",\"type\":\"card\",\"data\":{\"card_name\":\"BPO Sales Partner Commission\",\"col\":6}},{\"id\":\"0djthzjgD9\",\"type\":\"card\",\"data\":{\"card_name\":\"BPO Sales Person Commission\",\"col\":6}},{\"id\":\"5-E-_3zzM3\",\"type\":\"quick_list\",\"data\":{\"quick_list_name\":\"BPO Sales Partner Commission Pending\",\"col\":6}},{\"id\":\"XYdkHcYc7s\",\"type\":\"quick_list\",\"data\":{\"quick_list_name\":\"BPO Sales Person Commission Pending\",\"col\":6}},{\"id\":\"kdDUrGFyb-\",\"type\":\"quick_list\",\"data\":{\"quick_list_name\":\"BPO Sales Person Commission Paid\",\"col\":6}},{\"id\":\"lMatz-O3mJ\",\"type\":\"quick_list\",\"data\":{\"quick_list_name\":\"BPO Sales Partner Commission Paid\",\"col\":6}}]",
+ "creation": "2025-09-16 12:39:26.948978",
+ "custom_blocks": [],
+ "docstatus": 0,
+ "doctype": "Workspace",
+ "for_user": "",
+ "hide_custom": 0,
+ "icon": "",
+ "idx": 0,
+ "is_hidden": 0,
+ "label": "BPO Commission",
+ "links": [
+  {
+   "hidden": 0,
+   "is_query_report": 0,
+   "label": "BPO Sales Person Commission",
+   "link_count": 1,
+   "link_type": "DocType",
+   "onboard": 0,
+   "only_for": "Jamaica",
+   "type": "Card Break"
+  },
+  {
+   "hidden": 0,
+   "is_query_report": 0,
+   "label": "BPO Sales Person",
+   "link_count": 0,
+   "link_to": "sales-person-commiss",
+   "link_type": "Page",
+   "onboard": 0,
+   "only_for": "Jamaica",
+   "type": "Link"
+  },
+  {
+   "hidden": 0,
+   "is_query_report": 0,
+   "label": "BPO Sales Partner Commission",
+   "link_count": 1,
+   "link_type": "DocType",
+   "onboard": 0,
+   "only_for": "Jamaica",
+   "type": "Card Break"
+  },
+  {
+   "hidden": 0,
+   "is_query_report": 0,
+   "label": "BPO Sales Partner",
+   "link_count": 0,
+   "link_to": "sales-partner-commis",
+   "link_type": "Page",
+   "onboard": 0,
+   "only_for": "Jamaica",
+   "type": "Link"
+  }
+ ],
+ "modified": "2025-09-16 13:50:58.905074",
+ "modified_by": "Administrator",
+ "module": "POSAwesome",
+ "name": "BPO Commission",
+ "number_cards": [],
+ "owner": "Administrator",
+ "parent_page": "",
+ "public": 1,
+ "quick_lists": [
+  {
+   "document_type": "Sales Partner Commission Bulk Pay Out",
+   "label": "BPO Sales Partner Commission Pending",
+   "quick_list_filter": "[[\"Sales Partner Commission Bulk Pay Out\",\"docstatus\",\"=\",\"0\",false]]"
+  },
+  {
+   "document_type": "Sales Person Commission Bulk Pay Out",
+   "label": "BPO Sales Person Commission Pending",
+   "quick_list_filter": "[[\"Sales Person Commission Bulk Pay Out\",\"docstatus\",\"=\",\"0\",false]]"
+  },
+  {
+   "document_type": "Sales Partner Commission Bulk Pay Out",
+   "label": "BPO Sales Partner Commission Paid",
+   "quick_list_filter": "[[\"Sales Partner Commission Bulk Pay Out\",\"docstatus\",\"=\",\"1\",false]]"
+  },
+  {
+   "document_type": "Sales Person Commission Bulk Pay Out",
+   "label": "BPO Sales Person Commission Paid",
+   "quick_list_filter": "[[\"Sales Person Commission Bulk Pay Out\",\"docstatus\",\"=\",\"1\",false]]"
+  }
+ ],
+ "roles": [],
+ "sequence_id": 1.0,
+ "shortcuts": [],
+ "title": "BPO Commission"
+}

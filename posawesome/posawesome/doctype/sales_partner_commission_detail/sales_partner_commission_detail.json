@@ -1,0 +1,57 @@
+{
+ "actions": [],
+ "allow_rename": 1,
+ "creation": "2025-09-08 13:19:31.715115",
+ "doctype": "DocType",
+ "editable_grid": 1,
+ "engine": "InnoDB",
+ "field_order": [
+  "item_code",
+  "base_net_amount",
+  "applied_rate",
+  "commission_amount"
+ ],
+ "fields": [
+  {
+   "fieldname": "item_code",
+   "fieldtype": "Link",
+   "in_list_view": 1,
+   "label": "Item Code",
+   "options": "Item",
+   "search_index": 1
+  },
+  {
+   "fieldname": "base_net_amount",
+   "fieldtype": "Currency",
+   "in_list_view": 1,
+   "label": "Base Net Amount",
+   "search_index": 1
+  },
+  {
+   "fieldname": "applied_rate",
+   "fieldtype": "Float",
+   "in_list_view": 1,
+   "label": "Applied Rate",
+   "search_index": 1
+  },
+  {
+   "fieldname": "commission_amount",
+   "fieldtype": "Currency",
+   "in_list_view": 1,
+   "label": "Commission Amount",
+   "search_index": 1
+  }
+ ],
+ "index_web_pages_for_search": 1,
+ "istable": 1,
+ "links": [],
+ "modified": "2025-09-09 11:54:47.630709",
+ "modified_by": "Administrator",
+ "module": "POSAwesome",
+ "name": "Sales Partner Commission Detail",
+ "owner": "Administrator",
+ "permissions": [],
+ "sort_field": "modified",
+ "sort_order": "DESC",
+ "states": []
+}

@@ -20,7 +20,11 @@ app_license = "GPLv3"
 app_include_js = [
     "/assets/posawesome/node_modules/vuetify/dist/vuetify.js",
     "posawesome.bundle.js",
+    "/assets/posawesome/js/xlsx.full.min.js",
+    "/assets/posawesome/js/sales_person_commiss.js",
+    "/assets/posawesome/js/sales_partner_commis.js"
 ]
+
 
 # include js, css files in header of web template
 # web_include_css = "/assets/posawesome/css/posawesome.css"
@@ -32,6 +36,8 @@ app_include_js = [
 
 # include js in page
 # page_js = {"page" : "public/js/file.js"}
+
+
 
 # include js in doctype views
 doctype_js = {
@@ -98,6 +104,8 @@ override_doctype_class = {
 }
 doc_events = {
     "Sales Invoice": {
+        "before_save": "posawesome.overrides.selling_commission.run_custom_commission",
+        "before_save": "posawesome.overrides.selling_commission.run_custom_contribution",
         "validate": "posawesome.posawesome.api.invoice.validate",
         "before_submit": "posawesome.posawesome.api.invoice.before_submit",
         "before_cancel": "posawesome.posawesome.api.invoice.before_cancel",
@@ -267,5 +275,11 @@ fixtures = [
     {
         "doctype": "Property Setter",
         "filters": [["name", "in", ("Sales Invoice-posa_pos_opening_shift-no_copy")]],
+    },
+    {
+    "doctype": "Role",
+    "filters": [
+        ["role_name", "in", ["Sales Commission", "Sales Commission Admin"]]
+        ],
     },
 ]

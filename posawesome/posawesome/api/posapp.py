@@ -451,6 +451,14 @@ def get_sales_person_names():
     )
     return sales_persons
 
+@frappe.whitelist()
+def get_sales_partner_names():
+    sales_partners = frappe.get_list(
+        "Sales Partner",
+        fields=["name", "partner_name"],
+        limit_page_length=100000,
+    )
+    return sales_partners
 
 def add_taxes_from_tax_template(item, parent_doc):
     accounts_settings = frappe.get_cached_doc("Accounts Settings")
@@ -1884,9 +1892,26 @@ def delete_sales_invoice(sales_invoice):
 
 
 @frappe.whitelist()
-def get_sales_invoice_child_table(sales_invoice, sales_invoice_item):
+def get_sales_invoice_child_table(sales_invoice, sales_invoice_item=None):
     parent_doc = frappe.get_doc("Sales Invoice", sales_invoice)
-    child_doc = frappe.get_doc(
-        "Sales Invoice Item", {"parent": parent_doc.name, "name": sales_invoice_item}
-    )
-    return child_doc
+
+    if sales_invoice_item:
+        # fetch specific item row
+        return frappe.get_doc(
+            "Sales Invoice Item", {"parent": parent_doc.name, "name": sales_invoice_item}
+        )
+    else:
+        # fetch all child rows for that invoice
+        return frappe.get_all(
+            "Sales Invoice Item",
+            filters={"parent": parent_doc.name},
+            fields=["*"]
+        )
+
+# @frappe.whitelist()
+# def get_sales_invoice_child_table(sales_invoice, sales_invoice_item):
+#     parent_doc = frappe.get_doc("Sales Invoice", sales_invoice)
+#     child_doc = frappe.get_doc(
+#         "Sales Invoice Item", {"parent": parent_doc.name, "name": sales_invoice_item}
+#     )
+#     return child_doc

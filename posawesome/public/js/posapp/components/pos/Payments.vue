@@ -587,7 +587,10 @@
         </div>
         <v-divider></v-divider>
         <v-row class="pb-0 mb-2" align="start">
-          <v-col cols="12">
+          <v-col
+            cols="12"
+            v-if="pos_profile.custom_commission_enabled && invoice_doc.grand_total >= pos_profile.custom_sales_person_grand_total_limit"
+          >
             <v-autocomplete
               dense
               clearable
@@ -606,22 +609,59 @@
               :disabled="readonly"
             >
               <template v-slot:item="data">
-                <template>
-                  <v-list-item-content>
-                    <v-list-item-title
-                      class="primary--text subtitle-1"
-                      v-html="data.item.sales_person_name"
-                    ></v-list-item-title>
-                    <v-list-item-subtitle
-                      v-if="data.item.sales_person_name != data.item.name"
-                      v-html="`ID: ${data.item.name}`"
-                    ></v-list-item-subtitle>
-                  </v-list-item-content>
-                </template>
+                <v-list-item-content>
+                  <v-list-item-title
+                    class="primary--text subtitle-1"
+                    v-html="data.item.sales_person_name"
+                  ></v-list-item-title>
+                  <v-list-item-subtitle
+                    v-if="data.item.sales_person_name != data.item.name"
+                    v-html="`ID: ${data.item.name}`"
+                  ></v-list-item-subtitle>
+                </v-list-item-content>
+              </template>
+            </v-autocomplete>
+          </v-col>
+
+          <v-col
+            cols="12"
+            v-if="pos_profile.custom_commission_enabled && invoice_doc.grand_total >= pos_profile.custom_sales_partner_grand_total_limit"
+          >
+            <v-autocomplete
+              dense
+              clearable
+              auto-select-first
+              outlined
+              color="primary"
+              :label="frappe._('Sales Partner')"
+              v-model="sales_partner"
+              :items="sales_partners"
+              item-text="name"
+              item-value="name"
+              background-color="white"
+              :no-data-text="__('Sales Partner not found')"
+              hide-details
+              :filter="salesPartnerFilter"
+              :disabled="readonly"
+            >
+              <template v-slot:item="data">
+                <v-list-item-content>
+                  <v-list-item-title
+                    class="primary--text subtitle-1"
+                    v-html="data.item.sales_partner_name"
+                  ></v-list-item-title>
+                  <v-list-item-subtitle
+                    v-if="data.item.sales_partner_name != data.item.name"
+                    v-html="`ID: ${data.item.name}`"
+                  ></v-list-item-subtitle>
+                </v-list-item-content>
               </template>
             </v-autocomplete>
           </v-col>
         </v-row>
+
+
+
       </div>
     </v-card>
 
@@ -716,6 +756,8 @@ export default {
     addresses: [],
     sales_persons: [],
     sales_person: "",
+    sales_partner: null,
+    sales_partners: [],
     paid_change: 0,
     order_delivery_date: false,
     paid_change_rules: [],
@@ -851,6 +893,7 @@ export default {
       this.redeem_customer_credit = false;
       this.is_cashback = true;
       this.sales_person = "";
+      this.sales_partner = "";
 
       evntBus.$emit("new_invoice", "false");
       this.back_to_invoice();
@@ -1086,6 +1129,33 @@ export default {
         },
       });
     },
+    get_sales_partner_names() {
+      const vm = this;
+      if (
+        vm.pos_profile.posa_local_storage &&
+        localStorage.sales_partners_storage
+      ) {
+        vm.sales_partners = JSON.parse(
+          localStorage.getItem("sales_partners_storage")
+        );
+      }
+      frappe.call({
+        method: "posawesome.posawesome.api.posapp.get_sales_partner_names",
+        callback: function (r) {
+          if (r.message) {
+            vm.sales_partners = r.message;
+            if (vm.pos_profile.posa_local_storage) {
+              localStorage.setItem("sales_partners_storage", "");
+              localStorage.setItem(
+                "sales_partners_storage",
+                JSON.stringify(r.message)
+              );
+            }
+          }
+        },
+      });
+    },
+
     salesPersonFilter(item, queryText, itemText) {
       const textOne = item.sales_person_name
         ? item.sales_person_name.toLowerCase()
@@ -1363,6 +1433,7 @@ export default {
         this.loyalty_amount = 0;
         this.get_addresses();
         this.get_sales_person_names();
+        this.get_sales_partner_names();
       });
       evntBus.$on("register_pos_profile", (data) => {
         this.pos_profile = data.pos_profile;
@@ -1471,6 +1542,14 @@ export default {
         this.invoice_doc.sales_team = [];
       }
     },
+    sales_partner() {
+      if (this.sales_partner) {
+        this.invoice_doc.sales_partner = this.sales_partner
+      }
+      else {
+        this.invoice_doc.sales_partner = "";
+      }
+    }
   },
 };
 </script>
