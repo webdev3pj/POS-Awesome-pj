@@ -808,9 +808,9 @@
                 >{{ __("Select S.O") }}</v-btn
               >
             </v-col>
-            <!-- Return button: Only for Cashier (hidden for Sales Associate) -->
+            <!-- Return button: Visible for Cashier, hidden for Sales Associate in token workflow -->
             <v-col 
-              v-if="!isTokenWorkflowSalesAssociate"
+              v-if="pos_profile.posa_enable_token_workflow !== 1 || isCashier"
               cols="6" 
               class="pa-1"
             >
