@@ -904,6 +904,21 @@
                 >{{ __("PAY") }}</v-btn
               >
             </v-col>
+            <!-- Quotation button: Only for Sales Associate in token workflow -->
+            <v-col
+              v-if="pos_profile.posa_enable_token_workflow === 1 && isTokenWorkflowSalesAssociate"
+              cols="4"
+              class="pa-1"
+            >
+              <v-btn
+                block
+                class="pa-0"
+                color="primary"
+                @click="print_quotation"
+                dark
+                >{{ __("Quotation") }}</v-btn
+              >
+            </v-col>
             <!-- Print Draft: Only for Cashier in token workflow -->
             <v-col
               v-if="pos_profile.posa_enable_token_workflow === 1 && isCashier && !isTokenWorkflowSalesAssociate"
@@ -3071,6 +3086,84 @@ export default {
         },
       ]);
     },
+    
+    async print_quotation() {
+      // Print current cart as a Quotation for the Sales Associate
+      const vm = this;
+      
+      if (!this.customer) {
+        evntBus.$emit("show_mesage", {
+          text: __("Please select a customer first"),
+          color: "error",
+        });
+        return;
+      }
+      
+      if (!this.items || this.items.length === 0) {
+        evntBus.$emit("show_mesage", {
+          text: __("Please add items to the cart first"),
+          color: "error",
+        });
+        return;
+      }
+      
+      // Create a Quotation document
+      const quotation_items = this.items.map(item => ({
+        item_code: item.item_code,
+        item_name: item.item_name,
+        qty: item.qty,
+        rate: item.rate,
+        uom: item.uom || item.stock_uom,
+        warehouse: item.warehouse || this.pos_profile.warehouse,
+      }));
+      
+      try {
+        const response = await frappe.call({
+          method: "frappe.client.insert",
+          args: {
+            doc: {
+              doctype: "Quotation",
+              quotation_to: "Customer",
+              party_name: this.customer,
+              company: this.pos_profile.company,
+              currency: this.pos_profile.currency,
+              selling_price_list: this.pos_profile.selling_price_list,
+              items: quotation_items,
+            }
+          }
+        });
+        
+        if (response.message) {
+          const quotation_name = response.message.name;
+          evntBus.$emit("show_mesage", {
+            text: __("Quotation {0} created", [quotation_name]),
+            color: "success",
+          });
+          
+          // Open print dialog
+          const print_format = this.pos_profile.print_format || "Standard";
+          const letter_head = this.pos_profile.letter_head || 0;
+          const url = frappe.urllib.get_full_url(
+            "/printview?doctype=Quotation&name=" +
+            quotation_name +
+            "&trigger_print=1&format=" +
+            print_format +
+            "&no_letterhead=" +
+            letter_head
+          );
+          const printWindow = window.open(url, "Print");
+          printWindow.addEventListener("load", function () {
+            printWindow.print();
+          }, true);
+        }
+      } catch (error) {
+        evntBus.$emit("show_mesage", {
+          text: __("Failed to create quotation: {0}", [error.message || error]),
+          color: "error",
+        });
+      }
+    },
+    
     set_delivery_charges() {
       const vm = this;
       if (
