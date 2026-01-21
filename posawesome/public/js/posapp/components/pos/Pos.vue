@@ -162,41 +162,34 @@ export default {
     
     async load_pos_profile_for_sales_associate() {
       // Sales Associates don't need an opening shift
-      // Just load the POS Profile directly
-      const response = await frappe.call({
-        method: 'posawesome.posawesome.api.posapp.get_opening_dialog_data',
-        args: {}
-      });
-      
-      if (response.message && response.message.pos_profiles_data && response.message.pos_profiles_data.length > 0) {
-        // Get the first available POS Profile or the one assigned to user
-        const pos_profile_name = response.message.pos_profiles_data[0].name;
-        
-        // Fetch full POS Profile data
-        const profile_response = await frappe.call({
-          method: 'frappe.client.get',
-          args: {
-            doctype: 'POS Profile',
-            name: pos_profile_name
-          }
+      // Get their assigned POS Profile directly
+      try {
+        const response = await frappe.call({
+          method: 'posawesome.posawesome.api.posapp.get_user_pos_profile',
+          args: {}
         });
         
-        if (profile_response.message) {
-          this.pos_profile = profile_response.message;
+        if (response.message) {
+          this.pos_profile = response.message;
           this.get_offers(this.pos_profile.name);
           
           // Emit the profile data without opening shift
           const data = {
-            pos_profile: profile_response.message,
+            pos_profile: response.message,
             pos_opening_shift: null,
-            company: { name: profile_response.message.company },
+            company: { name: response.message.company },
             stock_settings: { allow_negative_stock: '0' }
           };
           
           evntBus.$emit('register_pos_profile', data);
           evntBus.$emit('set_company', data.company);
-          console.info('LoadPosProfile for Sales Associate (no opening shift)');
+          console.info('LoadPosProfile for Sales Associate (no opening shift):', this.pos_profile.name);
+        } else {
+          frappe.msgprint(__('No POS Profile assigned to this user. Please contact administrator.'));
         }
+      } catch (error) {
+        console.error('Error loading POS Profile for Sales Associate:', error);
+        frappe.msgprint(__('Error loading POS Profile. Please contact administrator.'));
       }
     },
     

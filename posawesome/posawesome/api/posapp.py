@@ -155,6 +155,62 @@ def get_opening_dialog_data():
 
 
 @frappe.whitelist()
+def get_user_pos_profile():
+    """
+    Get the POS Profile assigned to the current user.
+    Returns the first POS Profile where the user is in the 'Applicable for Users' table,
+    or if that doesn't exist, checks for profiles where user matches default_owner.
+    """
+    user = frappe.session.user
+    
+    # First, check for POS Profiles where user is in applicable_for_users
+    profiles = frappe.get_all(
+        "POS Profile User",
+        filters={"user": user, "default": 1},
+        fields=["parent"],
+        limit=1
+    )
+    
+    if profiles:
+        return frappe.get_doc("POS Profile", profiles[0].parent)
+    
+    # If no default, get any profile assigned to user
+    profiles = frappe.get_all(
+        "POS Profile User",
+        filters={"user": user},
+        fields=["parent"],
+        limit=1
+    )
+    
+    if profiles:
+        return frappe.get_doc("POS Profile", profiles[0].parent)
+    
+    # Fallback: get first enabled POS Profile with token workflow enabled
+    profiles = frappe.get_all(
+        "POS Profile",
+        filters={"disabled": 0, "posa_enable_token_workflow": 1},
+        fields=["name"],
+        limit=1
+    )
+    
+    if profiles:
+        return frappe.get_doc("POS Profile", profiles[0].name)
+    
+    # Last resort: first enabled profile
+    profiles = frappe.get_all(
+        "POS Profile",
+        filters={"disabled": 0},
+        fields=["name"],
+        limit=1
+    )
+    
+    if profiles:
+        return frappe.get_doc("POS Profile", profiles[0].name)
+    
+    return None
+
+
+@frappe.whitelist()
 def create_opening_voucher(pos_profile, company, balance_details):
     balance_details = json.loads(balance_details)
 

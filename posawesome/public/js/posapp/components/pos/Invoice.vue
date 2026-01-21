@@ -778,9 +778,9 @@
         </v-col>
         <v-col cols="5">
           <v-row no-gutters class="pa-1 pt-2 pl-0">
-            <!-- Held/Drafts button: Hidden for Sales Associate in token workflow -->
+            <!-- Held/Drafts button: Hidden when token workflow is enabled -->
             <v-col 
-              v-if="!pos_profile.posa_enable_token_workflow || !isTokenWorkflowSalesAssociate"
+              v-if="!pos_profile.posa_enable_token_workflow"
               cols="6" 
               class="pa-1"
             >
@@ -838,9 +838,9 @@
                 >{{ __("Cancel") }}</v-btn
               >
             </v-col>
-            <!-- Save/New button: Hidden for Sales Associate in token workflow -->
+            <!-- Save/New button: Hidden when token workflow is enabled -->
             <v-col 
-              v-if="!pos_profile.posa_enable_token_workflow || !isTokenWorkflowSalesAssociate"
+              v-if="!pos_profile.posa_enable_token_workflow"
               cols="6" 
               class="pa-1"
             >
