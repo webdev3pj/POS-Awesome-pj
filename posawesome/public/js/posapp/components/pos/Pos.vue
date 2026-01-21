@@ -92,6 +92,7 @@ export default {
       payment: false,
       offers: false,
       coupons: false,
+      user_roles: [],
     };
   },
 
@@ -114,8 +115,27 @@ export default {
     CashierMode,
     PendingTokensSidebar,
   },
+  
+  computed: {
+    isSalesAssociateOnly() {
+      // Returns true if user has POS Sales Associate role but NOT POS Cashier
+      return this.user_roles.includes("POS Sales Associate") && 
+             !this.user_roles.includes("POS Cashier");
+    }
+  },
 
   methods: {
+    async fetch_user_roles() {
+      // Fetch user roles first
+      const response = await frappe.call({
+        method: "posawesome.posawesome.api.posapp.get_current_user_roles",
+        args: {}
+      });
+      if (response.message) {
+        this.user_roles = response.message;
+      }
+    },
+    
     check_opening_entry() {
       return frappe
         .call('posawesome.posawesome.api.posapp.check_opening_shift', {
@@ -130,10 +150,56 @@ export default {
             evntBus.$emit('set_company', r.message.company);
             console.info('LoadPosProfile');
           } else {
-            this.create_opening_voucher();
+            // Check if user is a Sales Associate - they don't need opening shift
+            if (this.isSalesAssociateOnly) {
+              this.load_pos_profile_for_sales_associate();
+            } else {
+              this.create_opening_voucher();
+            }
           }
         });
     },
+    
+    async load_pos_profile_for_sales_associate() {
+      // Sales Associates don't need an opening shift
+      // Just load the POS Profile directly
+      const response = await frappe.call({
+        method: 'posawesome.posawesome.api.posapp.get_opening_dialog_data',
+        args: {}
+      });
+      
+      if (response.message && response.message.pos_profiles_data && response.message.pos_profiles_data.length > 0) {
+        // Get the first available POS Profile or the one assigned to user
+        const pos_profile_name = response.message.pos_profiles_data[0].name;
+        
+        // Fetch full POS Profile data
+        const profile_response = await frappe.call({
+          method: 'frappe.client.get',
+          args: {
+            doctype: 'POS Profile',
+            name: pos_profile_name
+          }
+        });
+        
+        if (profile_response.message) {
+          this.pos_profile = profile_response.message;
+          this.get_offers(this.pos_profile.name);
+          
+          // Emit the profile data without opening shift
+          const data = {
+            pos_profile: profile_response.message,
+            pos_opening_shift: null,
+            company: { name: profile_response.message.company },
+            stock_settings: { allow_negative_stock: '0' }
+          };
+          
+          evntBus.$emit('register_pos_profile', data);
+          evntBus.$emit('set_company', data.company);
+          console.info('LoadPosProfile for Sales Associate (no opening shift)');
+        }
+      }
+    },
+    
     create_opening_voucher() {
       this.dialog = true;
     },
@@ -193,7 +259,9 @@ export default {
   },
 
   mounted: function () {
-    this.$nextTick(function () {
+    this.$nextTick(async function () {
+      // Fetch user roles first before checking opening entry
+      await this.fetch_user_roles();
       this.check_opening_entry();
       this.get_pos_setting();
       evntBus.$on('close_opening_dialog', () => {

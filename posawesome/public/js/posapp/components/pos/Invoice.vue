@@ -904,22 +904,7 @@
                 >{{ __("PAY") }}</v-btn
               >
             </v-col>
-            <!-- Quotation button: Only for Sales Associate in token workflow -->
-            <v-col
-              v-if="pos_profile.posa_enable_token_workflow === 1 && isTokenWorkflowSalesAssociate"
-              cols="4"
-              class="pa-1"
-            >
-              <v-btn
-                block
-                class="pa-0"
-                color="primary"
-                @click="print_quotation"
-                dark
-                >{{ __("Quotation") }}</v-btn
-              >
-            </v-col>
-            <!-- Print Draft: Only for Cashier in token workflow -->
+            <!-- Quotation button: Only for Cashier in token workflow -->
             <v-col
               v-if="pos_profile.posa_enable_token_workflow === 1 && isCashier && !isTokenWorkflowSalesAssociate"
               cols="6"
@@ -929,9 +914,9 @@
                 block
                 class="pa-0"
                 color="primary"
-                @click="print_draft_invoice"
+                @click="print_quotation"
                 dark
-                >{{ __("Print Draft") }}</v-btn
+                >{{ __("Quotation") }}</v-btn
               >
             </v-col>
           </v-row>
