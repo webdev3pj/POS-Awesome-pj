@@ -768,9 +768,9 @@
         </v-col>
         <v-col cols="5">
           <v-row no-gutters class="pa-1 pt-2 pl-0">
-            <!-- Held/Drafts button: Hidden when token workflow enabled -->
+            <!-- Held/Drafts button: Only for Sales Associate in token workflow -->
             <v-col 
-              v-if="!pos_profile.posa_enable_token_workflow"
+              v-if="!pos_profile.posa_enable_token_workflow || isTokenWorkflowSalesAssociate"
               cols="6" 
               class="pa-1"
             >
@@ -798,7 +798,7 @@
                 >{{ __("Select S.O") }}</v-btn
               >
             </v-col>
-            <!-- Return button: Hidden for Sales Associate in token workflow -->
+            <!-- Return button: Only for Cashier (hidden for Sales Associate) -->
             <v-col 
               v-if="!isTokenWorkflowSalesAssociate"
               cols="6" 
@@ -828,9 +828,9 @@
                 >{{ __("Cancel") }}</v-btn
               >
             </v-col>
-            <!-- Save/New button: Hidden when token workflow enabled -->
+            <!-- Save/New button: Only for Sales Associate in token workflow -->
             <v-col 
-              v-if="!pos_profile.posa_enable_token_workflow"
+              v-if="!pos_profile.posa_enable_token_workflow || isTokenWorkflowSalesAssociate"
               cols="6" 
               class="pa-1"
             >
@@ -894,9 +894,9 @@
                 >{{ __("PAY") }}</v-btn
               >
             </v-col>
-            <!-- Print Draft: Hidden for Sales Associate in token workflow -->
+            <!-- Print Draft: Only for Cashier in token workflow -->
             <v-col
-              v-if="pos_profile.posa_allow_print_draft_invoices && !isTokenWorkflowSalesAssociate"
+              v-if="pos_profile.posa_enable_token_workflow === 1 && isCashier && !isTokenWorkflowSalesAssociate"
               cols="6"
               class="pa-1"
             >
