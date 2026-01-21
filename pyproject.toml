@@ -1,17 +1,8 @@
 [project]
 name = "posawesome"
-authors = [
-    { name = "Youssef Restom", email = "youssef@totrox.com"}
-]
+version = "6.3.0"
 description = "POS Awesome - Point of Sale for ERPNext"
 requires-python = ">=3.10"
-readme = "README.md"
-dynamic = ["version"]
 dependencies = [
     "qrcode[pil]>=7.3",
 ]
-
-[build-system]
-requires = ["flit_core >=3.4,<4"]
-build-backend = "flit_core.buildapi"
-
