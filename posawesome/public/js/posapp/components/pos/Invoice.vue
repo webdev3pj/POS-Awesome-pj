@@ -19,24 +19,34 @@
       </v-card>
     </v-dialog>
     
-    <!-- Sales Associate Info Bar - Only shown for Sales Associates in token workflow -->
+    <!-- Sales Associate Info Bar - Compact version for both roles -->
     <v-card 
-      v-if="isTokenWorkflowSalesAssociate"
-      class="mx-3 mt-3 mb-0 pa-2 purple lighten-5"
+      v-if="pos_profile.posa_enable_token_workflow === 1 && (isTokenWorkflowSalesAssociate || (isCashier && token_data))"
+      class="mx-3 mt-3 mb-0 px-3 py-1"
+      :class="isTokenWorkflowSalesAssociate ? 'purple lighten-5' : 'teal lighten-5'"
       flat
     >
       <v-row no-gutters align="center">
         <v-col cols="auto">
-          <v-icon color="purple" class="mr-2">mdi-account-badge</v-icon>
+          <v-icon :color="isTokenWorkflowSalesAssociate ? 'purple' : 'teal'" size="20" class="mr-2">mdi-account</v-icon>
         </v-col>
         <v-col>
-          <div class="text-caption purple--text text--darken-2">{{ __('Logged in as') }}</div>
-          <div class="text-subtitle-1 font-weight-bold purple--text text--darken-4">{{ currentUserFullName }}</div>
+          <span 
+            class="text-body-2 font-weight-medium"
+            :class="isTokenWorkflowSalesAssociate ? 'purple--text text--darken-3' : 'teal--text text--darken-3'"
+          >
+            {{ __('Sales Associate') }}:
+          </span>
+          <span 
+            class="text-body-2 font-weight-bold ml-1"
+            :class="isTokenWorkflowSalesAssociate ? 'purple--text text--darken-4' : 'teal--text text--darken-4'"
+          >
+            {{ isTokenWorkflowSalesAssociate ? currentUserFullName : (token_data ? token_data.sales_associate_name : '') }}
+          </span>
         </v-col>
-        <v-col cols="auto">
-          <v-chip small color="purple" dark>
-            <v-icon small left>mdi-ticket</v-icon>
-            {{ __('Sales Associate') }}
+        <v-col cols="auto" v-if="isCashier && token_data">
+          <v-chip x-small color="teal" dark>
+            {{ token_data.token_number }}
           </v-chip>
         </v-col>
       </v-row>
@@ -44,7 +54,7 @@
     
     <v-card
       style="max-height: 70vh; height: 70vh"
-      :style="isTokenWorkflowSalesAssociate ? 'max-height: 62vh; height: 62vh' : ''"
+      :style="(pos_profile.posa_enable_token_workflow === 1 && (isTokenWorkflowSalesAssociate || (isCashier && token_data))) ? 'max-height: 65vh; height: 65vh' : ''"
       class="cards my-0 py-0 mt-3 grey lighten-5"
     >
       <v-row align="center" class="items px-2 py-1">
