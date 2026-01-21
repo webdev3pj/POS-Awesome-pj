@@ -743,7 +743,12 @@
         </v-col>
         <v-col cols="5">
           <v-row no-gutters class="pa-1 pt-2 pl-0">
-            <v-col cols="6" class="pa-1">
+            <!-- Held/Drafts button: Hidden for Sales Associate in token workflow -->
+            <v-col 
+              v-if="!isTokenWorkflowSalesAssociate"
+              cols="6" 
+              class="pa-1"
+            >
               <v-btn
                 block
                 class="pa-0"
@@ -753,8 +758,9 @@
                 >{{ __("Held") }}</v-btn
               >
             </v-col>
+            <!-- Select S.O button: Hidden for Sales Associate in token workflow -->
             <v-col
-              v-if="pos_profile.custom_allow_select_sales_order === 1"
+              v-if="pos_profile.custom_allow_select_sales_order === 1 && !isTokenWorkflowSalesAssociate"
               cols="6"
               class="pa-1"
             >
@@ -767,7 +773,12 @@
                 >{{ __("Select S.O") }}</v-btn
               >
             </v-col>
-            <v-col cols="6" class="pa-1">
+            <!-- Return button: Hidden for Sales Associate in token workflow -->
+            <v-col 
+              v-if="!isTokenWorkflowSalesAssociate"
+              cols="6" 
+              class="pa-1"
+            >
               <v-btn
                 block
                 class="pa-0"
@@ -778,6 +789,7 @@
                 >{{ __("Return") }}</v-btn
               >
             </v-col>
+            <!-- Cancel button: Available to all -->
             <v-col cols="6" class="pa-1">
               <v-btn
                 block
@@ -788,7 +800,12 @@
                 >{{ __("Cancel") }}</v-btn
               >
             </v-col>
-            <v-col cols="6" class="pa-1">
+            <!-- Save/New button: Hidden for Sales Associate in token workflow -->
+            <v-col 
+              v-if="!isTokenWorkflowSalesAssociate"
+              cols="6" 
+              class="pa-1"
+            >
               <v-btn
                 block
                 class="pa-0"
@@ -842,8 +859,9 @@
                 >{{ __("PAY") }}</v-btn
               >
             </v-col>
+            <!-- Print Draft: Hidden for Sales Associate in token workflow -->
             <v-col
-              v-if="pos_profile.posa_allow_print_draft_invoices"
+              v-if="pos_profile.posa_allow_print_draft_invoices && !isTokenWorkflowSalesAssociate"
               cols="6"
               class="pa-1"
             >
