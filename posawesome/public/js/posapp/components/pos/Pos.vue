@@ -7,6 +7,8 @@
     <NewAddress></NewAddress>
     <MpesaPayments></MpesaPayments>
     <Variants></Variants>
+    <TokenDialog></TokenDialog>
+    <CashierMode></CashierMode>
     <OpeningDialog v-if="dialog" :dialog="dialog"></OpeningDialog>
     <v-row v-show="!dialog">
       <v-col
@@ -76,6 +78,8 @@ import NewAddress from './NewAddress.vue';
 import Variants from './Variants.vue';
 import Returns from './Returns.vue';
 import MpesaPayments from './Mpesa-Payments.vue';
+import TokenDialog from './TokenDialog.vue';
+import CashierMode from './CashierMode.vue';
 
 export default {
   data: function () {
@@ -104,6 +108,8 @@ export default {
     Variants,
     MpesaPayments,
     SalesOrders,
+    TokenDialog,
+    CashierMode,
   },
 
   methods: {

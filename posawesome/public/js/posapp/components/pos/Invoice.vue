@@ -798,7 +798,41 @@
                 >{{ __("Save/New") }}</v-btn
               >
             </v-col>
-            <v-col class="pa-1">
+            <!-- Token Workflow: Generate Token Button (Sales Associate) -->
+            <v-col
+              v-if="pos_profile.posa_enable_token_workflow === 1 && isSalesAssociate"
+              cols="6"
+              class="pa-1"
+            >
+              <v-btn
+                block
+                class="pa-0"
+                color="purple"
+                dark
+                @click="generate_token"
+                >{{ __("Generate Token") }}</v-btn
+              >
+            </v-col>
+            <!-- Token Workflow: Scan Token Button (Cashier) -->
+            <v-col
+              v-if="pos_profile.posa_enable_token_workflow === 1 && isCashier"
+              cols="6"
+              class="pa-1"
+            >
+              <v-btn
+                block
+                class="pa-0"
+                color="teal"
+                dark
+                @click="open_cashier_mode"
+                >{{ __("Scan Token") }}</v-btn
+              >
+            </v-col>
+            <!-- PAY button: Hidden for Sales Associate in token workflow mode -->
+            <v-col 
+              v-if="!isTokenWorkflowSalesAssociate"
+              class="pa-1"
+            >
               <v-btn
                 block
                 class="pa-0"
@@ -868,6 +902,8 @@ export default {
       selcted_delivery_charges: {},
       invoice_posting_date: false,
       posting_date: frappe.datetime.nowdate(),
+      token_reference: null,
+      user_roles: [],
       items_headers: [
         {
           text: __("Name"),
@@ -889,6 +925,19 @@ export default {
   },
 
   computed: {
+    // Token Workflow Role Detection
+    isSalesAssociate() {
+      return this.user_roles.includes("POS Sales Associate");
+    },
+    isCashier() {
+      return this.user_roles.includes("POS Cashier");
+    },
+    isTokenWorkflowSalesAssociate() {
+      // Returns true if token workflow is enabled AND user is a sales associate (hides PAY button)
+      return this.pos_profile.posa_enable_token_workflow === 1 && 
+             this.isSalesAssociate && 
+             !this.isCashier;
+    },
     total_qty() {
       this.close_payments();
       let qty = 0;
@@ -2958,9 +3007,134 @@ export default {
         this.delivery_charges_rate = 0;
       }
     },
+    
+    // Token System Methods
+    async generate_token() {
+      if (!this.customer) {
+        evntBus.$emit("show_mesage", {
+          text: __("Please select a customer first"),
+          color: "error",
+        });
+        return;
+      }
+      if (!this.items.length) {
+        evntBus.$emit("show_mesage", {
+          text: __("Please add items to generate token"),
+          color: "error",
+        });
+        return;
+      }
+      if (!this.validate()) {
+        return;
+      }
+      
+      const vm = this;
+      const items = this.items.map(item => ({
+        item_code: item.item_code,
+        item_name: item.item_name,
+        qty: item.qty,
+        rate: item.rate,
+        uom: item.uom || item.stock_uom,
+        batch_no: item.batch_no,
+        serial_no: item.serial_no,
+        warehouse: item.warehouse
+      }));
+      
+      frappe.call({
+        method: "posawesome.posawesome.api.token.create_token",
+        args: {
+          pos_profile: vm.pos_profile.name,
+          customer: vm.customer,
+          items: JSON.stringify(items),
+          pos_opening_shift: vm.pos_opening_shift ? vm.pos_opening_shift.name : null
+        },
+        freeze: true,
+        freeze_message: __("Generating Token..."),
+        callback: function(r) {
+          if (r.message) {
+            evntBus.$emit("open_token_dialog", r.message, vm.pos_profile.currency);
+            evntBus.$emit("show_mesage", {
+              text: __("Token {0} generated successfully", [r.message.token_number]),
+              color: "success",
+            });
+            // Clear the cart after token generation
+            vm.cancel_invoice();
+          }
+        },
+        error: function(err) {
+          evntBus.$emit("show_mesage", {
+            text: err.message || __("Error generating token"),
+            color: "error",
+          });
+        }
+      });
+    },
+    
+    open_cashier_mode() {
+      evntBus.$emit("open_cashier_mode", this.pos_profile, this.pos_opening_shift);
+    },
+    
+    load_token_items(tokenData) {
+      // Load token items into the cart for payment
+      this.customer = tokenData.customer;
+      this.items = [];
+      
+      tokenData.items.forEach(item => {
+        this.items.push({
+          item_code: item.item_code,
+          item_name: item.item_name,
+          qty: item.qty,
+          rate: item.rate,
+          amount: item.amount,
+          uom: item.uom,
+          batch_no: item.batch_no,
+          serial_no: item.serial_no,
+          warehouse: item.warehouse,
+          posa_row_id: this.makeid(20),
+          posa_offers: JSON.stringify([]),
+          posa_offer_applied: 0,
+          posa_is_offer: 0,
+          posa_notes: "",
+          posa_delivery_date: ""
+        });
+      });
+      
+      // Store token reference for payment processing
+      this.token_reference = tokenData.name;
+      
+      evntBus.$emit("show_mesage", {
+        text: __("Token {0} loaded for payment", [tokenData.token_number]),
+        color: "success",
+      });
+    },
+    
+    fetch_user_roles() {
+      // Fetch current user's roles for token workflow permission checks
+      const vm = this;
+      frappe.call({
+        method: "frappe.client.get_list",
+        args: {
+          doctype: "Has Role",
+          filters: {
+            parent: frappe.session.user,
+            parenttype: "User"
+          },
+          fields: ["role"]
+        },
+        async: false,
+        callback: function(r) {
+          if (r.message) {
+            vm.user_roles = r.message.map(row => row.role);
+          }
+        }
+      });
+    },
   },
 
   mounted() {
+    // Fetch user roles on mount
+    this.fetch_user_roles();
+    
     evntBus.$on("register_pos_profile", (data) => {
       this.pos_profile = data.pos_profile;
       this.customer = data.pos_profile.customer;
@@ -3029,6 +3203,13 @@ export default {
     evntBus.$on("set_new_line", (data) => {
       this.new_line = data;
     });
+    evntBus.$on("load_token_for_payment", (tokenData) => {
+      this.load_token_items(tokenData);
+    });
+    evntBus.$on("token_dialog_closed", () => {
+      // Clear token reference when token dialog is closed
+      this.token_reference = null;
+    });
   },
   beforeDestroy() {
     evntBus.$off("register_pos_profile");
@@ -3040,6 +3221,8 @@ export default {
     evntBus.$off("update_invoice_offers");
     evntBus.$off("update_invoice_coupons");
     evntBus.$off("set_all_items");
+    evntBus.$off("load_token_for_payment");
+    evntBus.$off("token_dialog_closed");
   },
   created() {
     document.addEventListener("keydown", this.shortOpenPayment.bind(this));
