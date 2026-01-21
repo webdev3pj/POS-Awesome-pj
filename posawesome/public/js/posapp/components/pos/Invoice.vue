@@ -780,7 +780,7 @@
           <v-row no-gutters class="pa-1 pt-2 pl-0">
             <!-- Held/Drafts button: Hidden when token workflow is enabled -->
             <v-col 
-              v-if="!pos_profile.posa_enable_token_workflow"
+              v-if="pos_profile.posa_enable_token_workflow !== 1"
               cols="6" 
               class="pa-1"
             >
@@ -795,7 +795,7 @@
             </v-col>
             <!-- Select S.O button: Hidden when token workflow enabled -->
             <v-col
-              v-if="pos_profile.custom_allow_select_sales_order === 1 && !pos_profile.posa_enable_token_workflow"
+              v-if="pos_profile.custom_allow_select_sales_order === 1 && pos_profile.posa_enable_token_workflow !== 1"
               cols="6"
               class="pa-1"
             >
@@ -840,7 +840,7 @@
             </v-col>
             <!-- Save/New button: Hidden when token workflow is enabled -->
             <v-col 
-              v-if="!pos_profile.posa_enable_token_workflow"
+              v-if="pos_profile.posa_enable_token_workflow !== 1"
               cols="6" 
               class="pa-1"
             >
@@ -3073,7 +3073,7 @@ export default {
     },
     
     async print_quotation() {
-      // Print current cart as a Quotation for the Sales Associate
+      // Print current cart as a Quotation for the Cashier
       const vm = this;
       
       if (!this.customer) {
@@ -3125,14 +3125,12 @@ export default {
             color: "success",
           });
           
-          // Open print dialog
-          const print_format = this.pos_profile.print_format || "Standard";
+          // Open print dialog using Standard format for Quotation (not Sales Invoice format)
           const letter_head = this.pos_profile.letter_head || 0;
           const url = frappe.urllib.get_full_url(
             "/printview?doctype=Quotation&name=" +
             quotation_name +
-            "&trigger_print=1&format=" +
-            print_format +
+            "&trigger_print=1&format=Standard" +
             "&no_letterhead=" +
             letter_head
           );
