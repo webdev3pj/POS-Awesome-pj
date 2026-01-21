@@ -18,8 +18,33 @@
         </v-card-actions>
       </v-card>
     </v-dialog>
+    
+    <!-- Sales Associate Info Bar - Only shown for Sales Associates in token workflow -->
+    <v-card 
+      v-if="isTokenWorkflowSalesAssociate"
+      class="mx-3 mt-3 mb-0 pa-2 purple lighten-5"
+      flat
+    >
+      <v-row no-gutters align="center">
+        <v-col cols="auto">
+          <v-icon color="purple" class="mr-2">mdi-account-badge</v-icon>
+        </v-col>
+        <v-col>
+          <div class="text-caption purple--text text--darken-2">{{ __('Logged in as') }}</div>
+          <div class="text-subtitle-1 font-weight-bold purple--text text--darken-4">{{ currentUserFullName }}</div>
+        </v-col>
+        <v-col cols="auto">
+          <v-chip small color="purple" dark>
+            <v-icon small left>mdi-ticket</v-icon>
+            {{ __('Sales Associate') }}
+          </v-chip>
+        </v-col>
+      </v-row>
+    </v-card>
+    
     <v-card
       style="max-height: 70vh; height: 70vh"
+      :style="isTokenWorkflowSalesAssociate ? 'max-height: 62vh; height: 62vh' : ''"
       class="cards my-0 py-0 mt-3 grey lighten-5"
     >
       <v-row align="center" class="items px-2 py-1">
@@ -789,8 +814,11 @@
                 >{{ __("Return") }}</v-btn
               >
             </v-col>
-            <!-- Cancel button: Available to all -->
-            <v-col cols="6" class="pa-1">
+            <!-- Cancel button: Available to all (smaller for Sales Associate) -->
+            <v-col 
+              :cols="isTokenWorkflowSalesAssociate ? 4 : 6" 
+              class="pa-1"
+            >
               <v-btn
                 block
                 class="pa-0"
@@ -815,24 +843,29 @@
                 >{{ __("Save/New") }}</v-btn
               >
             </v-col>
-            <!-- Token Workflow: Generate Token Button (Sales Associate) -->
+            
+            <!-- ========== SALES ASSOCIATE: Large Generate Token Button ========== -->
             <v-col
-              v-if="pos_profile.posa_enable_token_workflow === 1 && isSalesAssociate"
-              cols="6"
+              v-if="isTokenWorkflowSalesAssociate"
+              cols="8"
               class="pa-1"
             >
               <v-btn
                 block
-                class="pa-0"
+                x-large
                 color="purple"
                 dark
+                class="generate-token-btn"
                 @click="generate_token"
-                >{{ __("Generate Token") }}</v-btn
               >
+                <v-icon left large>mdi-ticket-confirmation</v-icon>
+                {{ __("GENERATE TOKEN") }}
+              </v-btn>
             </v-col>
-            <!-- Token Workflow: Scan Token Button (Cashier) -->
+            
+            <!-- ========== CASHIER: Scan Token Button ========== -->
             <v-col
-              v-if="pos_profile.posa_enable_token_workflow === 1 && isCashier"
+              v-if="pos_profile.posa_enable_token_workflow === 1 && isCashier && !isTokenWorkflowSalesAssociate"
               cols="6"
               class="pa-1"
             >
@@ -842,7 +875,9 @@
                 color="teal"
                 dark
                 @click="open_cashier_mode"
-                >{{ __("Scan Token") }}</v-btn
+                >
+                <v-icon left>mdi-qrcode-scan</v-icon>
+                {{ __("Scan Token") }}</v-btn
               >
             </v-col>
             <!-- PAY button: Hidden for Sales Associate in token workflow mode -->
@@ -923,6 +958,7 @@ export default {
       token_reference: null,
       token_data: null,
       user_roles: [],
+      currentUserFullName: '',
       items_headers: [
         {
           text: __("Name"),
@@ -3143,8 +3179,10 @@ export default {
     },
     
     fetch_user_roles() {
-      // Fetch current user's roles for token workflow permission checks
+      // Fetch current user's roles and full name for token workflow
       const vm = this;
+      
+      // Get user roles
       frappe.call({
         method: "frappe.client.get_list",
         args: {
@@ -3159,6 +3197,22 @@ export default {
         callback: function(r) {
           if (r.message) {
             vm.user_roles = r.message.map(row => row.role);
+          }
+        }
+      });
+      
+      // Get user full name
+      frappe.call({
+        method: "frappe.client.get_value",
+        args: {
+          doctype: "User",
+          filters: { name: frappe.session.user },
+          fieldname: ["full_name"]
+        },
+        async: false,
+        callback: function(r) {
+          if (r.message) {
+            vm.currentUserFullName = r.message.full_name || frappe.session.user;
           }
         }
       });
@@ -3321,5 +3375,11 @@ export default {
 }
 .disable-events {
   pointer-events: none;
+}
+.generate-token-btn {
+  font-size: 1.1rem !important;
+  font-weight: 700 !important;
+  letter-spacing: 0.5px;
+  height: 52px !important;
 }
 </style>
