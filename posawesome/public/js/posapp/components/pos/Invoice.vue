@@ -969,6 +969,8 @@ export default {
       token_data: null,
       user_roles: [],
       currentUserFullName: '',
+      customer_sales_info: null,
+      ownership_warning_shown: false,
       items_headers: [
         {
           text: __("Name"),
@@ -2044,7 +2046,39 @@ export default {
             vm.update_price_list();
           },
         });
+        
+        // Fetch customer sales info for commission ownership check
+        vm.fetch_customer_sales_info();
       }
+    },
+    
+    fetch_customer_sales_info() {
+      const vm = this;
+      if (!this.customer || !this.pos_profile.custom_commission_enabled) {
+        return;
+      }
+      
+      frappe.call({
+        method: "posawesome.posawesome.api.posapp.get_customer_sales_info",
+        args: {
+          customer: vm.customer,
+        },
+        async: false,
+        callback: (r) => {
+          if (!r.exc && r.message) {
+            vm.customer_sales_info = r.message;
+            
+            // Show ownership warning if customer belongs to another sales person
+            if (r.message.ownership_warning && !vm.ownership_warning_shown) {
+              vm.ownership_warning_shown = true;
+              frappe.show_alert({
+                message: r.message.ownership_warning,
+                indicator: 'orange'
+              }, 5);
+            }
+          }
+        },
+      });
     },
 
     get_price_list() {
@@ -3156,6 +3190,9 @@ export default {
       this.token_reference = tokenData.name;
       this.token_data = tokenData;
       
+      // Reset ownership warning flag for new token
+      this.ownership_warning_shown = false;
+      
       tokenData.items.forEach(item => {
         this.items.push({
           item_code: item.item_code,
@@ -3181,6 +3218,12 @@ export default {
       
       // Fetch customer details to populate customer_info
       this.fetch_customer_details();
+      
+      // Pre-populate sales person from token for commission
+      // The sales associate who created the token gets the commission
+      if (tokenData.sales_person) {
+        evntBus.$emit("set_token_sales_person", tokenData.sales_person);
+      }
       
       evntBus.$emit("show_mesage", {
         text: __("Token {0} loaded - you can modify items before paying", [tokenData.token_number]),

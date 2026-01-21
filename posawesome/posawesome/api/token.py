@@ -13,6 +13,7 @@ Key Features:
 - Stores Sales Person (for commission calculation)
 - Stores Sales Partner (for partner commission)
 - QR code generation for easy token lookup
+- Customer ownership tracking for commission attribution
 """
 
 from __future__ import unicode_literals
@@ -25,6 +26,28 @@ import io
 import base64
 
 
+def get_sales_person_for_current_user():
+    """
+    Get the Sales Person linked to the current user via Employee
+    Returns sales_person name or None
+    """
+    user = frappe.session.user
+    
+    # Find Employee linked to this User
+    employee = frappe.db.get_value("Employee", {"user_id": user}, "name")
+    if not employee:
+        return None
+    
+    # Find Sales Person linked to this Employee
+    sales_person = frappe.db.get_value(
+        "Sales Person", 
+        {"employee": employee, "enabled": 1}, 
+        "name"
+    )
+    
+    return sales_person
+
+
 @frappe.whitelist()
 def create_token(pos_profile, customer, items, pos_opening_shift=None, sales_person=None, sales_partner=None):
     """
@@ -35,7 +58,7 @@ def create_token(pos_profile, customer, items, pos_opening_shift=None, sales_per
         customer: Customer ID
         items: JSON string of cart items
         pos_opening_shift: Optional POS Opening Shift reference
-        sales_person: Optional Sales Person for commission
+        sales_person: Optional Sales Person for commission (if not provided, auto-determined)
         sales_partner: Optional Sales Partner for commission
     
     Returns:
@@ -52,6 +75,12 @@ def create_token(pos_profile, customer, items, pos_opening_shift=None, sales_per
     # Get sales associate name
     sales_associate = frappe.session.user
     sales_associate_name = frappe.db.get_value("User", sales_associate, "full_name") or sales_associate
+    
+    # Determine sales person for commission
+    # Priority: 1) Explicitly provided, 2) Current user's linked Sales Person
+    if not sales_person:
+        # Get the current user's sales person (the one making the transaction gets the commission)
+        sales_person = get_sales_person_for_current_user()
     
     # Create token document
     token_doc = frappe.get_doc({

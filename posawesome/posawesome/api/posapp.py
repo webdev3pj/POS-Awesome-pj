@@ -34,6 +34,81 @@ from posawesome.posawesome.doctype.delivery_charges.delivery_charges import (
 from frappe.utils.caching import redis_cache
 
 
+def get_sales_person_for_current_user():
+    """
+    Get the Sales Person linked to the current user via Employee
+    Returns sales_person name or None
+    """
+    user = frappe.session.user
+    
+    # Find Employee linked to this User
+    employee = frappe.db.get_value("Employee", {"user_id": user}, "name")
+    if not employee:
+        return None
+    
+    # Find Sales Person linked to this Employee
+    sales_person = frappe.db.get_value(
+        "Sales Person", 
+        {"employee": employee, "enabled": 1}, 
+        "name"
+    )
+    
+    return sales_person
+
+
+@frappe.whitelist()
+def get_customer_sales_info(customer):
+    """
+    Get the customer's default sales person and check for ownership conflicts
+    
+    Args:
+        customer: Customer ID
+    
+    Returns:
+        dict: Customer sales info including default sales person and ownership warning
+    """
+    if not customer:
+        return {"error": "Customer ID required"}
+    
+    customer_doc = frappe.get_doc("Customer", customer)
+    default_sales_person = customer_doc.get("custom_default_sales_person")
+    
+    # Get current user's sales person
+    current_user_sales_person = get_sales_person_for_current_user()
+    
+    result = {
+        "customer": customer,
+        "customer_name": customer_doc.customer_name,
+        "default_sales_person": default_sales_person,
+        "default_sales_person_name": None,
+        "current_user_sales_person": current_user_sales_person,
+        "current_user_sales_person_name": None,
+        "ownership_warning": None,
+        "is_own_customer": True
+    }
+    
+    # Get sales person names
+    if default_sales_person:
+        result["default_sales_person_name"] = frappe.db.get_value(
+            "Sales Person", default_sales_person, "sales_person_name"
+        )
+    
+    if current_user_sales_person:
+        result["current_user_sales_person_name"] = frappe.db.get_value(
+            "Sales Person", current_user_sales_person, "sales_person_name"
+        )
+    
+    # Check for ownership conflict
+    if default_sales_person and current_user_sales_person:
+        if default_sales_person != current_user_sales_person:
+            result["ownership_warning"] = _(
+                "This customer belongs to {0}. Commission will be credited to you for this transaction."
+            ).format(result["default_sales_person_name"])
+            result["is_own_customer"] = False
+    
+    return result
+
+
 @frappe.whitelist()
 def get_opening_dialog_data():
     data = {}
@@ -1125,6 +1200,12 @@ def create_customer(
                 customer.territory = territory
             else:
                 customer.territory = "All Territories"
+            
+            # Auto-set default sales person from current user (creator gets commission for their customers)
+            default_sales_person = get_sales_person_for_current_user()
+            if default_sales_person:
+                customer.custom_default_sales_person = default_sales_person
+            
             customer.save()
             return customer
         else:

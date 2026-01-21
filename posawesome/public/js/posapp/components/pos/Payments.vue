@@ -1465,6 +1465,12 @@ export default {
     evntBus.$on("set_customer_info_to_edit", (data) => {
       this.customer_info = data;
     });
+    evntBus.$on("set_token_sales_person", (salesPerson) => {
+      // Pre-populate sales person from token when loaded by cashier
+      if (salesPerson && this.pos_profile.custom_commission_enabled) {
+        this.sales_person = salesPerson;
+      }
+    });
     evntBus.$on("set_mpesa_payment", (data) => {
       this.set_mpesa_payment(data);
     });
@@ -1480,6 +1486,7 @@ export default {
     evntBus.$off("update_customer");
     evntBus.$off("set_pos_settings");
     evntBus.$off("set_customer_info_to_edit");
+    evntBus.$off("set_token_sales_person");
     evntBus.$off("update_invoice_coupons");
     evntBus.$off("set_mpesa_payment");
   },

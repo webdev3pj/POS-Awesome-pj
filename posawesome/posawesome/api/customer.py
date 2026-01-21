@@ -9,13 +9,59 @@ from posawesome.posawesome.doctype.referral_code.referral_code import (
 )
 
 
+def get_sales_person_for_user(user=None):
+    """
+    Get the Sales Person linked to a User via Employee
+    Returns sales_person name or None
+    """
+    if not user:
+        user = frappe.session.user
+    
+    # Find Employee linked to this User
+    employee = frappe.db.get_value("Employee", {"user_id": user}, "name")
+    if not employee:
+        return None
+    
+    # Find Sales Person linked to this Employee
+    sales_person = frappe.db.get_value(
+        "Sales Person", 
+        {"employee": employee, "enabled": 1}, 
+        "name"
+    )
+    
+    return sales_person
+
+
 def after_insert(doc, method):
     create_customer_referral_code(doc)
     create_gift_coupon(doc)
+    set_default_sales_person(doc)
 
 
 def validate(doc, method):
     validate_referral_code(doc)
+
+
+def set_default_sales_person(doc):
+    """
+    Set the default sales person for newly created customers.
+    The creator (if linked to a Sales Person) becomes the default for commission purposes.
+    """
+    # Only set if not already set
+    if doc.get("custom_default_sales_person"):
+        return
+    
+    # Get the sales person linked to the current user (creator)
+    sales_person = get_sales_person_for_user()
+    
+    if sales_person:
+        frappe.db.set_value(
+            "Customer", 
+            doc.name, 
+            "custom_default_sales_person", 
+            sales_person,
+            update_modified=False
+        )
 
 
 def create_customer_referral_code(doc):
