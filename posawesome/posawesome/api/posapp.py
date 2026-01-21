@@ -57,6 +57,15 @@ def get_sales_person_for_current_user():
 
 
 @frappe.whitelist()
+def get_current_user_roles():
+    """
+    Get the current user's roles without requiring Has Role read permission.
+    Uses frappe.get_roles() which is an internal method.
+    """
+    return frappe.get_roles(frappe.session.user)
+
+
+@frappe.whitelist()
 def get_customer_sales_info(customer):
     """
     Get the customer's default sales person and check for ownership conflicts

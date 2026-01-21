@@ -3235,21 +3235,14 @@ export default {
       // Fetch current user's roles and full name for token workflow
       const vm = this;
       
-      // Get user roles
+      // Get user roles using custom API that doesn't require Has Role permission
       frappe.call({
-        method: "frappe.client.get_list",
-        args: {
-          doctype: "Has Role",
-          filters: {
-            parent: frappe.session.user,
-            parenttype: "User"
-          },
-          fields: ["role"]
-        },
+        method: "posawesome.posawesome.api.posapp.get_current_user_roles",
+        args: {},
         async: false,
         callback: function(r) {
           if (r.message) {
-            vm.user_roles = r.message.map(row => row.role);
+            vm.user_roles = r.message;
           }
         }
       });
