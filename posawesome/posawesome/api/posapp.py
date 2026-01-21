@@ -68,52 +68,48 @@ def get_current_user_roles():
 @frappe.whitelist()
 def get_customer_sales_info(customer):
     """
-    Get the customer's default sales person and check for ownership conflicts
+    Get the customer's sales associate info and check for ownership conflicts
     
     Args:
         customer: Customer ID
     
     Returns:
-        dict: Customer sales info including default sales person and ownership warning
+        dict: Customer sales info including creator and ownership warning
     """
     if not customer:
         return {"error": "Customer ID required"}
     
     customer_doc = frappe.get_doc("Customer", customer)
-    default_sales_person = customer_doc.get("custom_default_sales_person")
     
-    # Get current user's sales person
-    current_user_sales_person = get_sales_person_for_current_user()
+    # Get the Sales Associate (User) who created this customer
+    created_by_user = customer_doc.get("custom_created_by_sales_associate")
+    
+    # Current logged in user
+    current_user = frappe.session.user
     
     result = {
         "customer": customer,
         "customer_name": customer_doc.customer_name,
-        "default_sales_person": default_sales_person,
-        "default_sales_person_name": None,
-        "current_user_sales_person": current_user_sales_person,
-        "current_user_sales_person_name": None,
+        "created_by_sales_associate": created_by_user,
+        "created_by_sales_associate_name": None,
+        "current_user": current_user,
+        "current_user_name": frappe.db.get_value("User", current_user, "full_name"),
         "ownership_warning": None,
         "is_own_customer": True
     }
     
-    # Get sales person names
-    if default_sales_person:
-        result["default_sales_person_name"] = frappe.db.get_value(
-            "Sales Person", default_sales_person, "sales_person_name"
-        )
+    # Get creator's full name
+    if created_by_user:
+        result["created_by_sales_associate_name"] = frappe.db.get_value(
+            "User", created_by_user, "full_name"
+        ) or created_by_user
     
-    if current_user_sales_person:
-        result["current_user_sales_person_name"] = frappe.db.get_value(
-            "Sales Person", current_user_sales_person, "sales_person_name"
-        )
-    
-    # Check for ownership conflict
-    if default_sales_person and current_user_sales_person:
-        if default_sales_person != current_user_sales_person:
-            result["ownership_warning"] = _(
-                "This customer belongs to {0}. Commission will be credited to you for this transaction."
-            ).format(result["default_sales_person_name"])
-            result["is_own_customer"] = False
+    # Check for ownership conflict - compare User IDs directly
+    if created_by_user and current_user != created_by_user:
+        result["ownership_warning"] = _(
+            "This customer belongs to {0}. Commission will be credited to you for this transaction."
+        ).format(result["created_by_sales_associate_name"])
+        result["is_own_customer"] = False
     
     return result
 
@@ -1266,7 +1262,10 @@ def create_customer(
             else:
                 customer.territory = "All Territories"
             
-            # Auto-set default sales person from current user (creator gets commission for their customers)
+            # Store the Sales Associate (User) who created this customer
+            customer.custom_created_by_sales_associate = frappe.session.user
+            
+            # Also try to set default sales person if Employee→Sales Person link exists
             default_sales_person = get_sales_person_for_current_user()
             if default_sales_person:
                 customer.custom_default_sales_person = default_sales_person

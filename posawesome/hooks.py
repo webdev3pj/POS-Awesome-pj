@@ -195,6 +195,7 @@ fixtures = [
                     "POS Profile-posa_hide_closing_shift",
                     "Customer-posa_discount",
                     "Customer-custom_default_sales_person",
+                    "Customer-custom_created_by_sales_associate",
                     "POS Profile-posa_apply_customer_discount",
                     "Sales Invoice-posa_offers",
                     "Sales Invoice-posa_coupons",

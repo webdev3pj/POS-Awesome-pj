@@ -35,11 +35,31 @@ def get_sales_person_for_user(user=None):
 def after_insert(doc, method):
     create_customer_referral_code(doc)
     create_gift_coupon(doc)
+    set_sales_associate_user(doc)
     set_default_sales_person(doc)
 
 
 def validate(doc, method):
     validate_referral_code(doc)
+
+
+def set_sales_associate_user(doc):
+    """
+    Set the Sales Associate (User) who created this customer.
+    This is used for ownership tracking and commission attribution.
+    """
+    # Only set if not already set
+    if doc.get("custom_created_by_sales_associate"):
+        return
+    
+    # Store the current user as the creator
+    frappe.db.set_value(
+        "Customer", 
+        doc.name, 
+        "custom_created_by_sales_associate", 
+        frappe.session.user,
+        update_modified=False
+    )
 
 
 def set_default_sales_person(doc):
