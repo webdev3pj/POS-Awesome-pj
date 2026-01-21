@@ -903,6 +903,7 @@ export default {
       invoice_posting_date: false,
       posting_date: frappe.datetime.nowdate(),
       token_reference: null,
+      token_data: null,
       user_roles: [],
       items_headers: [
         {
@@ -3076,8 +3077,13 @@ export default {
     
     load_token_items(tokenData) {
       // Load token items into the cart for payment
+      // Cashier can modify items (add/remove/change qty) before paying
       this.customer = tokenData.customer;
       this.items = [];
+      
+      // Store token reference for tracking
+      this.token_reference = tokenData.name;
+      this.token_data = tokenData;
       
       tokenData.items.forEach(item => {
         this.items.push({
@@ -3087,6 +3093,7 @@ export default {
           rate: item.rate,
           amount: item.amount,
           uom: item.uom,
+          stock_uom: item.uom,
           batch_no: item.batch_no,
           serial_no: item.serial_no,
           warehouse: item.warehouse,
@@ -3095,15 +3102,17 @@ export default {
           posa_offer_applied: 0,
           posa_is_offer: 0,
           posa_notes: "",
-          posa_delivery_date: ""
+          posa_delivery_date: "",
+          // Allow modification
+          posa_is_from_token: 1
         });
       });
       
-      // Store token reference for payment processing
-      this.token_reference = tokenData.name;
+      // Fetch customer details to populate customer_info
+      this.fetch_customer_details();
       
       evntBus.$emit("show_mesage", {
-        text: __("Token {0} loaded for payment", [tokenData.token_number]),
+        text: __("Token {0} loaded - you can modify items before paying", [tokenData.token_number]),
         color: "success",
       });
     },

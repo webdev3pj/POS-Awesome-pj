@@ -268,6 +268,7 @@ fixtures = [
                     "POS Profile-posa_allow_reconcile_payments",
                     "POS Profile-column_break_uolvm",
                     "POS Profile-posa_allow_mpesa_reconcile_payments",
+                    "POS Profile-posa_enable_token_workflow",
                 ),
             ]
         ],
@@ -279,7 +280,13 @@ fixtures = [
     {
     "doctype": "Role",
     "filters": [
-        ["role_name", "in", ["Sales Commission", "Sales Commission Admin"]]
+        ["role_name", "in", ["Sales Commission", "Sales Commission Admin", "POS Sales Associate", "POS Cashier"]]
+        ],
+    },
+    {
+    "doctype": "Role Profile",
+    "filters": [
+        ["name", "in", ["POS Sales Associate Profile", "POS Cashier Profile"]]
         ],
     },
 ]

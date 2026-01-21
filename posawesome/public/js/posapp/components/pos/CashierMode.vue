@@ -139,6 +139,18 @@
             </v-btn>
           </v-card-actions>
           
+          <!-- Tip for modifying order -->
+          <v-alert
+            v-if="tokenData && tokenData.status === 'Pending'"
+            type="info"
+            dense
+            text
+            class="mx-4 mb-4"
+          >
+            <v-icon small class="mr-1">mdi-information</v-icon>
+            {{ __('Need to modify the order? Click "COLLECT PAYMENT" to load items, then add/remove items before paying.') }}
+          </v-alert>
+          
           <!-- Already Paid Message -->
           <v-card-actions v-else-if="tokenData.status === 'Paid'" class="pa-4 green lighten-4">
             <v-icon color="success" class="mr-2">mdi-check-circle</v-icon>

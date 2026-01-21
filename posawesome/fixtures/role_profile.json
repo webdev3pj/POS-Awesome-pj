@@ -1,0 +1,26 @@
+[
+ {
+  "docstatus": 0,
+  "doctype": "Role Profile",
+  "modified": "2025-08-01 10:00:00.000000",
+  "name": "POS Sales Associate Profile",
+  "role_profile": "POS Sales Associate Profile",
+  "roles": [
+   {
+    "role": "POS Sales Associate"
+   }
+  ]
+ },
+ {
+  "docstatus": 0,
+  "doctype": "Role Profile",
+  "modified": "2025-08-01 10:00:00.000000",
+  "name": "POS Cashier Profile",
+  "role_profile": "POS Cashier Profile",
+  "roles": [
+   {
+    "role": "POS Cashier"
+   }
+  ]
+ }
+]
