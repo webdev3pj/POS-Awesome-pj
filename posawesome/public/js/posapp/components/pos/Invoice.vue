@@ -3241,6 +3241,8 @@ export default {
               text: __("Token {0} generated successfully", [r.message.token_number]),
               color: "success",
             });
+            // Notify pending tokens sidebar to refresh
+            evntBus.$emit("token_created");
             // Clear the cart after token generation
             vm.cancel_invoice();
           }

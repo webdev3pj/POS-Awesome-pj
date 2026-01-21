@@ -161,32 +161,24 @@ export default {
     checkUserRole() {
       const vm = this;
       frappe.call({
-        method: "frappe.client.get_list",
-        args: {
-          doctype: "Has Role",
-          filters: {
-            parent: frappe.session.user,
-            parenttype: "User"
-          },
-          fields: ["role"]
-        },
+        method: "posawesome.posawesome.api.posapp.get_current_user_roles",
+        args: {},
         async: false,
         callback: function(r) {
           if (r.message) {
-            const roles = r.message.map(row => row.role);
-            vm.isCashier = roles.includes("POS Cashier");
+            vm.isCashier = r.message.includes("POS Cashier");
           }
         }
       });
     },
 
     startAutoRefresh() {
-      // Refresh every 30 seconds
+      // Refresh every 10 seconds for better real-time updates
       this.refreshInterval = setInterval(() => {
         if (this.isCashier && this.posProfile) {
           this.loadPendingTokens();
         }
-      }, 30000);
+      }, 10000);
     }
   },
 
@@ -209,8 +201,13 @@ export default {
       this.loadPendingTokens();
     });
 
-    // Refresh when token dialog closes
+    // Refresh when token dialog closes (new token created)
     evntBus.$on('token_dialog_closed', () => {
+      this.loadPendingTokens();
+    });
+    
+    // Refresh when a new token is created
+    evntBus.$on('token_created', () => {
       this.loadPendingTokens();
     });
   },
@@ -219,6 +216,7 @@ export default {
     evntBus.$off('register_pos_profile');
     evntBus.$off('token_paid');
     evntBus.$off('token_dialog_closed');
+    evntBus.$off('token_created');
     if (this.refreshInterval) {
       clearInterval(this.refreshInterval);
     }
