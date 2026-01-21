@@ -1155,6 +1155,13 @@ export default {
       this.selcted_delivery_charges = {};
       evntBus.$emit("set_customer_readonly", false);
       this.cancel_dialog = false;
+      
+      // Clear token reference and notify sidebar to refresh
+      if (this.token_reference) {
+        evntBus.$emit("token_paid");
+        this.token_reference = null;
+        this.token_data = null;
+      }
     },
 
     new_invoice(data = {}) {

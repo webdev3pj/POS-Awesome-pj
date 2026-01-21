@@ -9,6 +9,7 @@
     <Variants></Variants>
     <TokenDialog></TokenDialog>
     <CashierMode></CashierMode>
+    <PendingTokensSidebar></PendingTokensSidebar>
     <OpeningDialog v-if="dialog" :dialog="dialog"></OpeningDialog>
     <v-row v-show="!dialog">
       <v-col
@@ -80,6 +81,7 @@ import Returns from './Returns.vue';
 import MpesaPayments from './Mpesa-Payments.vue';
 import TokenDialog from './TokenDialog.vue';
 import CashierMode from './CashierMode.vue';
+import PendingTokensSidebar from './PendingTokensSidebar.vue';
 
 export default {
   data: function () {
@@ -110,6 +112,7 @@ export default {
     SalesOrders,
     TokenDialog,
     CashierMode,
+    PendingTokensSidebar,
   },
 
   methods: {

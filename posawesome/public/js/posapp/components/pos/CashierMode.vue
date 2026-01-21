@@ -378,6 +378,15 @@ export default {
       this.$nextTick(() => {
         this.$refs.searchInput?.focus();
       });
+    },
+    
+    openDialogWithToken(posProfile, posOpeningShift, tokenNumber) {
+      // Open dialog and pre-select a token (called from sidebar)
+      this.openDialog(posProfile, posOpeningShift);
+      this.$nextTick(() => {
+        this.searchTerm = tokenNumber;
+        this.searchToken();
+      });
     }
   },
   
@@ -385,10 +394,15 @@ export default {
     evntBus.$on('open_cashier_mode', (posProfile, posOpeningShift) => {
       this.openDialog(posProfile, posOpeningShift);
     });
+    
+    evntBus.$on('open_cashier_mode_with_token', (posProfile, posOpeningShift, tokenNumber) => {
+      this.openDialogWithToken(posProfile, posOpeningShift, tokenNumber);
+    });
   },
   
   beforeDestroy() {
     evntBus.$off('open_cashier_mode');
+    evntBus.$off('open_cashier_mode_with_token');
   }
 };
 </script>
