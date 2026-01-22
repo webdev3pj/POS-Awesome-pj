@@ -269,7 +269,6 @@ fixtures = [
                     "POS Profile-column_break_uolvm",
                     "POS Profile-posa_allow_mpesa_reconcile_payments",
                     "POS Profile-posa_enable_token_workflow",
-                    "Sales Person-custom_user",
                 ),
             ]
         ],

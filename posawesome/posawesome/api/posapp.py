@@ -36,98 +36,24 @@ from frappe.utils.caching import redis_cache
 
 def get_sales_person_for_current_user():
     """
-    Get the Sales Person linked to the current user via custom_user field.
-    Bypasses the Employee doctype entirely.
-    
-    Returns: sales_person name or None
+    Get the Sales Person linked to the current user via Employee
+    Returns sales_person name or None
     """
     user = frappe.session.user
     
-    # Find Sales Person linked directly to this User via custom_user field
+    # Find Employee linked to this User
+    employee = frappe.db.get_value("Employee", {"user_id": user}, "name")
+    if not employee:
+        return None
+    
+    # Find Sales Person linked to this Employee
     sales_person = frappe.db.get_value(
         "Sales Person", 
-        {"custom_user": user, "enabled": 1}, 
+        {"employee": employee, "enabled": 1}, 
         "name"
     )
     
     return sales_person
-
-
-def get_or_create_sales_person_for_user(user=None, commission_rate=0.5):
-    """
-    Get existing Sales Person for user or create a new one with default commission.
-    Uses the custom_user field to bypass the broken Employee doctype.
-    
-    Args:
-        user: User ID (defaults to current session user)
-        commission_rate: Default commission rate (0.5% = 0.5)
-    
-    Returns:
-        str: Sales Person name
-    """
-    if not user:
-        user = frappe.session.user
-    
-    # Check if Sales Person already exists for this user
-    existing = frappe.db.get_value(
-        "Sales Person", 
-        {"custom_user": user, "enabled": 1}, 
-        "name"
-    )
-    
-    if existing:
-        return existing
-    
-    # Get user's full name for the Sales Person name
-    user_full_name = frappe.db.get_value("User", user, "full_name") or user.split("@")[0]
-    
-    # Check if a Sales Person with this name already exists
-    base_name = user_full_name
-    counter = 1
-    sales_person_name = base_name
-    
-    while frappe.db.exists("Sales Person", sales_person_name):
-        # Check if existing one is linked to this user
-        existing_user = frappe.db.get_value("Sales Person", sales_person_name, "custom_user")
-        if existing_user == user:
-            return sales_person_name
-        sales_person_name = f"{base_name} {counter}"
-        counter += 1
-    
-    # Get the root Sales Person node (required for tree structure)
-    root_sales_person = frappe.db.get_value(
-        "Sales Person",
-        {"is_group": 1, "parent_sales_person": ["in", ["", None]]},
-        "name"
-    )
-    
-    if not root_sales_person:
-        # Create a root node if none exists
-        root_sales_person = "All Sales Persons"
-        if not frappe.db.exists("Sales Person", root_sales_person):
-            root_doc = frappe.get_doc({
-                "doctype": "Sales Person",
-                "sales_person_name": root_sales_person,
-                "is_group": 1,
-                "enabled": 1
-            })
-            root_doc.insert(ignore_permissions=True)
-    
-    # Create new Sales Person linked to this user
-    sales_person_doc = frappe.get_doc({
-        "doctype": "Sales Person",
-        "sales_person_name": sales_person_name,
-        "parent_sales_person": root_sales_person,
-        "is_group": 0,
-        "enabled": 1,
-        "custom_user": user,
-        "commission_rate": commission_rate  # Default 0.5% commission
-    })
-    
-    sales_person_doc.insert(ignore_permissions=True)
-    frappe.db.commit()
-    
-    return sales_person_doc.name
 
 
 @frappe.whitelist()
@@ -137,36 +63,6 @@ def get_current_user_roles():
     Uses frappe.get_roles() which is an internal method.
     """
     return frappe.get_roles(frappe.session.user)
-
-
-@frappe.whitelist()
-def ensure_sales_person_for_user():
-    """
-    Ensure a Sales Person record exists for the current user.
-    Creates one with 0.5% default commission if it doesn't exist.
-    
-    Returns:
-        dict: Sales Person info including name and commission rate
-    """
-    sales_person = get_or_create_sales_person_for_user(
-        user=frappe.session.user,
-        commission_rate=0.5
-    )
-    
-    if sales_person:
-        commission_rate = frappe.db.get_value("Sales Person", sales_person, "commission_rate") or 0.5
-        return {
-            "sales_person": sales_person,
-            "user": frappe.session.user,
-            "commission_rate": commission_rate,
-            "created": True
-        }
-    
-    return {
-        "sales_person": None,
-        "user": frappe.session.user,
-        "error": "Failed to create Sales Person"
-    }
 
 
 @frappe.whitelist()
@@ -1369,14 +1265,10 @@ def create_customer(
             # Store the Sales Associate (User) who created this customer
             customer.custom_created_by_sales_associate = frappe.session.user
             
-            # Auto-create or get Sales Person for this user with 0.5% commission
-            # This bypasses the broken Employee doctype entirely
-            sales_person = get_or_create_sales_person_for_user(
-                user=frappe.session.user,
-                commission_rate=0.5  # Default 0.5% commission
-            )
-            if sales_person:
-                customer.custom_default_sales_person = sales_person
+            # Also try to set default sales person if Employee→Sales Person link exists
+            default_sales_person = get_sales_person_for_current_user()
+            if default_sales_person:
+                customer.custom_default_sales_person = default_sales_person
             
             customer.save()
             return customer
