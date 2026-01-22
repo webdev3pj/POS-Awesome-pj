@@ -37,7 +37,7 @@
               <v-list-item-group v-model="menu_item" color="primary">
                 <v-list-item
                   @click="close_shift_dialog"
-                  v-if="!pos_profile.posa_hide_closing_shift && item == 0"
+                  v-if="!pos_profile.posa_hide_closing_shift && item == 0 && !isSalesAssociate"
                 >
                   <v-list-item-icon>
                     <v-icon>mdi-content-save-move-outline</v-icon>
@@ -164,9 +164,28 @@ export default {
       freezeTitle: '',
       freezeMsg: '',
       last_invoice: '',
+      user_roles: [],
     };
   },
+  computed: {
+    isSalesAssociate() {
+      return this.user_roles.includes("POS Sales Associate");
+    },
+  },
   methods: {
+    fetch_user_roles() {
+      const vm = this;
+      frappe.call({
+        method: "posawesome.posawesome.api.posapp.get_current_user_roles",
+        args: {},
+        async: false,
+        callback: function(r) {
+          if (r.message) {
+            vm.user_roles = r.message;
+          }
+        }
+      });
+    },
     changePage(key) {
       this.$emit('changePage', key);
     },
@@ -229,6 +248,9 @@ export default {
     },
   },
   created: function () {
+    // Fetch user roles on component creation
+    this.fetch_user_roles();
+    
     this.$nextTick(function () {
       evntBus.$on('show_mesage', (data) => {
         this.show_mesage(data);
