@@ -184,6 +184,27 @@
    "width": null
   },
   {
+   "fieldname": "custom_pos_token",
+   "label": "POS Token",
+   "fieldtype": "Link",
+   "options": "POS Token",
+   "insert_after": "custom_partner_commission_paid",
+   "read_only": 1,
+   "in_list_view": 0,
+   "dt": "Sales Invoice"
+  },
+  {
+   "fieldname": "custom_sales_associate",
+   "label": "Sales Associate (User)",
+   "fieldtype": "Link",
+   "options": "User",
+   "insert_after": "custom_pos_token",
+   "read_only": 1,
+   "in_list_view": 0,
+   "dt": "Sales Invoice",
+   "description": "The user who created the token/order"
+  },
+  {
    "_assign": null,
    "_comments": null,
    "_liked_by": null,

@@ -915,6 +915,9 @@ def submit_invoice(invoice, data):
     frappe.flags.ignore_account_permission = True
     invoice_doc.posa_is_printed = 1
     invoice_doc.save()
+    
+    # Apply Sales Associate commission if this is a token payment
+    apply_sales_associate_commission(invoice_doc)
 
     if data.get("due_date"):
         frappe.db.set_value(
@@ -960,6 +963,72 @@ def submit_invoice(invoice, data):
         )
 
     return {"name": invoice_doc.name, "status": invoice_doc.docstatus}
+
+
+def apply_sales_associate_commission(invoice_doc):
+    """
+    Apply Sales Associate commission for token payments.
+    Uses existing ERPNext sales_team table to track commission.
+    
+    Only applies if:
+    1. Commission is enabled in POS Profile
+    2. Grand total meets the threshold
+    3. Customer has a sales associate linked
+    """
+    try:
+        # Check if customer has a sales associate
+        customer_doc = frappe.get_doc("Customer", invoice_doc.customer)
+        sales_associate = customer_doc.get("custom_created_by_sales_associate")
+        
+        if not sales_associate:
+            return
+        
+        # Get POS Profile commission settings
+        pos_profile_doc = frappe.get_doc("POS Profile", invoice_doc.pos_profile)
+        commission_enabled = pos_profile_doc.get("custom_commission_enabled", 0)
+        sales_person_limit = flt(pos_profile_doc.get("custom_sales_person_grand_total_limit", 0))
+        grand_total = flt(invoice_doc.grand_total)
+        
+        # Check if commission is eligible
+        if not commission_enabled or grand_total < sales_person_limit:
+            return
+        
+        # Get the Sales Person linked to this Sales Associate (via custom_user)
+        sales_person = frappe.db.get_value(
+            "Sales Person",
+            {"custom_user": sales_associate, "enabled": 1},
+            ["name", "commission_rate"],
+            as_dict=True
+        )
+        
+        if not sales_person:
+            # No Sales Person linked to this associate, skip commission
+            return
+        
+        commission_rate = flt(sales_person.commission_rate) or 0.5
+        
+        # Clear existing sales_team entries to avoid duplicates
+        invoice_doc.sales_team = []
+        
+        # Add sales team entry for the Sales Associate
+        invoice_doc.append("sales_team", {
+            "sales_person": sales_person.name,
+            "allocated_percentage": 100,
+            "commission_rate": commission_rate
+        })
+        
+        # Store Sales Associate reference in custom field
+        invoice_doc.custom_sales_associate = sales_associate
+        
+        # Save the invoice to apply changes
+        invoice_doc.save(ignore_permissions=True)
+        
+    except Exception as e:
+        # Log error but don't break invoice submission
+        frappe.log_error(
+            title="Sales Associate Commission Error",
+            message=f"Failed to apply commission for invoice {invoice_doc.name}: {str(e)}"
+        )
 
 
 def set_batch_nos_for_bundels(doc, warehouse_field, throw=False):
