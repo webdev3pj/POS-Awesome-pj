@@ -1690,15 +1690,18 @@ export default {
           evntBus.$emit("show_payment", "true");
           const invoice_doc = await this.process_invoice_from_order();
           evntBus.$emit("send_invoice_doc_payment", invoice_doc);
+          evntBus.$emit("set_token_reference", this.token_reference);
         } else {
           evntBus.$emit("show_payment", "true");
           const invoice_doc = this.process_invoice();
           evntBus.$emit("send_invoice_doc_payment", invoice_doc);
+          evntBus.$emit("set_token_reference", this.token_reference);
         }
       } else {
         evntBus.$emit("show_payment", "true");
         const invoice_doc = this.process_invoice();
         evntBus.$emit("send_invoice_doc_payment", invoice_doc);
+        evntBus.$emit("set_token_reference", this.token_reference);
       }
     },
 

@@ -917,7 +917,9 @@ def submit_invoice(invoice, data):
     invoice_doc.save()
     
     # Apply Sales Associate commission if this is a token payment
-    apply_sales_associate_commission(invoice_doc)
+    token_reference = data.get("token_reference")
+    if token_reference:
+        apply_token_commission_and_update_status(invoice_doc, token_reference)
 
     if data.get("due_date"):
         frappe.db.set_value(
@@ -965,22 +967,31 @@ def submit_invoice(invoice, data):
     return {"name": invoice_doc.name, "status": invoice_doc.docstatus}
 
 
-def apply_sales_associate_commission(invoice_doc):
+def apply_token_commission_and_update_status(invoice_doc, token_name):
     """
-    Apply Sales Associate commission for token payments.
+    Apply Sales Associate commission for token payments and update token status.
     Uses existing ERPNext sales_team table to track commission.
     
-    Only applies if:
-    1. Commission is enabled in POS Profile
-    2. Grand total meets the threshold
-    3. Customer has a sales associate linked
+    Steps:
+    1. Get token document
+    2. Check commission eligibility (enabled + threshold)
+    3. Get Sales Person linked to the Sales Associate
+    4. Add commission entry to sales_team table
+    5. Update token status to "Paid"
+    6. Link invoice to token
     """
     try:
-        # Check if customer has a sales associate
-        customer_doc = frappe.get_doc("Customer", invoice_doc.customer)
-        sales_associate = customer_doc.get("custom_created_by_sales_associate")
+        # Get the token document
+        token_doc = frappe.get_doc("POS Token", token_name)
+        
+        # Get Sales Associate from token
+        sales_associate = token_doc.sales_associate
         
         if not sales_associate:
+            frappe.log_error(
+                title="Token Commission Warning",
+                message=f"Token {token_name} has no sales_associate"
+            )
             return
         
         # Get POS Profile commission settings
@@ -990,45 +1001,78 @@ def apply_sales_associate_commission(invoice_doc):
         grand_total = flt(invoice_doc.grand_total)
         
         # Check if commission is eligible
-        if not commission_enabled or grand_total < sales_person_limit:
-            return
+        if not commission_enabled:
+            frappe.log_error(
+                title="Commission Not Enabled",
+                message=f"Commission not enabled in POS Profile {invoice_doc.pos_profile}"
+            )
         
-        # Get the Sales Person linked to this Sales Associate (via custom_user)
-        sales_person = frappe.db.get_value(
-            "Sales Person",
-            {"custom_user": sales_associate, "enabled": 1},
-            ["name", "commission_rate"],
-            as_dict=True
-        )
+        if grand_total < sales_person_limit:
+            frappe.log_error(
+                title="Below Commission Threshold",
+                message=f"Grand total {grand_total} is below limit {sales_person_limit}"
+            )
         
-        if not sales_person:
-            # No Sales Person linked to this associate, skip commission
-            return
+        if commission_enabled and grand_total >= sales_person_limit:
+            # Get the Sales Person linked to this Sales Associate (via custom_user)
+            sales_person = frappe.db.get_value(
+                "Sales Person",
+                {"custom_user": sales_associate, "enabled": 1},
+                ["name", "commission_rate"],
+                as_dict=True
+            )
+            
+            if not sales_person:
+                frappe.log_error(
+                    title="No Sales Person Found",
+                    message=f"No Sales Person linked to user {sales_associate}"
+                )
+            else:
+                commission_rate = flt(sales_person.commission_rate) or 0.5
+                
+                # Clear existing sales_team entries to avoid duplicates
+                invoice_doc.sales_team = []
+                
+                # Add sales team entry for the Sales Associate
+                invoice_doc.append("sales_team", {
+                    "sales_person": sales_person.name,
+                    "allocated_percentage": 100,
+                    "commission_rate": commission_rate
+                })
+                
+                # Store Sales Associate and Token reference in custom fields
+                invoice_doc.custom_sales_associate = sales_associate
+                invoice_doc.custom_pos_token = token_name
+                
+                # Save the invoice to apply changes
+                invoice_doc.flags.ignore_permissions = True
+                invoice_doc.save(ignore_permissions=True)
         
-        commission_rate = flt(sales_person.commission_rate) or 0.5
+        # Update token status to "Paid" and link the invoice
+        token_doc.status = "Paid"
+        token_doc.linked_invoice = invoice_doc.name
+        token_doc.paid_datetime = frappe.utils.now_datetime()
+        token_doc.cashier = frappe.session.user
+        token_doc.flags.ignore_permissions = True
+        token_doc.save(ignore_permissions=True)
         
-        # Clear existing sales_team entries to avoid duplicates
-        invoice_doc.sales_team = []
-        
-        # Add sales team entry for the Sales Associate
-        invoice_doc.append("sales_team", {
-            "sales_person": sales_person.name,
-            "allocated_percentage": 100,
-            "commission_rate": commission_rate
-        })
-        
-        # Store Sales Associate reference in custom field
-        invoice_doc.custom_sales_associate = sales_associate
-        
-        # Save the invoice to apply changes
-        invoice_doc.save(ignore_permissions=True)
+        frappe.db.commit()
         
     except Exception as e:
         # Log error but don't break invoice submission
         frappe.log_error(
-            title="Sales Associate Commission Error",
-            message=f"Failed to apply commission for invoice {invoice_doc.name}: {str(e)}"
+            title="Token Commission and Status Update Error",
+            message=f"Failed for invoice {invoice_doc.name}, token {token_name}: {str(e)}"
         )
+
+
+def apply_sales_associate_commission(invoice_doc):
+    """
+    DEPRECATED: Use apply_token_commission_and_update_status() instead.
+    
+    This function is kept for backward compatibility but should not be used.
+    """
+    pass
 
 
 def set_batch_nos_for_bundels(doc, warehouse_field, throw=False):
