@@ -433,29 +433,6 @@ def process_token_payment(token_name, payments, pos_opening_shift=None):
             "warehouse": item.warehouse or pos_profile_doc.warehouse
         })
     
-    # Add sales team from token (for commission calculation)
-    if token_doc.sales_person:
-        # Get commission rate from Sales Person (defaults to 0.5%)
-        commission_rate = frappe.db.get_value(
-            "Sales Person", token_doc.sales_person, "commission_rate"
-        ) or 0.5
-        
-        invoice.append("sales_team", {
-            "sales_person": token_doc.sales_person,
-            "allocated_percentage": 100,
-            "commission_rate": commission_rate
-        })
-    
-    # Add sales partner from token (if set)
-    if token_doc.sales_partner:
-        invoice.sales_partner = token_doc.sales_partner
-        # Get commission rate from Sales Partner
-        partner_commission = frappe.db.get_value(
-            "Sales Partner", token_doc.sales_partner, "commission_rate"
-        )
-        if partner_commission:
-            invoice.commission_rate = partner_commission
-    
     # Add payments
     for payment in payments:
         invoice.append("payments", {
@@ -468,6 +445,43 @@ def process_token_payment(token_name, payments, pos_opening_shift=None):
     
     invoice.set_missing_values()
     invoice.save()
+    
+    # Check commission eligibility after invoice is saved and totals are calculated
+    commission_enabled = pos_profile_doc.get("custom_commission_enabled", 0)
+    sales_person_limit = flt(pos_profile_doc.get("custom_sales_person_grand_total_limit", 0))
+    grand_total = flt(invoice.grand_total)
+    
+    # Add sales team from token (for commission calculation)
+    # Only if commission is enabled AND grand total meets the threshold
+    if token_doc.sales_person and commission_enabled and grand_total >= sales_person_limit:
+        # Get commission rate from Sales Person (defaults to 0.5%)
+        commission_rate = frappe.db.get_value(
+            "Sales Person", token_doc.sales_person, "commission_rate"
+        ) or 0.5
+        
+        invoice.append("sales_team", {
+            "sales_person": token_doc.sales_person,
+            "allocated_percentage": 100,
+            "commission_rate": commission_rate
+        })
+        
+        # Re-save invoice to apply commission
+        invoice.save()
+    
+    # Add sales partner from token (if set)
+    # Note: Sales partner validation skipped as per user request
+    if token_doc.sales_partner:
+        invoice.sales_partner = token_doc.sales_partner
+        # Get commission rate from Sales Partner
+        partner_commission = frappe.db.get_value(
+            "Sales Partner", token_doc.sales_partner, "commission_rate"
+        )
+        if partner_commission:
+            invoice.commission_rate = partner_commission
+        invoice.save()
+    
+    # Submit the invoice after all modifications
+    # Submit the invoice after all modifications
     invoice.submit()
     
     # Update token status
