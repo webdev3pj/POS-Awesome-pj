@@ -7,10 +7,11 @@ def custom_calculate_commission(self):
     if not self.sales_partner:
         return  
 
-    if not self.meta.get_field("commission_rate") or self.docstatus.is_submitted():
+    if not self.meta.get_field("commission_rate") or self.is_submitted():
         return
 
-    self.round_floats_in(self, ("amount_eligible_for_commission", "commission_rate"))
+    # round floats on the document fields
+    self.round_floats_in(("amount_eligible_for_commission", "commission_rate"))
 
     if not (0 <= flt(self.commission_rate) <= 100.0):
         frappe.throw(
@@ -21,8 +22,9 @@ def custom_calculate_commission(self):
         )
 
     partner_rate = flt(self.commission_rate)
-    customer_rate = flt(self.custom_discount_ or 0)   # ✅ take customer share
-    effective_rate = max(partner_rate - customer_rate, 0)  # ✅ ensure not negative
+    # support both possible field names; default to 0 if neither present
+    customer_rate = flt(getattr(self, "custom_discount_", getattr(self, "custom_discount", 0)) or 0)
+    effective_rate = max(partner_rate - customer_rate, 0)  # ensure not negative
 
     total_commission = 0
     eligible_amount = 0
@@ -44,7 +46,7 @@ def custom_calculate_commission(self):
             if tax_rows:
                 tax_rate = flt(tax_rows[0].rate)  # or sum if multiple
 
-        # ✅ Exclude tax from Price List Rate
+        # Exclude tax from Price List Rate
         base_rate_excl_tax = flt(item.price_list_rate) / (1 + (tax_rate / 100))
         item_amount = flt(item.qty) * base_rate_excl_tax
 
@@ -66,9 +68,11 @@ def custom_calculate_commission(self):
     self.amount_eligible_for_commission = eligible_amount
     self.total_commission = flt(total_commission, self.precision("total_commission"))
 
-    # ✅ Set the additional fields
-    self.custom_effective_commission_rate = applied_rate
-    self.custom_effective_commission = eligible_amount
+    # Set the additional fields if they exist on the DocType
+    if self.meta.get_field("custom_effective_commission_rate"):
+        self.custom_effective_commission_rate = effective_rate
+    if self.meta.get_field("custom_effective_commission"):
+        self.custom_effective_commission = flt(total_commission, self.precision("total_commission"))
 
 
 

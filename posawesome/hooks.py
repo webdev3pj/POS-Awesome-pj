@@ -102,8 +102,10 @@ override_doctype_class = {
 }
 doc_events = {
     "Sales Invoice": {
-        "before_save": "posawesome.overrides.selling_commission.run_custom_commission",
-        "before_save": "posawesome.overrides.selling_commission.run_custom_contribution",
+        "before_save": [
+            "posawesome.overrides.selling_commission.run_custom_commission",
+            "posawesome.overrides.selling_commission.run_custom_contribution",
+        ],
         "validate": "posawesome.posawesome.api.invoice.validate",
         "before_submit": "posawesome.posawesome.api.invoice.before_submit",
         "before_cancel": "posawesome.posawesome.api.invoice.before_cancel",
