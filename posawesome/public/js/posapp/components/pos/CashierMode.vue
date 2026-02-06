@@ -3,7 +3,7 @@
     <v-card>
       <v-card-title class="success white--text">
         <v-icon class="mr-2" color="white">mdi-cash-register</v-icon>
-        {{ __('Cashier - Scan Token') }}
+        {{ __('Cashier - Scan Order') }}
         <v-spacer></v-spacer>
         <v-btn icon @click="closeDialog" color="white">
           <v-icon>mdi-close</v-icon>
@@ -16,14 +16,14 @@
           <v-col cols="12">
             <v-text-field
               v-model="searchTerm"
-              :label="__('Scan QR Code or Enter Token Number')"
+              :label="__('Scan QR Code or Enter Order Number (Token/SO-XXX)')"
               outlined
               autofocus
               large
               prepend-inner-icon="mdi-qrcode-scan"
               append-icon="mdi-magnify"
-              @click:append="searchToken"
-              @keyup.enter="searchToken"
+              @click:append="searchOrder"
+              @keyup.enter="searchOrder"
               :loading="loading"
               :error-messages="errorMessage"
               clearable
@@ -305,6 +305,74 @@ export default {
         this.errorMessage = error.message || this.__('Token not found');
       } finally {
         this.loading = false;
+      }
+    },
+    
+    async searchOrder() {
+      // NEW: Search for both Sales Orders and Tokens
+      if (!this.searchTerm) {
+        this.loadPendingTokens();
+        return;
+      }
+      
+      this.loading = true;
+      this.errorMessage = '';
+      this.tokenData = null;
+      
+      try {
+        const searchTerm = this.searchTerm.trim();
+        
+        // Check if it's a Sales Order (starts with "SO-")
+        if (searchTerm.startsWith('SO-')) {
+          // Retrieve Sales Order and load to POS
+          const response = await frappe.call({
+            method: 'posawesome.posawesome.api.sales_order_token.get_sales_order_for_cashier',
+            args: {
+              order_name: searchTerm
+            }
+          });
+          
+          if (response.message) {
+            // Load Sales Order into POS cart
+            await this.loadSalesOrderToPOS(response.message);
+            this.closeDialog();
+          }
+        } else {
+          // Try to find as token (backward compatibility)
+          const response = await frappe.call({
+            method: 'posawesome.posawesome.api.token.get_token',
+            args: {
+              token_identifier: searchTerm
+            }
+          });
+          
+          if (response.message) {
+            this.tokenData = response.message;
+            this.searchTerm = '';
+          }
+        }
+      } catch (error) {
+        this.errorMessage = error.message || this.__('Order/Token not found');
+      } finally {
+        this.loading = false;
+      }
+    },
+    
+    async loadSalesOrderToPOS(salesOrder) {
+      // Load Sales Order items into POS cart
+      try {
+        // Emit event to load order
+        evntBus.$emit('load_sales_order', salesOrder);
+        
+        evntBus.$emit('show_mesage', {
+          text: this.__('Order {0} loaded successfully', [salesOrder.name]),
+          color: 'success'
+        });
+      } catch (error) {
+        evntBus.$emit('show_mesage', {
+          text: error.message || this.__('Error loading order'),
+          color: 'error'
+        });
       }
     },
     

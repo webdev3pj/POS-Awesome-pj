@@ -854,7 +854,7 @@
               >
             </v-col>
             
-            <!-- ========== SALES ASSOCIATE: Large Generate Token Button ========== -->
+            <!-- ========== SALES ASSOCIATE: Large Generate Order Button ========== -->
             <v-col
               v-if="isTokenWorkflowSalesAssociate"
               cols="8"
@@ -865,11 +865,11 @@
                 x-large
                 color="purple"
                 dark
-                class="generate-token-btn"
-                @click="generate_token"
+                class="generate-order-btn"
+                @click="generate_sales_order"
               >
-                <v-icon left large>mdi-ticket-confirmation</v-icon>
-                {{ __("GENERATE TOKEN") }}
+                <v-icon left large>mdi-receipt-text</v-icon>
+                {{ __("GENERATE ORDER") }}
               </v-btn>
             </v-col>
             
@@ -966,6 +966,7 @@ export default {
       invoice_posting_date: false,
       posting_date: frappe.datetime.nowdate(),
       token_reference: null,
+      sales_order_reference: null,
       token_data: null,
       user_roles: [],
       currentUserFullName: '',
@@ -3257,6 +3258,104 @@ export default {
       });
     },
     
+    async generate_sales_order() {
+      // NEW: Generate Sales Order (replaces token workflow)
+      if (!this.customer) {
+        evntBus.$emit("show_mesage", {
+          text: __("Please select a customer first"),
+          color: "error",
+        });
+        return;
+      }
+      if (!this.items.length) {
+        evntBus.$emit("show_mesage", {
+          text: __("Please add items to generate order"),
+          color: "error",
+        });
+        return;
+      }
+      if (!this.validate()) {
+        return;
+      }
+      
+      const vm = this;
+      const items = this.items.map(item => ({
+        item_code: item.item_code,
+        item_name: item.item_name,
+        description: item.description,
+        qty: item.qty,
+        rate: item.rate,
+        uom: item.uom || item.stock_uom,
+        conversion_factor: item.conversion_factor || 1,
+        batch_no: item.batch_no,
+        serial_no: item.serial_no,
+        warehouse: item.warehouse || vm.pos_profile.warehouse
+      }));
+      
+      frappe.call({
+        method: "posawesome.posawesome.api.sales_order_token.create_sales_order_token",
+        args: {
+          pos_profile: vm.pos_profile.name,
+          customer: vm.customer,
+          items: JSON.stringify(items)
+        },
+        freeze: true,
+        freeze_message: __("Creating Sales Order..."),
+        callback: function(r) {
+          if (r.message) {
+            // Show success dialog with order details
+            evntBus.$emit("open_order_dialog", r.message, vm.pos_profile.currency);
+            evntBus.$emit("show_mesage", {
+              text: __("Order {0} created successfully", [r.message.order_name]),
+              color: "success",
+            });
+            // Notify pending orders sidebar to refresh
+            evntBus.$emit("sales_order_created");
+            // Clear the cart after order generation
+            vm.cancel_invoice();
+          }
+        },
+        error: function(err) {
+          evntBus.$emit("show_mesage", {
+            text: err.message || __("Error creating sales order"),
+            color: "error",
+          });
+        }
+      });
+    },
+    
+    load_sales_order_items(salesOrder) {
+      // NEW: Load Sales Order items into cart
+      this.cancel_invoice(); // Clear cart first
+      
+      // Set customer
+      this.customer = salesOrder.customer;
+      this.customer_info.customer = salesOrder.customer;
+      this.customer_info.customer_name = salesOrder.customer_name;
+      
+      // Add items from order
+      salesOrder.items.forEach(item => {
+        this.add_item({
+          item_code: item.item_code,
+          item_name: item.item_name,
+          qty: item.qty,
+          rate: item.rate,
+          uom: item.uom,
+          warehouse: item.warehouse,
+          batch_no: item.batch_no,
+          serial_no: item.serial_no
+        });
+      });
+      
+      // Store the sales order reference
+      this.sales_order_reference = salesOrder.name;
+      
+      evntBus.$emit("show_mesage", {
+        text: __("Order loaded. You can now modify and process payment."),
+        color: "info",
+      });
+    },
+    
     open_cashier_mode() {
       evntBus.$emit("open_cashier_mode", this.pos_profile, this.pos_opening_shift);
     },
@@ -3420,6 +3519,9 @@ export default {
     });
     evntBus.$on("load_token_for_payment", (tokenData) => {
       this.load_token_items(tokenData);
+    });
+    evntBus.$on("load_sales_order", (salesOrder) => {
+      this.load_sales_order_items(salesOrder);
     });
     evntBus.$on("token_dialog_closed", () => {
       // Clear token reference when token dialog is closed
