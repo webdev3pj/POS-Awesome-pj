@@ -71,7 +71,7 @@ doctype_js = {
 # ------------
 
 # before_install = "posawesome.install.before_install"
-# after_install = "posawesome.install.after_install"
+after_install = "posawesome.posawesome.patches.create_sales_order_custom_fields.execute"
 # before_uninstall = "posawesome.uninstall.before_uninstall"
 after_uninstall = "posawesome.uninstall.after_uninstall"
 
@@ -270,6 +270,10 @@ fixtures = [
                     "POS Profile-posa_allow_mpesa_reconcile_payments",
                     "POS Profile-posa_enable_token_workflow",
                     "Sales Person-custom_user",
+                    "Sales Order-custom_sales_associate",
+                    "Sales Order-custom_order_type",
+                    "Sales Order-custom_pos_opening_shift",
+                    "Sales Order-custom_token_qr_code",
                 ),
             ]
         ],
