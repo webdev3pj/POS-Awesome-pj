@@ -1,5 +1,6 @@
 {
  "doctype": "Sales Order",
+ "property_setters": [],
  "custom_fields": [
   {
    "fieldname": "custom_sales_associate",
