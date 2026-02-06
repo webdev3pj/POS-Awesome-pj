@@ -1,4 +1,5 @@
 {
+ "doctype": "Sales Order",
  "custom_fields": [
   {
    "fieldname": "custom_sales_associate",

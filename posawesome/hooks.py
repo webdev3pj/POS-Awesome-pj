@@ -163,6 +163,7 @@ doc_events = {
 # auto_cancel_exempted_doctypes = ["Auto Repeat"]
 
 fixtures = [
+    "posawesome/custom/sales_order.json",
     {
         "doctype": "Custom Field",
         "filters": [
