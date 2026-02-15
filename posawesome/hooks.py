@@ -22,7 +22,7 @@ app_include_js = [
     "posawesome.bundle.js",
     "/assets/posawesome/js/xlsx.full.min.js",
     "/assets/posawesome/js/sales_person_commiss.js",
-    "/assets/posawesome/js/sales_partner_commis.js"
+    "/assets/posawesome/js/sales_partner_commis.js",
 ]
 
 
@@ -36,7 +36,6 @@ app_include_js = [
 
 # include js in page
 # page_js = {"page" : "public/js/file.js"}
-
 
 
 # include js in doctype views
@@ -273,13 +272,21 @@ fixtures = [
         ],
     },
     {
+        "doctype": "Custom Field",
+        "filters": [["module", "in", ("POSAwesome")]],
+    },
+    {
+        "doctype": "Property Setter",
+        "filters": [["module", "in", ("POSAwesome")]],
+    },
+    {
         "doctype": "Property Setter",
         "filters": [["name", "in", ("Sales Invoice-posa_pos_opening_shift-no_copy")]],
     },
     {
-    "doctype": "Role",
-    "filters": [
-        ["role_name", "in", ["Sales Commission", "Sales Commission Admin"]]
+        "doctype": "Role",
+        "filters": [
+            ["role_name", "in", ["Sales Commission", "Sales Commission Admin"]]
         ],
     },
 ]
