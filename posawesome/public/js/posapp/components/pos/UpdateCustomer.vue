@@ -41,10 +41,13 @@
                 <v-text-field
                   dense
                   color="primary"
-                  :label="frappe._('Mobile No')"
+                  :label="frappe._('Mobile No') + ' *'"
                   background-color="white"
-                  hide-details
                   v-model="mobile_no"
+                  :rules="mobileRules"
+                  :error-messages="mobileError"
+                  @input="validateMobile"
+                  maxlength="10"
                 ></v-text-field>
               </v-col>
               <v-col cols="6">
@@ -197,9 +200,20 @@ export default {
     gender: '',
     loyalty_points: null,
     loyalty_program: null,
+    mobileError: '',
+    mobileRules: [
+      v => !!v || 'Mobile number is required',
+      v => /^\d{10}$/.test(v) || 'Mobile number must be exactly 10 digits',
+    ],
   }),
   watch: {},
   methods: {
+    validateMobile() {
+      this.mobileError = '';
+      if (this.mobile_no && !/^\d{10}$/.test(this.mobile_no)) {
+        this.mobileError = 'Mobile number must be exactly 10 digits';
+      }
+    },
     close_dialog() {
       this.customerDialog = false;
       this.clear_customer();
@@ -275,6 +289,20 @@ export default {
       if (!this.customer_name) {
         evntBus.$emit('show_mesage', {
           text: __('Customer name is required.'),
+          color: 'error',
+        });
+        return;
+      }
+      if (!this.mobile_no) {
+        evntBus.$emit('show_mesage', {
+          text: __('Mobile number is required.'),
+          color: 'error',
+        });
+        return;
+      }
+      if (!/^\d{10}$/.test(this.mobile_no)) {
+        evntBus.$emit('show_mesage', {
+          text: __('Mobile number must be exactly 10 digits.'),
           color: 'error',
         });
         return;

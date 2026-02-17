@@ -18,8 +18,43 @@
         </v-card-actions>
       </v-card>
     </v-dialog>
+    
+    <!-- Sales Associate Info Bar - Compact version for both roles -->
+    <v-card 
+      v-if="pos_profile.posa_enable_token_workflow === 1 && (isTokenWorkflowSalesAssociate || (isCashier && token_data))"
+      class="mx-3 mt-3 mb-0 px-3 py-1"
+      :class="isTokenWorkflowSalesAssociate ? 'purple lighten-5' : 'teal lighten-5'"
+      flat
+    >
+      <v-row no-gutters align="center">
+        <v-col cols="auto">
+          <v-icon :color="isTokenWorkflowSalesAssociate ? 'purple' : 'teal'" size="20" class="mr-2">mdi-account</v-icon>
+        </v-col>
+        <v-col>
+          <span 
+            class="text-body-2 font-weight-medium"
+            :class="isTokenWorkflowSalesAssociate ? 'purple--text text--darken-3' : 'teal--text text--darken-3'"
+          >
+            {{ __('Sales Associate') }}:
+          </span>
+          <span 
+            class="text-body-2 font-weight-bold ml-1"
+            :class="isTokenWorkflowSalesAssociate ? 'purple--text text--darken-4' : 'teal--text text--darken-4'"
+          >
+            {{ isTokenWorkflowSalesAssociate ? currentUserFullName : (token_data ? token_data.sales_associate_name : '') }}
+          </span>
+        </v-col>
+        <v-col cols="auto" v-if="isCashier && token_data">
+          <v-chip x-small color="teal" dark>
+            {{ token_data.token_number }}
+          </v-chip>
+        </v-col>
+      </v-row>
+    </v-card>
+    
     <v-card
       style="max-height: 70vh; height: 70vh"
+      :style="(pos_profile.posa_enable_token_workflow === 1 && (isTokenWorkflowSalesAssociate || (isCashier && token_data))) ? 'max-height: 65vh; height: 65vh' : ''"
       class="cards my-0 py-0 mt-3 grey lighten-5"
     >
       <v-row align="center" class="items px-2 py-1">
@@ -743,7 +778,12 @@
         </v-col>
         <v-col cols="5">
           <v-row no-gutters class="pa-1 pt-2 pl-0">
-            <v-col cols="6" class="pa-1">
+            <!-- Held/Drafts button: Hidden when token workflow is enabled -->
+            <v-col 
+              v-if="pos_profile.posa_enable_token_workflow !== 1"
+              cols="6" 
+              class="pa-1"
+            >
               <v-btn
                 block
                 class="pa-0"
@@ -753,8 +793,9 @@
                 >{{ __("Held") }}</v-btn
               >
             </v-col>
+            <!-- Select S.O button: Hidden when token workflow enabled -->
             <v-col
-              v-if="pos_profile.custom_allow_select_sales_order === 1"
+              v-if="pos_profile.custom_allow_select_sales_order === 1 && pos_profile.posa_enable_token_workflow !== 1"
               cols="6"
               class="pa-1"
             >
@@ -767,7 +808,12 @@
                 >{{ __("Select S.O") }}</v-btn
               >
             </v-col>
-            <v-col cols="6" class="pa-1">
+            <!-- Return button: Visible for Cashier, hidden for Sales Associate in token workflow -->
+            <v-col 
+              v-if="pos_profile.posa_enable_token_workflow !== 1 || isCashier"
+              cols="6" 
+              class="pa-1"
+            >
               <v-btn
                 block
                 class="pa-0"
@@ -778,7 +824,11 @@
                 >{{ __("Return") }}</v-btn
               >
             </v-col>
-            <v-col cols="6" class="pa-1">
+            <!-- Cancel button: Available to all (smaller for Sales Associate) -->
+            <v-col 
+              :cols="isTokenWorkflowSalesAssociate ? 4 : 6" 
+              class="pa-1"
+            >
               <v-btn
                 block
                 class="pa-0"
@@ -788,7 +838,12 @@
                 >{{ __("Cancel") }}</v-btn
               >
             </v-col>
-            <v-col cols="6" class="pa-1">
+            <!-- Save/New button: Hidden when token workflow is enabled -->
+            <v-col 
+              v-if="pos_profile.posa_enable_token_workflow !== 1"
+              cols="6" 
+              class="pa-1"
+            >
               <v-btn
                 block
                 class="pa-0"
@@ -798,7 +853,48 @@
                 >{{ __("Save/New") }}</v-btn
               >
             </v-col>
-            <v-col class="pa-1">
+            
+            <!-- ========== SALES ASSOCIATE: Large Generate Order Button ========== -->
+            <v-col
+              v-if="isTokenWorkflowSalesAssociate"
+              cols="8"
+              class="pa-1"
+            >
+              <v-btn
+                block
+                x-large
+                color="purple"
+                dark
+                class="generate-order-btn"
+                @click="generate_sales_order"
+              >
+                <v-icon left large>mdi-receipt-text</v-icon>
+                {{ __("GENERATE ORDER") }}
+              </v-btn>
+            </v-col>
+            
+            <!-- ========== CASHIER: Scan Token Button ========== -->
+            <v-col
+              v-if="pos_profile.posa_enable_token_workflow === 1 && isCashier && !isTokenWorkflowSalesAssociate"
+              cols="6"
+              class="pa-1"
+            >
+              <v-btn
+                block
+                class="pa-0"
+                color="teal"
+                dark
+                @click="open_cashier_mode"
+                >
+                <v-icon left>mdi-qrcode-scan</v-icon>
+                {{ __("Scan Token") }}</v-btn
+              >
+            </v-col>
+            <!-- PAY button: Hidden for Sales Associate in token workflow mode -->
+            <v-col 
+              v-if="!isTokenWorkflowSalesAssociate"
+              class="pa-1"
+            >
               <v-btn
                 block
                 class="pa-0"
@@ -808,8 +904,9 @@
                 >{{ __("PAY") }}</v-btn
               >
             </v-col>
+            <!-- Quotation button: Only for Cashier in token workflow -->
             <v-col
-              v-if="pos_profile.posa_allow_print_draft_invoices"
+              v-if="pos_profile.posa_enable_token_workflow === 1 && isCashier && !isTokenWorkflowSalesAssociate"
               cols="6"
               class="pa-1"
             >
@@ -817,9 +914,9 @@
                 block
                 class="pa-0"
                 color="primary"
-                @click="print_draft_invoice"
+                @click="print_quotation"
                 dark
-                >{{ __("Print Draft") }}</v-btn
+                >{{ __("Quotation") }}</v-btn
               >
             </v-col>
           </v-row>
@@ -868,6 +965,13 @@ export default {
       selcted_delivery_charges: {},
       invoice_posting_date: false,
       posting_date: frappe.datetime.nowdate(),
+      token_reference: null,
+      sales_order_reference: null,
+      token_data: null,
+      user_roles: [],
+      currentUserFullName: '',
+      customer_sales_info: null,
+      ownership_warning_shown: false,
       items_headers: [
         {
           text: __("Name"),
@@ -889,6 +993,19 @@ export default {
   },
 
   computed: {
+    // Token Workflow Role Detection
+    isSalesAssociate() {
+      return this.user_roles.includes("POS Sales Associate");
+    },
+    isCashier() {
+      return this.user_roles.includes("POS Cashier");
+    },
+    isTokenWorkflowSalesAssociate() {
+      // Returns true if token workflow is enabled AND user is a sales associate (hides PAY button)
+      return this.pos_profile.posa_enable_token_workflow === 1 && 
+             this.isSalesAssociate && 
+             !this.isCashier;
+    },
     total_qty() {
       this.close_payments();
       let qty = 0;
@@ -1105,6 +1222,13 @@ export default {
       this.selcted_delivery_charges = {};
       evntBus.$emit("set_customer_readonly", false);
       this.cancel_dialog = false;
+      
+      // Clear token reference and notify sidebar to refresh
+      if (this.token_reference) {
+        evntBus.$emit("token_paid");
+        this.token_reference = null;
+        this.token_data = null;
+      }
     },
 
     new_invoice(data = {}) {
@@ -1567,15 +1691,18 @@ export default {
           evntBus.$emit("show_payment", "true");
           const invoice_doc = await this.process_invoice_from_order();
           evntBus.$emit("send_invoice_doc_payment", invoice_doc);
+          evntBus.$emit("set_token_reference", this.token_reference);
         } else {
           evntBus.$emit("show_payment", "true");
           const invoice_doc = this.process_invoice();
           evntBus.$emit("send_invoice_doc_payment", invoice_doc);
+          evntBus.$emit("set_token_reference", this.token_reference);
         }
       } else {
         evntBus.$emit("show_payment", "true");
         const invoice_doc = this.process_invoice();
         evntBus.$emit("send_invoice_doc_payment", invoice_doc);
+        evntBus.$emit("set_token_reference", this.token_reference);
       }
     },
 
@@ -1923,7 +2050,39 @@ export default {
             vm.update_price_list();
           },
         });
+        
+        // Fetch customer sales info for commission ownership check
+        vm.fetch_customer_sales_info();
       }
+    },
+    
+    fetch_customer_sales_info() {
+      const vm = this;
+      if (!this.customer || !this.pos_profile.custom_commission_enabled) {
+        return;
+      }
+      
+      frappe.call({
+        method: "posawesome.posawesome.api.posapp.get_customer_sales_info",
+        args: {
+          customer: vm.customer,
+        },
+        async: false,
+        callback: (r) => {
+          if (!r.exc && r.message) {
+            vm.customer_sales_info = r.message;
+            
+            // Show ownership warning if customer belongs to another sales person
+            if (r.message.ownership_warning && !vm.ownership_warning_shown) {
+              vm.ownership_warning_shown = true;
+              frappe.show_alert({
+                message: r.message.ownership_warning,
+                indicator: 'orange'
+              }, 5);
+            }
+          }
+        },
+      });
     },
 
     get_price_list() {
@@ -2916,6 +3075,82 @@ export default {
         },
       ]);
     },
+    
+    async print_quotation() {
+      // Print current cart as a Quotation for the Cashier
+      const vm = this;
+      
+      if (!this.customer) {
+        evntBus.$emit("show_mesage", {
+          text: __("Please select a customer first"),
+          color: "error",
+        });
+        return;
+      }
+      
+      if (!this.items || this.items.length === 0) {
+        evntBus.$emit("show_mesage", {
+          text: __("Please add items to the cart first"),
+          color: "error",
+        });
+        return;
+      }
+      
+      // Create a Quotation document
+      const quotation_items = this.items.map(item => ({
+        item_code: item.item_code,
+        item_name: item.item_name,
+        qty: item.qty,
+        rate: item.rate,
+        uom: item.uom || item.stock_uom,
+        warehouse: item.warehouse || this.pos_profile.warehouse,
+      }));
+      
+      try {
+        const response = await frappe.call({
+          method: "frappe.client.insert",
+          args: {
+            doc: {
+              doctype: "Quotation",
+              quotation_to: "Customer",
+              party_name: this.customer,
+              company: this.pos_profile.company,
+              currency: this.pos_profile.currency,
+              selling_price_list: this.pos_profile.selling_price_list,
+              items: quotation_items,
+            }
+          }
+        });
+        
+        if (response.message) {
+          const quotation_name = response.message.name;
+          evntBus.$emit("show_mesage", {
+            text: __("Quotation {0} created", [quotation_name]),
+            color: "success",
+          });
+          
+          // Open print dialog using Standard format for Quotation (not Sales Invoice format)
+          const letter_head = this.pos_profile.letter_head || 0;
+          const url = frappe.urllib.get_full_url(
+            "/printview?doctype=Quotation&name=" +
+            quotation_name +
+            "&trigger_print=1&format=Standard" +
+            "&no_letterhead=" +
+            letter_head
+          );
+          const printWindow = window.open(url, "Print");
+          printWindow.addEventListener("load", function () {
+            printWindow.print();
+          }, true);
+        }
+      } catch (error) {
+        evntBus.$emit("show_mesage", {
+          text: __("Failed to create quotation: {0}", [error.message || error]),
+          color: "error",
+        });
+      }
+    },
+    
     set_delivery_charges() {
       const vm = this;
       if (
@@ -2958,9 +3193,262 @@ export default {
         this.delivery_charges_rate = 0;
       }
     },
+    
+    // Token System Methods
+    async generate_token() {
+      if (!this.customer) {
+        evntBus.$emit("show_mesage", {
+          text: __("Please select a customer first"),
+          color: "error",
+        });
+        return;
+      }
+      if (!this.items.length) {
+        evntBus.$emit("show_mesage", {
+          text: __("Please add items to generate token"),
+          color: "error",
+        });
+        return;
+      }
+      if (!this.validate()) {
+        return;
+      }
+      
+      const vm = this;
+      const items = this.items.map(item => ({
+        item_code: item.item_code,
+        item_name: item.item_name,
+        qty: item.qty,
+        rate: item.rate,
+        uom: item.uom || item.stock_uom,
+        batch_no: item.batch_no,
+        serial_no: item.serial_no,
+        warehouse: item.warehouse
+      }));
+      
+      frappe.call({
+        method: "posawesome.posawesome.api.token.create_token",
+        args: {
+          pos_profile: vm.pos_profile.name,
+          customer: vm.customer,
+          items: JSON.stringify(items),
+          pos_opening_shift: vm.pos_opening_shift ? vm.pos_opening_shift.name : null
+        },
+        freeze: true,
+        freeze_message: __("Generating Token..."),
+        callback: function(r) {
+          if (r.message) {
+            evntBus.$emit("open_token_dialog", r.message, vm.pos_profile.currency);
+            evntBus.$emit("show_mesage", {
+              text: __("Token {0} generated successfully", [r.message.token_number]),
+              color: "success",
+            });
+            // Notify pending tokens sidebar to refresh
+            evntBus.$emit("token_created");
+            // Clear the cart after token generation
+            vm.cancel_invoice();
+          }
+        },
+        error: function(err) {
+          evntBus.$emit("show_mesage", {
+            text: err.message || __("Error generating token"),
+            color: "error",
+          });
+        }
+      });
+    },
+    
+    async generate_sales_order() {
+      // NEW: Generate Sales Order (replaces token workflow)
+      if (!this.customer) {
+        evntBus.$emit("show_mesage", {
+          text: __("Please select a customer first"),
+          color: "error",
+        });
+        return;
+      }
+      if (!this.items.length) {
+        evntBus.$emit("show_mesage", {
+          text: __("Please add items to generate order"),
+          color: "error",
+        });
+        return;
+      }
+      if (!this.validate()) {
+        return;
+      }
+      
+      const vm = this;
+      const items = this.items.map(item => ({
+        item_code: item.item_code,
+        item_name: item.item_name,
+        description: item.description,
+        qty: item.qty,
+        rate: item.rate,
+        uom: item.uom || item.stock_uom,
+        conversion_factor: item.conversion_factor || 1,
+        batch_no: item.batch_no,
+        serial_no: item.serial_no,
+        warehouse: item.warehouse || vm.pos_profile.warehouse
+      }));
+      
+      frappe.call({
+        method: "posawesome.posawesome.api.sales_order_token.create_sales_order_token",
+        args: {
+          pos_profile: vm.pos_profile.name,
+          customer: vm.customer,
+          items: JSON.stringify(items)
+        },
+        freeze: true,
+        freeze_message: __("Creating Sales Order..."),
+        callback: function(r) {
+          if (r.message) {
+            // Show success dialog with order details
+            evntBus.$emit("open_order_dialog", r.message, vm.pos_profile.currency);
+            evntBus.$emit("show_mesage", {
+              text: __("Order {0} created successfully", [r.message.order_name]),
+              color: "success",
+            });
+            // Notify pending orders sidebar to refresh
+            evntBus.$emit("sales_order_created");
+            // Clear the cart after order generation
+            vm.cancel_invoice();
+          }
+        },
+        error: function(err) {
+          evntBus.$emit("show_mesage", {
+            text: err.message || __("Error creating sales order"),
+            color: "error",
+          });
+        }
+      });
+    },
+    
+    load_sales_order_items(salesOrder) {
+      // NEW: Load Sales Order items into cart
+      this.cancel_invoice(); // Clear cart first
+      
+      // Set customer
+      this.customer = salesOrder.customer;
+      this.customer_info.customer = salesOrder.customer;
+      this.customer_info.customer_name = salesOrder.customer_name;
+      
+      // Add items from order
+      salesOrder.items.forEach(item => {
+        this.add_item({
+          item_code: item.item_code,
+          item_name: item.item_name,
+          qty: item.qty,
+          rate: item.rate,
+          uom: item.uom,
+          warehouse: item.warehouse,
+          batch_no: item.batch_no,
+          serial_no: item.serial_no
+        });
+      });
+      
+      // Store the sales order reference
+      this.sales_order_reference = salesOrder.name;
+      
+      evntBus.$emit("show_mesage", {
+        text: __("Order loaded. You can now modify and process payment."),
+        color: "info",
+      });
+    },
+    
+    open_cashier_mode() {
+      evntBus.$emit("open_cashier_mode", this.pos_profile, this.pos_opening_shift);
+    },
+    
+    load_token_items(tokenData) {
+      // Load token items into the cart for payment
+      // Cashier can modify items (add/remove/change qty) before paying
+      this.customer = tokenData.customer;
+      this.items = [];
+      
+      // Store token reference for tracking
+      this.token_reference = tokenData.name;
+      this.token_data = tokenData;
+      
+      // Reset ownership warning flag for new token
+      this.ownership_warning_shown = false;
+      
+      tokenData.items.forEach(item => {
+        this.items.push({
+          item_code: item.item_code,
+          item_name: item.item_name,
+          qty: item.qty,
+          rate: item.rate,
+          amount: item.amount,
+          uom: item.uom,
+          stock_uom: item.uom,
+          batch_no: item.batch_no,
+          serial_no: item.serial_no,
+          warehouse: item.warehouse,
+          posa_row_id: this.makeid(20),
+          posa_offers: JSON.stringify([]),
+          posa_offer_applied: 0,
+          posa_is_offer: 0,
+          posa_notes: "",
+          posa_delivery_date: "",
+          // Allow modification
+          posa_is_from_token: 1
+        });
+      });
+      
+      // Fetch customer details to populate customer_info
+      this.fetch_customer_details();
+      
+      // Pre-populate sales person from token for commission
+      // The sales associate who created the token gets the commission
+      if (tokenData.sales_person) {
+        evntBus.$emit("set_token_sales_person", tokenData.sales_person);
+      }
+      
+      evntBus.$emit("show_mesage", {
+        text: __("Token {0} loaded - you can modify items before paying", [tokenData.token_number]),
+        color: "success",
+      });
+    },
+    
+    fetch_user_roles() {
+      // Fetch current user's roles and full name for token workflow
+      const vm = this;
+      
+      // Get user roles using custom API that doesn't require Has Role permission
+      frappe.call({
+        method: "posawesome.posawesome.api.posapp.get_current_user_roles",
+        args: {},
+        async: false,
+        callback: function(r) {
+          if (r.message) {
+            vm.user_roles = r.message;
+          }
+        }
+      });
+      
+      // Get user full name
+      frappe.call({
+        method: "frappe.client.get_value",
+        args: {
+          doctype: "User",
+          filters: { name: frappe.session.user },
+          fieldname: ["full_name"]
+        },
+        async: false,
+        callback: function(r) {
+          if (r.message) {
+            vm.currentUserFullName = r.message.full_name || frappe.session.user;
+          }
+        }
+      });
+    },
   },
 
   mounted() {
+    // Fetch user roles on mount
+    this.fetch_user_roles();
+    
     evntBus.$on("register_pos_profile", (data) => {
       this.pos_profile = data.pos_profile;
       this.customer = data.pos_profile.customer;
@@ -3029,6 +3517,16 @@ export default {
     evntBus.$on("set_new_line", (data) => {
       this.new_line = data;
     });
+    evntBus.$on("load_token_for_payment", (tokenData) => {
+      this.load_token_items(tokenData);
+    });
+    evntBus.$on("load_sales_order", (salesOrder) => {
+      this.load_sales_order_items(salesOrder);
+    });
+    evntBus.$on("token_dialog_closed", () => {
+      // Clear token reference when token dialog is closed
+      this.token_reference = null;
+    });
   },
   beforeDestroy() {
     evntBus.$off("register_pos_profile");
@@ -3040,6 +3538,8 @@ export default {
     evntBus.$off("update_invoice_offers");
     evntBus.$off("update_invoice_coupons");
     evntBus.$off("set_all_items");
+    evntBus.$off("load_token_for_payment");
+    evntBus.$off("token_dialog_closed");
   },
   created() {
     document.addEventListener("keydown", this.shortOpenPayment.bind(this));
@@ -3104,5 +3604,11 @@ export default {
 }
 .disable-events {
   pointer-events: none;
+}
+.generate-token-btn {
+  font-size: 1.1rem !important;
+  font-weight: 700 !important;
+  letter-spacing: 0.5px;
+  height: 52px !important;
 }
 </style>

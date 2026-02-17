@@ -7,6 +7,11 @@
     <NewAddress></NewAddress>
     <MpesaPayments></MpesaPayments>
     <Variants></Variants>
+    <TokenDialog></TokenDialog>
+    <OrderDialog></OrderDialog>
+    <CashierMode></CashierMode>
+    <PendingTokensSidebar></PendingTokensSidebar>
+    <PendingOrdersSidebar></PendingOrdersSidebar>
     <OpeningDialog v-if="dialog" :dialog="dialog"></OpeningDialog>
     <v-row v-show="!dialog">
       <v-col
@@ -76,6 +81,11 @@ import NewAddress from './NewAddress.vue';
 import Variants from './Variants.vue';
 import Returns from './Returns.vue';
 import MpesaPayments from './Mpesa-Payments.vue';
+import TokenDialog from './TokenDialog.vue';
+import OrderDialog from './OrderDialog.vue';
+import CashierMode from './CashierMode.vue';
+import PendingTokensSidebar from './PendingTokensSidebar.vue';
+import PendingOrdersSidebar from './PendingOrdersSidebar.vue';
 
 export default {
   data: function () {
@@ -86,6 +96,7 @@ export default {
       payment: false,
       offers: false,
       coupons: false,
+      user_roles: [],
     };
   },
 
@@ -104,9 +115,33 @@ export default {
     Variants,
     MpesaPayments,
     SalesOrders,
+    TokenDialog,
+    OrderDialog,
+    CashierMode,
+    PendingTokensSidebar,
+    PendingOrdersSidebar,
+  },
+  
+  computed: {
+    isSalesAssociateOnly() {
+      // Returns true if user has POS Sales Associate role but NOT POS Cashier
+      return this.user_roles.includes("POS Sales Associate") && 
+             !this.user_roles.includes("POS Cashier");
+    }
   },
 
   methods: {
+    async fetch_user_roles() {
+      // Fetch user roles first
+      const response = await frappe.call({
+        method: "posawesome.posawesome.api.posapp.get_current_user_roles",
+        args: {}
+      });
+      if (response.message) {
+        this.user_roles = response.message;
+      }
+    },
+    
     check_opening_entry() {
       return frappe
         .call('posawesome.posawesome.api.posapp.check_opening_shift', {
@@ -121,10 +156,49 @@ export default {
             evntBus.$emit('set_company', r.message.company);
             console.info('LoadPosProfile');
           } else {
-            this.create_opening_voucher();
+            // Check if user is a Sales Associate - they don't need opening shift
+            if (this.isSalesAssociateOnly) {
+              this.load_pos_profile_for_sales_associate();
+            } else {
+              this.create_opening_voucher();
+            }
           }
         });
     },
+    
+    async load_pos_profile_for_sales_associate() {
+      // Sales Associates don't need an opening shift
+      // Get their assigned POS Profile directly
+      try {
+        const response = await frappe.call({
+          method: 'posawesome.posawesome.api.posapp.get_user_pos_profile',
+          args: {}
+        });
+        
+        if (response.message) {
+          this.pos_profile = response.message;
+          this.get_offers(this.pos_profile.name);
+          
+          // Emit the profile data without opening shift
+          const data = {
+            pos_profile: response.message,
+            pos_opening_shift: null,
+            company: { name: response.message.company },
+            stock_settings: { allow_negative_stock: '0' }
+          };
+          
+          evntBus.$emit('register_pos_profile', data);
+          evntBus.$emit('set_company', data.company);
+          console.info('LoadPosProfile for Sales Associate (no opening shift):', this.pos_profile.name);
+        } else {
+          frappe.msgprint(__('No POS Profile assigned to this user. Please contact administrator.'));
+        }
+      } catch (error) {
+        console.error('Error loading POS Profile for Sales Associate:', error);
+        frappe.msgprint(__('Error loading POS Profile. Please contact administrator.'));
+      }
+    },
+    
     create_opening_voucher() {
       this.dialog = true;
     },
@@ -184,7 +258,9 @@ export default {
   },
 
   mounted: function () {
-    this.$nextTick(function () {
+    this.$nextTick(async function () {
+      // Fetch user roles first before checking opening entry
+      await this.fetch_user_roles();
       this.check_opening_entry();
       this.get_pos_setting();
       evntBus.$on('close_opening_dialog', () => {

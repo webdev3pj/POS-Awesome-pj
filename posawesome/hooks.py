@@ -72,7 +72,7 @@ doctype_js = {
 # ------------
 
 # before_install = "posawesome.install.before_install"
-# after_install = "posawesome.install.after_install"
+after_install = "posawesome.posawesome.patches.create_sales_order_custom_fields.execute"
 # before_uninstall = "posawesome.uninstall.before_uninstall"
 after_uninstall = "posawesome.uninstall.after_uninstall"
 
@@ -195,6 +195,8 @@ fixtures = [
                     "POS Profile-use_cashback",
                     "POS Profile-posa_hide_closing_shift",
                     "Customer-posa_discount",
+                    "Customer-custom_default_sales_person",
+                    "Customer-custom_created_by_sales_associate",
                     "POS Profile-posa_apply_customer_discount",
                     "Sales Invoice-posa_offers",
                     "Sales Invoice-posa_coupons",
@@ -267,6 +269,12 @@ fixtures = [
                     "POS Profile-posa_allow_reconcile_payments",
                     "POS Profile-column_break_uolvm",
                     "POS Profile-posa_allow_mpesa_reconcile_payments",
+                    "POS Profile-posa_enable_token_workflow",
+                    "Sales Person-custom_user",
+                    "Sales Order-custom_sales_associate",
+                    "Sales Order-custom_order_type",
+                    "Sales Order-custom_pos_opening_shift",
+                    "Sales Order-custom_token_qr_code",
                 ),
             ]
         ],
@@ -286,7 +294,22 @@ fixtures = [
     {
         "doctype": "Role",
         "filters": [
-            ["role_name", "in", ["Sales Commission", "Sales Commission Admin"]]
+            [
+                "role_name",
+                "in",
+                [
+                    "Sales Commission",
+                    "Sales Commission Admin",
+                    "POS Sales Associate",
+                    "POS Cashier",
+                ],
+            ]
+        ],
+    },
+    {
+        "doctype": "Role Profile",
+        "filters": [
+            ["name", "in", ["POS Sales Associate Profile", "POS Cashier Profile"]]
         ],
     },
 ]

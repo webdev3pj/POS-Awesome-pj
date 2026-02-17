@@ -34,6 +34,190 @@ from posawesome.posawesome.doctype.delivery_charges.delivery_charges import (
 from frappe.utils.caching import redis_cache
 
 
+def get_sales_person_for_current_user():
+    """
+    Get the Sales Person linked to the current user via custom_user field.
+    Bypasses the Employee doctype entirely.
+    
+    Returns: sales_person name or None
+    """
+    user = frappe.session.user
+    
+    # Find Sales Person linked directly to this User via custom_user field
+    sales_person = frappe.db.get_value(
+        "Sales Person", 
+        {"custom_user": user, "enabled": 1}, 
+        "name"
+    )
+    
+    return sales_person
+
+
+def get_or_create_sales_person_for_user(user=None, commission_rate=0.5):
+    """
+    Get existing Sales Person for user or create a new one with default commission.
+    Uses the custom_user field to bypass the broken Employee doctype.
+    
+    Args:
+        user: User ID (defaults to current session user)
+        commission_rate: Default commission rate (0.5% = 0.5)
+    
+    Returns:
+        str: Sales Person name
+    """
+    if not user:
+        user = frappe.session.user
+    
+    # Check if Sales Person already exists for this user
+    existing = frappe.db.get_value(
+        "Sales Person", 
+        {"custom_user": user, "enabled": 1}, 
+        "name"
+    )
+    
+    if existing:
+        return existing
+    
+    # Get user's full name for the Sales Person name
+    user_full_name = frappe.db.get_value("User", user, "full_name") or user.split("@")[0]
+    
+    # Check if a Sales Person with this name already exists
+    base_name = user_full_name
+    counter = 1
+    sales_person_name = base_name
+    
+    while frappe.db.exists("Sales Person", sales_person_name):
+        # Check if existing one is linked to this user
+        existing_user = frappe.db.get_value("Sales Person", sales_person_name, "custom_user")
+        if existing_user == user:
+            return sales_person_name
+        sales_person_name = f"{base_name} {counter}"
+        counter += 1
+    
+    # Get the root Sales Person node (required for tree structure)
+    root_sales_person = frappe.db.get_value(
+        "Sales Person",
+        {"is_group": 1, "parent_sales_person": ["in", ["", None]]},
+        "name"
+    )
+    
+    if not root_sales_person:
+        # Create a root node if none exists
+        root_sales_person = "All Sales Persons"
+        if not frappe.db.exists("Sales Person", root_sales_person):
+            root_doc = frappe.get_doc({
+                "doctype": "Sales Person",
+                "sales_person_name": root_sales_person,
+                "is_group": 1,
+                "enabled": 1
+            })
+            root_doc.insert(ignore_permissions=True)
+    
+    # Create new Sales Person linked to this user
+    sales_person_doc = frappe.get_doc({
+        "doctype": "Sales Person",
+        "sales_person_name": sales_person_name,
+        "parent_sales_person": root_sales_person,
+        "is_group": 0,
+        "enabled": 1,
+        "custom_user": user,
+        "commission_rate": commission_rate  # Default 0.5% commission
+    })
+    
+    sales_person_doc.insert(ignore_permissions=True)
+    frappe.db.commit()
+    
+    return sales_person_doc.name
+
+
+@frappe.whitelist()
+def get_current_user_roles():
+    """
+    Get the current user's roles without requiring Has Role read permission.
+    Uses frappe.get_roles() which is an internal method.
+    """
+    return frappe.get_roles(frappe.session.user)
+
+
+@frappe.whitelist()
+def ensure_sales_person_for_user():
+    """
+    Ensure a Sales Person record exists for the current user.
+    Creates one with 0.5% default commission if it doesn't exist.
+    
+    Returns:
+        dict: Sales Person info including name and commission rate
+    """
+    sales_person = get_or_create_sales_person_for_user(
+        user=frappe.session.user,
+        commission_rate=0.5
+    )
+    
+    if sales_person:
+        commission_rate = frappe.db.get_value("Sales Person", sales_person, "commission_rate") or 0.5
+        return {
+            "sales_person": sales_person,
+            "user": frappe.session.user,
+            "commission_rate": commission_rate,
+            "created": True
+        }
+    
+    return {
+        "sales_person": None,
+        "user": frappe.session.user,
+        "error": "Failed to create Sales Person"
+    }
+
+
+@frappe.whitelist()
+def get_customer_sales_info(customer):
+    """
+    Get the customer's sales associate info and check for ownership conflicts
+    
+    Args:
+        customer: Customer ID
+    
+    Returns:
+        dict: Customer sales info including creator and ownership warning
+    """
+    if not customer:
+        return {"error": "Customer ID required"}
+    
+    customer_doc = frappe.get_doc("Customer", customer)
+    
+    # Get the Sales Associate (User) who created this customer
+    created_by_user = customer_doc.get("custom_created_by_sales_associate")
+    
+    # Current logged in user
+    current_user = frappe.session.user
+    
+    result = {
+        "customer": customer,
+        "customer_name": customer_doc.customer_name,
+        "created_by_sales_associate": created_by_user,
+        "created_by_sales_associate_name": None,
+        "current_user": current_user,
+        "current_user_name": frappe.db.get_value("User", current_user, "full_name"),
+        "ownership_warning": None,
+        "is_own_customer": True
+    }
+    
+    # Get creator's full name
+    if created_by_user:
+        result["created_by_sales_associate_name"] = frappe.db.get_value(
+            "User", created_by_user, "full_name"
+        ) or created_by_user
+    
+    # Check for ownership conflict - compare User IDs directly
+    if created_by_user and current_user != created_by_user:
+        result["ownership_warning"] = _(
+            "This customer belongs to {0}. Commission will be credited to you for this transaction."
+        ).format(result["created_by_sales_associate_name"])
+        result["is_own_customer"] = False
+    
+    return result
+
+
 @frappe.whitelist()
 def get_opening_dialog_data():
     data = {}
@@ -68,6 +252,62 @@ def get_opening_dialog_data():
         )
 
     return data
+
+
+@frappe.whitelist()
+def get_user_pos_profile():
+    """
+    Get the POS Profile assigned to the current user.
+    Returns the first POS Profile where the user is in the 'Applicable for Users' table,
+    or if that doesn't exist, checks for profiles where user matches default_owner.
+    """
+    user = frappe.session.user
+    
+    # First, check for POS Profiles where user is in applicable_for_users
+    profiles = frappe.get_all(
+        "POS Profile User",
+        filters={"user": user, "default": 1},
+        fields=["parent"],
+        limit=1
+    )
+    
+    if profiles:
+        return frappe.get_doc("POS Profile", profiles[0].parent)
+    
+    # If no default, get any profile assigned to user
+    profiles = frappe.get_all(
+        "POS Profile User",
+        filters={"user": user},
+        fields=["parent"],
+        limit=1
+    )
+    
+    if profiles:
+        return frappe.get_doc("POS Profile", profiles[0].parent)
+    
+    # Fallback: get first enabled POS Profile with token workflow enabled
+    profiles = frappe.get_all(
+        "POS Profile",
+        filters={"disabled": 0, "posa_enable_token_workflow": 1},
+        fields=["name"],
+        limit=1
+    )
+    
+    if profiles:
+        return frappe.get_doc("POS Profile", profiles[0].name)
+    
+    # Last resort: first enabled profile
+    profiles = frappe.get_all(
+        "POS Profile",
+        filters={"disabled": 0},
+        fields=["name"],
+        limit=1
+    )
+    
+    if profiles:
+        return frappe.get_doc("POS Profile", profiles[0].name)
+    
+    return None
 
 
 @frappe.whitelist()
@@ -675,6 +915,11 @@ def submit_invoice(invoice, data):
     frappe.flags.ignore_account_permission = True
     invoice_doc.posa_is_printed = 1
     invoice_doc.save()
+    
+    # Apply Sales Associate commission if this is a token payment
+    token_reference = data.get("token_reference")
+    if token_reference:
+        apply_token_commission_and_update_status(invoice_doc, token_reference)
 
     if data.get("due_date"):
         frappe.db.set_value(
@@ -720,6 +965,114 @@ def submit_invoice(invoice, data):
         )
 
     return {"name": invoice_doc.name, "status": invoice_doc.docstatus}
+
+
+def apply_token_commission_and_update_status(invoice_doc, token_name):
+    """
+    Apply Sales Associate commission for token payments and update token status.
+    Uses existing ERPNext sales_team table to track commission.
+    
+    Steps:
+    1. Get token document
+    2. Check commission eligibility (enabled + threshold)
+    3. Get Sales Person linked to the Sales Associate
+    4. Add commission entry to sales_team table
+    5. Update token status to "Paid"
+    6. Link invoice to token
+    """
+    try:
+        # Get the token document
+        token_doc = frappe.get_doc("POS Token", token_name)
+        
+        # Get Sales Associate from token
+        sales_associate = token_doc.sales_associate
+        
+        if not sales_associate:
+            frappe.log_error(
+                title="Token Commission Warning",
+                message=f"Token {token_name} has no sales_associate"
+            )
+            return
+        
+        # Get POS Profile commission settings
+        pos_profile_doc = frappe.get_doc("POS Profile", invoice_doc.pos_profile)
+        commission_enabled = pos_profile_doc.get("custom_commission_enabled", 0)
+        sales_person_limit = flt(pos_profile_doc.get("custom_sales_person_grand_total_limit", 0))
+        grand_total = flt(invoice_doc.grand_total)
+        
+        # Check if commission is eligible
+        if not commission_enabled:
+            frappe.log_error(
+                title="Commission Not Enabled",
+                message=f"Commission not enabled in POS Profile {invoice_doc.pos_profile}"
+            )
+        
+        if grand_total < sales_person_limit:
+            frappe.log_error(
+                title="Below Commission Threshold",
+                message=f"Grand total {grand_total} is below limit {sales_person_limit}"
+            )
+        
+        if commission_enabled and grand_total >= sales_person_limit:
+            # Get the Sales Person linked to this Sales Associate (via custom_user)
+            sales_person = frappe.db.get_value(
+                "Sales Person",
+                {"custom_user": sales_associate, "enabled": 1},
+                ["name", "commission_rate"],
+                as_dict=True
+            )
+            
+            if not sales_person:
+                frappe.log_error(
+                    title="No Sales Person Found",
+                    message=f"No Sales Person linked to user {sales_associate}"
+                )
+            else:
+                commission_rate = flt(sales_person.commission_rate) or 0.5
+                
+                # Clear existing sales_team entries to avoid duplicates
+                invoice_doc.sales_team = []
+                
+                # Add sales team entry for the Sales Associate
+                invoice_doc.append("sales_team", {
+                    "sales_person": sales_person.name,
+                    "allocated_percentage": 100,
+                    "commission_rate": commission_rate
+                })
+                
+                # Store Sales Associate and Token reference in custom fields
+                invoice_doc.custom_sales_associate = sales_associate
+                invoice_doc.custom_pos_token = token_name
+                
+                # Save the invoice to apply changes
+                invoice_doc.flags.ignore_permissions = True
+                invoice_doc.save(ignore_permissions=True)
+        
+        # Update token status to "Paid" and link the invoice
+        token_doc.status = "Paid"
+        token_doc.linked_invoice = invoice_doc.name
+        token_doc.paid_datetime = frappe.utils.now_datetime()
+        token_doc.cashier = frappe.session.user
+        token_doc.flags.ignore_permissions = True
+        token_doc.save(ignore_permissions=True)
+        
+        frappe.db.commit()
+        
+    except Exception as e:
+        # Log error but don't break invoice submission
+        frappe.log_error(
+            title="Token Commission and Status Update Error",
+            message=f"Failed for invoice {invoice_doc.name}, token {token_name}: {str(e)}"
+        )
+
+
+def apply_sales_associate_commission(invoice_doc):
+    """
+    DEPRECATED: Use apply_token_commission_and_update_status() instead.
+    
+    This function is kept for backward compatibility but should not be used.
+    """
+    pass
 
 
 def set_batch_nos_for_bundels(doc, warehouse_field, throw=False):
@@ -1125,6 +1478,19 @@ def create_customer(
                 customer.territory = territory
             else:
                 customer.territory = "All Territories"
+            
+            # Store the Sales Associate (User) who created this customer
+            customer.custom_created_by_sales_associate = frappe.session.user
+            
+            # Auto-create or get Sales Person for this user with 0.5% commission
+            # This bypasses the broken Employee doctype entirely
+            sales_person = get_or_create_sales_person_for_user(
+                user=frappe.session.user,
+                commission_rate=0.5  # Default 0.5% commission
+            )
+            if sales_person:
+                customer.custom_default_sales_person = sales_person
+            
             customer.save()
             return customer
         else:

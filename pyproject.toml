@@ -1,0 +1,8 @@
+[project]
+name = "posawesome"
+version = "6.3.0"
+description = "POS Awesome - Point of Sale for ERPNext"
+requires-python = ">=3.10"
+dependencies = [
+    "qrcode[pil]>=7.3",
+]
