@@ -19,10 +19,11 @@ Use this exact checklist on your OptiPlex.
 
 ## 2) Install relay app
 
-- [ ] Install Python 3.10+
 - [ ] Open folder `relay/`
-- [ ] Run `start_relay.bat`
-- [ ] Open browser at `http://127.0.0.1:8787`
+- [ ] Double-click [`start_relay.bat`](relay/start_relay.bat)
+- [ ] Wait for installer steps (Python detect/install, dependencies, self-test)
+- [ ] Confirm browser opens at `http://127.0.0.1:8787`
+- [ ] If script shows error, read message and rerun after fix
 
 ## 3) Configure from setup UI
 
@@ -47,6 +48,12 @@ Go to `System Setup` and fill:
 - [ ] Open Dashboard (`/`)
 - [ ] Open Queue (`/queue`)
 - [ ] Verify real-time refresh updates counters
+
+## 7) Simple run instructions (daily)
+
+- [ ] To start relay: double-click [`start_relay.bat`](relay/start_relay.bat)
+- [ ] To check status: open `http://127.0.0.1:8787/health`
+- [ ] To view queue live: open `http://127.0.0.1:8787/queue`
 
 ## 6) POS integration usage
 

@@ -9,16 +9,22 @@ This folder contains a lightweight relay service designed to run on your always-
 - Relay queue persistence in a local SQLite database.
 - Basic Windows bootstrap helper to create firewall rule and startup task.
 
-## Quick start (Windows)
+## One-click install/start (Windows)
 
-1. Install Python 3.10+.
-2. Open terminal in this folder.
-3. Install dependencies:
-   - `pip install -r requirements.txt`
-4. Start relay:
-   - `python -m relay.app`
-5. Open browser:
-   - `http://127.0.0.1:8787`
+1. Open folder [`relay/`](relay/README.md).
+2. Double-click [`start_relay.bat`](relay/start_relay.bat).
+
+What this one-click script does automatically:
+
+- Detects Python (`py`/`python`).
+- Attempts Python install via `winget` if Python is missing.
+- Creates virtual environment.
+- Downloads/installs all dependencies from [`requirements.txt`](relay/requirements.txt).
+- Runs relay self-test using [`relay.selftest`](relay/relay/selftest.py).
+- Opens browser at `http://127.0.0.1:8787`.
+- Starts relay app from [`relay.app`](relay/relay/app.py).
+
+If anything fails, the script stops with an error message.
 
 ## Bootstrap actions (from the UI)
 
@@ -28,6 +34,14 @@ It will:
 
 - Create inbound firewall rule for your relay port on private profile.
 - Create a startup task that launches relay on user logon.
+
+## Quick verification
+
+After start, verify:
+
+- Dashboard: `http://127.0.0.1:8787`
+- Queue page: `http://127.0.0.1:8787/queue`
+- Health JSON: `http://127.0.0.1:8787/health`
 
 ## Important notes
 
