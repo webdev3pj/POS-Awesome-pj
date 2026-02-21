@@ -1140,6 +1140,13 @@ export default {
                 fieldtype: "HTML",
                 options: `<div style="text-align:center;font-size:48px;padding:1rem 0;"><b>${token}</b></div>`,
               },
+              {
+                fieldname: "relay_note",
+                fieldtype: "HTML",
+                options: `<div style="text-align:center;color:#1e88e5;padding-bottom:0.5rem;"><small>${frappe._(
+                  "Relay workflow enabled for this POS Profile"
+                )}</small></div>`,
+              },
             ],
             primary_action_label: "Print",
             primary_action() {

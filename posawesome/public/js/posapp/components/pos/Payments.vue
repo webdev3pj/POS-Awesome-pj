@@ -932,6 +932,31 @@ export default {
         async: true,
         callback: function (r) {
           if (r.message) {
+            if (parseInt(vm.pos_profile.custom_have_token || 0, 10) === 1) {
+              frappe.call({
+                method: "posawesome.posawesome.api.posapp.get_relay_workflow_state",
+                args: {
+                  sales_invoice: vm.invoice_doc.name,
+                },
+                async: true,
+                callback: function (relayResponse) {
+                  const relay = relayResponse.message || {};
+                  if (relay.token_status) {
+                    evntBus.$emit("show_mesage", {
+                      text: __(
+                        "Relay Queue: Token {0} is {1}, Picking {2}",
+                        [
+                          relay.token_id || vm.invoice_doc.name.slice(-5),
+                          relay.token_status,
+                          relay.picking_status || "Not Started",
+                        ]
+                      ),
+                      color: "info",
+                    });
+                  }
+                },
+              });
+            }
             if (print) {
               vm.load_print_page();
             }

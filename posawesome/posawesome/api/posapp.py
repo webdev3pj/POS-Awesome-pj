@@ -6,7 +6,7 @@ from __future__ import unicode_literals
 import json
 import frappe
 import copy
-from frappe.utils import nowdate, flt, cstr, getdate
+from frappe.utils import nowdate, flt, cstr, getdate, cint, now_datetime
 from frappe import _
 from erpnext.accounts.doctype.sales_invoice.sales_invoice import get_bank_cash_account
 from erpnext.stock.get_item_details import get_item_details
@@ -460,6 +460,222 @@ def get_sales_partner_names():
     )
     return sales_partners
 
+
+RELAY_TOKEN_STATUSES = ("Draft", "Paid", "Expired", "Abandoned")
+RELAY_PICKING_STATUSES = ("Not Started", "In Progress", "Picked", "Exception")
+RELAY_DISPATCH_STATUSES = ("Pending", "Released", "On Hold")
+
+
+def _relay_workflow_doctype_exists():
+    return bool(frappe.db.exists("DocType", "POS Relay Workflow State"))
+
+
+def _is_relay_workflow_enabled(pos_profile):
+    if not pos_profile:
+        return False
+
+    return cint(
+        frappe.get_cached_value("POS Profile", pos_profile, "custom_have_token") or 0
+    ) == 1
+
+
+def _get_relay_state_doc(invoice_doc):
+    state_name = frappe.db.exists(
+        "POS Relay Workflow State", {"sales_invoice": invoice_doc.name}
+    )
+    if state_name:
+        return frappe.get_doc("POS Relay Workflow State", state_name)
+
+    return frappe.get_doc(
+        {
+            "doctype": "POS Relay Workflow State",
+            "sales_invoice": invoice_doc.name,
+            "pos_profile": invoice_doc.pos_profile,
+            "token_id": cstr(invoice_doc.name)[-5:],
+            "token_status": "Draft",
+            "picking_status": "Not Started",
+            "dispatch_status": "Pending",
+            "last_sync_status": "Not Applicable",
+        }
+    )
+
+
+def _upsert_relay_workflow_state(
+    invoice_doc,
+    token_status=None,
+    picking_status=None,
+    dispatch_status=None,
+    exceptions_note=None,
+    is_offline_recorded=None,
+    last_sync_status=None,
+    sync_error=None,
+):
+    if not invoice_doc or not invoice_doc.get("name") or not invoice_doc.get("pos_profile"):
+        return None
+
+    if not _relay_workflow_doctype_exists():
+        return None
+
+    if not _is_relay_workflow_enabled(invoice_doc.pos_profile):
+        return None
+
+    state_doc = _get_relay_state_doc(invoice_doc)
+
+    # Always align key identifiers with invoice
+    state_doc.pos_profile = invoice_doc.pos_profile
+    state_doc.token_id = cstr(invoice_doc.name)[-5:]
+
+    if token_status in RELAY_TOKEN_STATUSES:
+        state_doc.token_status = token_status
+
+    if picking_status in RELAY_PICKING_STATUSES:
+        state_doc.picking_status = picking_status
+
+    if dispatch_status in RELAY_DISPATCH_STATUSES:
+        state_doc.dispatch_status = dispatch_status
+
+    if exceptions_note is not None:
+        state_doc.exceptions_note = exceptions_note
+
+    if is_offline_recorded is not None:
+        state_doc.is_offline_recorded = cint(is_offline_recorded)
+
+    if last_sync_status is not None:
+        state_doc.last_sync_status = last_sync_status
+
+    if sync_error is not None:
+        state_doc.sync_error = sync_error
+
+    if state_doc.dispatch_status == "Released":
+        state_doc.released_by = frappe.session.user
+        state_doc.released_at = now_datetime()
+
+    state_doc.flags.ignore_permissions = True
+    state_doc.save()
+    return state_doc
+
+
+@frappe.whitelist()
+def get_relay_workflow_state(sales_invoice):
+    if not _relay_workflow_doctype_exists():
+        return {}
+
+    invoice_doc = frappe.get_doc("Sales Invoice", sales_invoice)
+    if not _is_relay_workflow_enabled(invoice_doc.pos_profile):
+        return {}
+
+    state_doc = _upsert_relay_workflow_state(invoice_doc)
+    return state_doc.as_dict() if state_doc else {}
+
+
+@frappe.whitelist()
+def get_relay_pick_queue(pos_profile=None, picking_status=None, dispatch_status=None, limit_page_length=50):
+    if not _relay_workflow_doctype_exists():
+        return []
+
+    filters = {"token_status": "Paid"}
+    if pos_profile:
+        filters["pos_profile"] = pos_profile
+    if picking_status:
+        filters["picking_status"] = picking_status
+    if dispatch_status:
+        filters["dispatch_status"] = dispatch_status
+    else:
+        filters["dispatch_status"] = ["!=", "Released"]
+
+    return frappe.get_all(
+        "POS Relay Workflow State",
+        filters=filters,
+        fields=[
+            "name",
+            "sales_invoice",
+            "pos_profile",
+            "token_id",
+            "token_status",
+            "picking_status",
+            "dispatch_status",
+            "exceptions_note",
+            "released_by",
+            "released_at",
+            "modified",
+        ],
+        order_by="modified asc",
+        limit_page_length=cint(limit_page_length) or 50,
+    )
+
+
+@frappe.whitelist()
+def update_relay_picking_status(sales_invoice, picking_status, exceptions_note=None):
+    if picking_status not in RELAY_PICKING_STATUSES:
+        frappe.throw(_("Invalid picking status: {0}").format(picking_status))
+
+    if not _relay_workflow_doctype_exists():
+        frappe.throw(_("Relay workflow state DocType is missing. Please run migration."))
+
+    invoice_doc = frappe.get_doc("Sales Invoice", sales_invoice)
+    if not _is_relay_workflow_enabled(invoice_doc.pos_profile):
+        frappe.throw(
+            _("Relay workflow is not enabled for POS Profile {0}").format(
+                invoice_doc.pos_profile
+            )
+        )
+
+    current_state = _get_relay_state_doc(invoice_doc)
+    if current_state.dispatch_status == "Released":
+        next_dispatch_status = "Released"
+    elif picking_status == "Exception":
+        next_dispatch_status = "On Hold"
+    else:
+        next_dispatch_status = "Pending"
+
+    state_doc = _upsert_relay_workflow_state(
+        invoice_doc,
+        token_status="Paid" if invoice_doc.docstatus == 1 else "Draft",
+        picking_status=picking_status,
+        dispatch_status=next_dispatch_status,
+        exceptions_note=exceptions_note,
+    )
+    return state_doc.as_dict() if state_doc else {}
+
+
+@frappe.whitelist()
+def release_relay_dispatch(sales_invoice, allow_exception_release=0):
+    if not _relay_workflow_doctype_exists():
+        frappe.throw(_("Relay workflow state DocType is missing. Please run migration."))
+
+    invoice_doc = frappe.get_doc("Sales Invoice", sales_invoice)
+    if not _is_relay_workflow_enabled(invoice_doc.pos_profile):
+        frappe.throw(
+            _("Relay workflow is not enabled for POS Profile {0}").format(
+                invoice_doc.pos_profile
+            )
+        )
+
+    if invoice_doc.docstatus != 1:
+        frappe.throw(_("Only submitted Sales Invoices can be released for dispatch."))
+
+    state_doc = _upsert_relay_workflow_state(invoice_doc, token_status="Paid")
+    if not state_doc:
+        frappe.throw(_("Unable to create relay workflow state."))
+
+    if state_doc.dispatch_status == "Released":
+        return state_doc.as_dict()
+
+    allow_exception_release = cint(allow_exception_release)
+    can_release = state_doc.picking_status == "Picked" or (
+        allow_exception_release and state_doc.picking_status == "Exception"
+    )
+
+    if not can_release:
+        frappe.throw(
+            _(
+                "Dispatch release requires Picking status 'Picked'. Use supervisor override for exceptions."
+            )
+        )
+
+    state_doc = _upsert_relay_workflow_state(invoice_doc, dispatch_status="Released")
+    return state_doc.as_dict() if state_doc else {}
+
 def add_taxes_from_tax_template(item, parent_doc):
     accounts_settings = frappe.get_cached_doc("Accounts Settings")
     add_taxes_from_item_tax_template = (
@@ -593,6 +809,12 @@ def update_invoice(data):
             frappe.msgprint(_("Please select a Mode of Payment before submitting the document."))
 
     invoice_doc.save()
+
+    _upsert_relay_workflow_state(
+        invoice_doc,
+        token_status="Draft" if invoice_doc.docstatus == 0 else None,
+    )
+
     return invoice_doc
 
 
@@ -717,6 +939,12 @@ def submit_invoice(invoice, data):
         invoice_doc.submit()
         redeeming_customer_credit(
             invoice_doc, data, is_payment_entry, total_cash, cash_account, payments
+        )
+        _upsert_relay_workflow_state(
+            invoice_doc,
+            token_status="Paid",
+            picking_status="Not Started",
+            dispatch_status="Pending",
         )
 
     return {"name": invoice_doc.name, "status": invoice_doc.docstatus}
@@ -855,6 +1083,12 @@ def submit_in_background_job(kwargs):
     invoice_doc.submit()
     redeeming_customer_credit(
         invoice_doc, data, is_payment_entry, total_cash, cash_account, payments
+    )
+    _upsert_relay_workflow_state(
+        invoice_doc,
+        token_status="Paid",
+        picking_status="Not Started",
+        dispatch_status="Pending",
     )
 
 
