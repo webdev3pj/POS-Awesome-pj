@@ -22,6 +22,15 @@
       </v-toolbar-title>
 
       <v-spacer></v-spacer>
+      <v-chip
+        v-if="relay_status.enabled"
+        small
+        class="mr-2"
+        :color="relay_status.connected ? 'success' : 'error'"
+        text-color="white"
+      >
+        {{ relay_status.connected ? __('Relay Online') : __('Relay Offline') }}
+      </v-chip>
       <v-btn style="cursor: unset" text color="primary">
         <span right>{{ pos_profile.name }}</span>
       </v-btn>
@@ -164,6 +173,12 @@ export default {
       freezeTitle: '',
       freezeMsg: '',
       last_invoice: '',
+      relay_status: {
+        enabled: false,
+        connected: false,
+        message: '',
+      },
+      relay_poll_timer: null,
     };
   },
   methods: {
@@ -227,6 +242,61 @@ export default {
         true
       );
     },
+    fetch_relay_status(profileName, silent = true) {
+      if (!profileName) {
+        this.relay_status = {
+          enabled: false,
+          connected: false,
+          message: '',
+        };
+        return;
+      }
+
+      frappe.call({
+        method: 'posawesome.posawesome.api.posapp.get_relay_connectivity_status',
+        args: {
+          pos_profile: profileName,
+        },
+        async: true,
+        callback: (r) => {
+          const relay = r.message || {};
+          this.relay_status = {
+            enabled: !!relay.enabled,
+            connected: !!relay.connected,
+            message: relay.message || '',
+          };
+
+          if (!silent && relay.enabled) {
+            evntBus.$emit('show_mesage', {
+              text:
+                relay.message ||
+                (relay.connected
+                  ? __('Relay connection established')
+                  : __('Relay connection unavailable')),
+              color: relay.connected ? 'success' : 'warning',
+            });
+          }
+        },
+      });
+    },
+    start_relay_poll(profileName) {
+      if (this.relay_poll_timer) {
+        clearInterval(this.relay_poll_timer);
+        this.relay_poll_timer = null;
+      }
+
+      if (!profileName) return;
+      this.fetch_relay_status(profileName, false);
+      this.relay_poll_timer = setInterval(() => {
+        this.fetch_relay_status(profileName, true);
+      }, 15000);
+    },
+    stop_relay_poll() {
+      if (this.relay_poll_timer) {
+        clearInterval(this.relay_poll_timer);
+        this.relay_poll_timer = null;
+      }
+    },
   },
   created: function () {
     this.$nextTick(function () {
@@ -248,6 +318,10 @@ export default {
         ) {
           this.items.push(payments);
         }
+        this.start_relay_poll(this.pos_profile.name);
+      });
+      evntBus.$on('check_relay_connectivity', () => {
+        this.fetch_relay_status(this.pos_profile && this.pos_profile.name, false);
       });
       evntBus.$on('set_last_invoice', (data) => {
         this.last_invoice = data;
@@ -263,6 +337,16 @@ export default {
         this.freezeMsg = '';
       });
     });
+  },
+  beforeDestroy() {
+    this.stop_relay_poll();
+    evntBus.$off('show_mesage');
+    evntBus.$off('set_company');
+    evntBus.$off('register_pos_profile');
+    evntBus.$off('check_relay_connectivity');
+    evntBus.$off('set_last_invoice');
+    evntBus.$off('freeze');
+    evntBus.$off('unfreeze');
   },
 };
 </script>

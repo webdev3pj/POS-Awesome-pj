@@ -6,6 +6,7 @@ from __future__ import unicode_literals
 import json
 import frappe
 import copy
+import requests
 from frappe.utils import nowdate, flt, cstr, getdate, cint, now_datetime
 from frappe import _
 from erpnext.accounts.doctype.sales_invoice.sales_invoice import get_bank_cash_account
@@ -477,6 +478,84 @@ def _is_relay_workflow_enabled(pos_profile):
     return cint(
         frappe.get_cached_value("POS Profile", pos_profile, "custom_have_token") or 0
     ) == 1
+
+
+def _get_edge_relay_base_url():
+    relay_base_url = cstr(
+        frappe.conf.get("posa_edge_relay_url")
+        or frappe.conf.get("edge_relay_base_url")
+        or ""
+    ).strip()
+    return relay_base_url.rstrip("/")
+
+
+@frappe.whitelist()
+def get_relay_connectivity_status(pos_profile):
+    pos_profile = cstr(pos_profile or "").strip()
+    if not pos_profile:
+        frappe.throw(_("POS Profile is required"))
+
+    if not _is_relay_workflow_enabled(pos_profile):
+        return {
+            "enabled": False,
+            "configured": False,
+            "connected": False,
+            "status": "disabled",
+            "message": _("Relay workflow is disabled for this POS Profile."),
+            "checked_at": str(now_datetime()),
+        }
+
+    relay_base_url = _get_edge_relay_base_url()
+    if not relay_base_url:
+        return {
+            "enabled": True,
+            "configured": False,
+            "connected": False,
+            "status": "not_configured",
+            "relay_url": "",
+            "message": _(
+                "Edge Relay URL is not configured. Set 'posa_edge_relay_url' in site_config.json."
+            ),
+            "checked_at": str(now_datetime()),
+        }
+
+    timeout_seconds = max(1, cint(frappe.conf.get("posa_edge_relay_timeout") or 3))
+    health_url = "{0}/health".format(relay_base_url)
+
+    try:
+        response = requests.get(health_url, timeout=timeout_seconds)
+        response.raise_for_status()
+
+        health_payload = {}
+        try:
+            health_payload = response.json() or {}
+        except Exception:
+            health_payload = {}
+
+        relay_ok = bool(health_payload.get("ok")) if isinstance(health_payload, dict) else True
+        return {
+            "enabled": True,
+            "configured": True,
+            "connected": relay_ok,
+            "status": "online" if relay_ok else "offline",
+            "relay_url": relay_base_url,
+            "message": _("Edge Relay reachable.")
+            if relay_ok
+            else _("Edge Relay responded, but reported unhealthy status."),
+            "http_status": response.status_code,
+            "queue": health_payload.get("queue", {}) if isinstance(health_payload, dict) else {},
+            "checked_at": str(now_datetime()),
+        }
+    except Exception:
+        return {
+            "enabled": True,
+            "configured": True,
+            "connected": False,
+            "status": "offline",
+            "relay_url": relay_base_url,
+            "message": _("Edge Relay is unreachable from this server."),
+            "checked_at": str(now_datetime()),
+        }
 
 
 def _get_relay_state_doc(invoice_doc):
