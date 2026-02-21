@@ -7,8 +7,8 @@ from reportlab.lib.units import mm
 from reportlab.platypus import Paragraph, SimpleDocTemplate, Spacer
 
 
-SOURCE = Path("LLM_DEVELOPMENTS/POS_token_and_edge_relay.md")
-TARGET = Path("LLM_DEVELOPMENTS/POS_token_and_edge_relay.pdf")
+SOURCE = Path("LLM_DEVELOPMENTS/NAMING_SCHEME.md")
+TARGET = Path("LLM_DEVELOPMENTS/NAMING_SCHEME.pdf")
 
 
 def make_story(text: str):
@@ -25,14 +25,6 @@ def make_story(text: str):
         spaceBefore=8,
         spaceAfter=4,
     )
-    h3 = ParagraphStyle(
-        "DocH3",
-        parent=styles["Heading3"],
-        fontSize=10,
-        leading=14,
-        spaceBefore=6,
-        spaceAfter=3,
-    )
     body = ParagraphStyle(
         "DocBody", parent=styles["BodyText"], fontSize=9, leading=12, spaceAfter=2
     )
@@ -43,10 +35,6 @@ def make_story(text: str):
 
         if not line:
             story.append(Spacer(1, 4))
-            continue
-
-        if line.startswith("### "):
-            story.append(Paragraph(escape(line[4:]), h3))
             continue
 
         if line.startswith("## "):
@@ -75,7 +63,7 @@ def main():
     doc = SimpleDocTemplate(
         str(TARGET),
         pagesize=A4,
-        title="POS token and edge relay",
+        title="Naming scheme",
         leftMargin=14 * mm,
         rightMargin=14 * mm,
         topMargin=14 * mm,
