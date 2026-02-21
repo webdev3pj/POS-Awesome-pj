@@ -489,6 +489,15 @@ def _get_edge_relay_base_url():
     return relay_base_url.rstrip("/")
 
 
+def _get_pos_profile_edge_relay_url(pos_profile):
+    if not pos_profile:
+        return ""
+    relay_url = cstr(
+        frappe.get_cached_value("POS Profile", pos_profile, "custom_edge_relay_url") or ""
+    ).strip()
+    return relay_url.rstrip("/")
+
+
 @frappe.whitelist()
 def get_relay_connectivity_status(pos_profile):
     pos_profile = cstr(pos_profile or "").strip()
@@ -505,7 +514,10 @@ def get_relay_connectivity_status(pos_profile):
             "checked_at": str(now_datetime()),
         }
 
-    relay_base_url = _get_edge_relay_base_url()
+    profile_relay_url = _get_pos_profile_edge_relay_url(pos_profile)
+    site_relay_url = _get_edge_relay_base_url()
+    relay_base_url = profile_relay_url or site_relay_url
+
     if not relay_base_url:
         return {
             "enabled": True,
@@ -513,14 +525,25 @@ def get_relay_connectivity_status(pos_profile):
             "connected": False,
             "status": "not_configured",
             "relay_url": "",
+            "relay_source": "none",
+            "profile_relay_url": profile_relay_url,
+            "site_relay_url": site_relay_url,
             "message": _(
-                "Edge Relay URL is not configured. Set 'posa_edge_relay_url' in site_config.json."
+                "Edge Relay URL is not configured on this POS Profile. Set Edge Relay URL on POS Profile or fallback key 'posa_edge_relay_url' in site_config.json."
             ),
             "checked_at": str(now_datetime()),
+            "debug": {
+                "pos_profile": pos_profile,
+                "relay_health_url": "",
+                "hint": _(
+                    "Open POS Profile and set 'Edge Relay URL', for example http://192.168.50.10:8787"
+                ),
+            },
         }
 
     timeout_seconds = max(1, cint(frappe.conf.get("posa_edge_relay_timeout") or 3))
     health_url = "{0}/health".format(relay_base_url)
+    relay_source = "pos_profile" if profile_relay_url else "site_config"
 
     try:
         response = requests.get(health_url, timeout=timeout_seconds)
@@ -539,12 +562,81 @@ def get_relay_connectivity_status(pos_profile):
             "connected": relay_ok,
             "status": "online" if relay_ok else "offline",
             "relay_url": relay_base_url,
+            "relay_source": relay_source,
+            "profile_relay_url": profile_relay_url,
+            "site_relay_url": site_relay_url,
             "message": _("Edge Relay reachable.")
             if relay_ok
             else _("Edge Relay responded, but reported unhealthy status."),
             "http_status": response.status_code,
             "queue": health_payload.get("queue", {}) if isinstance(health_payload, dict) else {},
             "checked_at": str(now_datetime()),
+            "debug": {
+                "pos_profile": pos_profile,
+                "relay_health_url": health_url,
+                "timeout_seconds": timeout_seconds,
+            },
+        }
+    except requests.exceptions.Timeout:
+        return {
+            "enabled": True,
+            "configured": True,
+            "connected": False,
+            "status": "timeout",
+            "relay_url": relay_base_url,
+            "relay_source": relay_source,
+            "profile_relay_url": profile_relay_url,
+            "site_relay_url": site_relay_url,
+            "message": _(
+                "Timed out while connecting to Edge Relay. Check network route/firewall and relay service status."
+            ),
+            "checked_at": str(now_datetime()),
+            "debug": {
+                "pos_profile": pos_profile,
+                "relay_health_url": health_url,
+                "timeout_seconds": timeout_seconds,
+                "hint": _("Try opening the relay URL from the ERP server network."),
+            },
+        }
+    except requests.exceptions.ConnectionError:
+        return {
+            "enabled": True,
+            "configured": True,
+            "connected": False,
+            "status": "connection_error",
+            "relay_url": relay_base_url,
+            "relay_source": relay_source,
+            "profile_relay_url": profile_relay_url,
+            "site_relay_url": site_relay_url,
+            "message": _(
+                "Connection to Edge Relay failed. Verify host/IP, port, and whether relay app is running."
+            ),
+            "checked_at": str(now_datetime()),
+            "debug": {
+                "pos_profile": pos_profile,
+                "relay_health_url": health_url,
+                "hint": _("Ensure relay machine allows inbound traffic on relay port."),
+            },
+        }
+    except requests.exceptions.HTTPError as exc:
+        status_code = exc.response.status_code if getattr(exc, "response", None) else None
+        return {
+            "enabled": True,
+            "configured": True,
+            "connected": False,
+            "status": "http_error",
+            "relay_url": relay_base_url,
+            "relay_source": relay_source,
+            "profile_relay_url": profile_relay_url,
+            "site_relay_url": site_relay_url,
+            "message": _("Edge Relay returned HTTP error status."),
+            "http_status": status_code,
+            "checked_at": str(now_datetime()),
+            "debug": {
+                "pos_profile": pos_profile,
+                "relay_health_url": health_url,
+                "hint": _("Check relay app logs and health endpoint response."),
+            },
         }
     except Exception:
         return {
@@ -553,8 +645,15 @@ def get_relay_connectivity_status(pos_profile):
             "connected": False,
             "status": "offline",
             "relay_url": relay_base_url,
+            "relay_source": relay_source,
+            "profile_relay_url": profile_relay_url,
+            "site_relay_url": site_relay_url,
             "message": _("Edge Relay is unreachable from this server."),
             "checked_at": str(now_datetime()),
+            "debug": {
+                "pos_profile": pos_profile,
+                "relay_health_url": health_url,
+            },
         }
 
 

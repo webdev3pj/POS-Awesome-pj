@@ -22,15 +22,49 @@
       </v-toolbar-title>
 
       <v-spacer></v-spacer>
-      <v-chip
-        v-if="relay_status.enabled"
-        small
-        class="mr-2"
-        :color="relay_status.connected ? 'success' : 'error'"
-        text-color="white"
-      >
-        {{ relay_status.connected ? __('Relay Online') : __('Relay Offline') }}
-      </v-chip>
+      <v-menu v-if="relay_status.enabled" bottom offset-y>
+        <template v-slot:activator="{ on, attrs }">
+          <v-chip
+            small
+            class="mr-2"
+            :color="relay_status_chip_color"
+            text-color="white"
+            v-bind="attrs"
+            v-on="on"
+          >
+            {{ relay_status_chip_text }}
+          </v-chip>
+        </template>
+        <v-card max-width="520" class="pa-2">
+          <v-card-title class="text-subtitle-1 pb-1">
+            {{ __('Edge Relay Diagnostics') }}
+          </v-card-title>
+          <v-divider></v-divider>
+          <v-card-text class="pt-3">
+            <div class="mb-2"><b>{{ __('Status') }}:</b> {{ relay_status.status || '-' }}</div>
+            <div class="mb-2"><b>{{ __('Message') }}:</b> {{ relay_status.message || '-' }}</div>
+            <div class="mb-2"><b>{{ __('POS Profile Relay URL') }}:</b> {{ relay_status.profile_relay_url || __('Not set') }}</div>
+            <div class="mb-2"><b>{{ __('Site Relay URL') }}:</b> {{ relay_status.site_relay_url || __('Not set') }}</div>
+            <div class="mb-2"><b>{{ __('Using') }}:</b> {{ relay_status.relay_source || '-' }}</div>
+            <div class="mb-2"><b>{{ __('Health URL') }}:</b> {{ relay_status.debug && relay_status.debug.relay_health_url ? relay_status.debug.relay_health_url : '-' }}</div>
+            <div class="mb-2" v-if="relay_status.http_status"><b>{{ __('HTTP Status') }}:</b> {{ relay_status.http_status }}</div>
+            <div class="mb-2"><b>{{ __('Checked At') }}:</b> {{ relay_status.checked_at || '-' }}</div>
+            <div class="mb-2" v-if="relay_status.debug && relay_status.debug.hint"><b>{{ __('Hint') }}:</b> {{ relay_status.debug.hint }}</div>
+            <div class="mb-2" v-if="relay_status.queue && relay_status.connected">
+              <b>{{ __('Queue') }}:</b>
+              {{ __('Queued') }} {{ relay_status.queue.queued || 0 }},
+              {{ __('Processing') }} {{ relay_status.queue.processing || 0 }},
+              {{ __('Failed') }} {{ relay_status.queue.failed || 0 }}
+            </div>
+          </v-card-text>
+          <v-card-actions>
+            <v-spacer></v-spacer>
+            <v-btn small text color="primary" @click="fetch_relay_status(pos_profile && pos_profile.name, false)">
+              {{ __('Refresh') }}
+            </v-btn>
+          </v-card-actions>
+        </v-card>
+      </v-menu>
       <v-btn style="cursor: unset" text color="primary">
         <span right>{{ pos_profile.name }}</span>
       </v-btn>
@@ -176,10 +210,46 @@ export default {
       relay_status: {
         enabled: false,
         connected: false,
+        status: '',
         message: '',
+        relay_source: '',
+        profile_relay_url: '',
+        site_relay_url: '',
+        http_status: null,
+        checked_at: '',
+        queue: {},
+        debug: {},
       },
       relay_poll_timer: null,
     };
+  },
+  computed: {
+    relay_status_chip_text() {
+      if (this.relay_status.connected) {
+        return __('Relay Online');
+      }
+      if (this.relay_status.status === 'not_configured') {
+        return __('Relay Not Configured');
+      }
+      if (this.relay_status.status === 'timeout') {
+        return __('Relay Timeout');
+      }
+      if (this.relay_status.status === 'connection_error') {
+        return __('Relay Connection Error');
+      }
+      if (this.relay_status.status === 'http_error') {
+        return __('Relay HTTP Error');
+      }
+      return __('Relay Offline');
+    },
+    relay_status_chip_color() {
+      if (this.relay_status.connected) return 'success';
+      if (this.relay_status.status === 'not_configured') return 'warning';
+      if (this.relay_status.status === 'timeout') return 'orange';
+      if (this.relay_status.status === 'connection_error') return 'error';
+      if (this.relay_status.status === 'http_error') return 'error';
+      return 'error';
+    },
   },
   methods: {
     changePage(key) {
@@ -247,7 +317,15 @@ export default {
         this.relay_status = {
           enabled: false,
           connected: false,
+          status: '',
           message: '',
+          relay_source: '',
+          profile_relay_url: '',
+          site_relay_url: '',
+          http_status: null,
+          checked_at: '',
+          queue: {},
+          debug: {},
         };
         return;
       }
@@ -263,7 +341,15 @@ export default {
           this.relay_status = {
             enabled: !!relay.enabled,
             connected: !!relay.connected,
+            status: relay.status || '',
             message: relay.message || '',
+            relay_source: relay.relay_source || '',
+            profile_relay_url: relay.profile_relay_url || '',
+            site_relay_url: relay.site_relay_url || '',
+            http_status: relay.http_status || null,
+            checked_at: relay.checked_at || '',
+            queue: relay.queue || {},
+            debug: relay.debug || {},
           };
 
           if (!silent && relay.enabled) {
