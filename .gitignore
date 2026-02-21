@@ -6,3 +6,9 @@ tags
 posawesome/docs/current
 node_modules
 posawesome/public/dist
+
+# Relay local runtime/secrets (must never be committed)
+relay/.venv/
+relay/data/*
+!relay/data/.gitkeep
+relay/*.log
