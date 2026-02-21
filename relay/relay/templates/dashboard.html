@@ -1,0 +1,47 @@
+{% extends "base.html" %}
+
+{% block content %}
+<div class="card">
+  <h1>POS Relay Dashboard</h1>
+  <p class="muted">Real-time queue and connectivity status for OptiPlex relay.</p>
+  <div class="grid cols-2">
+    <div>
+      <h3>Relay Endpoint</h3>
+      <p><code>{{ config.relay_host }}:{{ config.relay_port }}</code></p>
+      <p class="muted">Use your LAN IP, for example <code>192.168.50.168:{{ config.relay_port }}</code>.</p>
+    </div>
+    <div>
+      <h3>Frappe Cloud</h3>
+      <p><code>{{ config.frappe_base_url or "(not set)" }}</code></p>
+      <p class="muted">API auth: {{ "configured" if config.api_key and config.api_secret else "missing" }}</p>
+    </div>
+  </div>
+</div>
+
+<div class="card">
+  <h2>Queue Counters</h2>
+  <div class="grid cols-2">
+    <div><span class="pill queued">Queued: {{ counts.queued }}</span></div>
+    <div><span class="pill">Processing: {{ counts.processing }}</span></div>
+    <div><span class="pill done">Done: {{ counts.done }}</span></div>
+    <div><span class="pill failed">Failed: {{ counts.failed }}</span></div>
+  </div>
+  <p class="muted" style="margin-top:10px">Total events: {{ counts.total }}</p>
+</div>
+
+<div class="card">
+  <h2>Quick Actions</h2>
+  <div class="actions">
+    <form method="post" action="/api/sync-now">
+      <button type="submit">Sync One Event Now</button>
+    </form>
+    <a href="/queue"><button class="secondary" type="button">Open Queue</button></a>
+    <a href="/setup"><button class="secondary" type="button">Open Setup</button></a>
+  </div>
+</div>
+
+<script>
+  setTimeout(() => window.location.reload(), 5000);
+</script>
+{% endblock %}
+
