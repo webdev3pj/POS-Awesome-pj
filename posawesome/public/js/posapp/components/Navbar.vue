@@ -65,6 +65,41 @@
           </v-card-actions>
         </v-card>
       </v-menu>
+      <v-menu bottom offset-y>
+        <template v-slot:activator="{ on, attrs }">
+          <v-chip
+            small
+            class="mr-2"
+            :color="cloud_status_chip_color"
+            text-color="white"
+            v-bind="attrs"
+            v-on="on"
+          >
+            {{ cloud_status_chip_text }}
+          </v-chip>
+        </template>
+        <v-card max-width="420" class="pa-2">
+          <v-card-title class="text-subtitle-1 pb-1">
+            {{ __('Cloud Connectivity') }}
+          </v-card-title>
+          <v-divider></v-divider>
+          <v-card-text class="pt-3">
+            <div class="mb-2"><b>{{ __('Browser Internet') }}:</b> {{ cloud_status.navigator_online ? __('Online') : __('Offline') }}</div>
+            <div class="mb-2"><b>{{ __('Cloud Reachability') }}:</b> {{ cloud_status.server_online ? __('Reachable') : __('Unreachable') }}</div>
+            <div class="mb-2"><b>{{ __('URL') }}:</b> {{ cloud_status.url || window.location.origin }}</div>
+            <div class="mb-2" v-if="cloud_status.response_ms"><b>{{ __('Latency') }}:</b> {{ cloud_status.response_ms }} ms</div>
+            <div class="mb-2" v-if="cloud_status.http_status"><b>{{ __('HTTP Status') }}:</b> {{ cloud_status.http_status }}</div>
+            <div class="mb-2"><b>{{ __('Checked At') }}:</b> {{ cloud_status.checked_at || '-' }}</div>
+            <div class="mb-2"><b>{{ __('Message') }}:</b> {{ cloud_status.message || '-' }}</div>
+          </v-card-text>
+          <v-card-actions>
+            <v-spacer></v-spacer>
+            <v-btn small text color="primary" @click="check_cloud_connectivity(false)">
+              {{ __('Refresh') }}
+            </v-btn>
+          </v-card-actions>
+        </v-card>
+      </v-menu>
       <v-btn style="cursor: unset" text color="primary">
         <span right>{{ pos_profile.name }}</span>
       </v-btn>
@@ -221,6 +256,16 @@ export default {
         debug: {},
       },
       relay_poll_timer: null,
+      cloud_status: {
+        navigator_online: typeof navigator !== 'undefined' ? !!navigator.onLine : true,
+        server_online: false,
+        http_status: null,
+        response_ms: null,
+        checked_at: '',
+        message: '',
+        url: '',
+      },
+      cloud_poll_timer: null,
     };
   },
   computed: {
@@ -249,6 +294,20 @@ export default {
       if (this.relay_status.status === 'connection_error') return 'error';
       if (this.relay_status.status === 'http_error') return 'error';
       return 'error';
+    },
+    cloud_status_chip_text() {
+      if (!this.cloud_status.navigator_online) {
+        return __('Internet Offline');
+      }
+      return this.cloud_status.server_online
+        ? __('Cloud Online')
+        : __('Cloud Unreachable');
+    },
+    cloud_status_chip_color() {
+      if (!this.cloud_status.navigator_online) {
+        return 'error';
+      }
+      return this.cloud_status.server_online ? 'success' : 'warning';
     },
   },
   methods: {
@@ -383,9 +442,98 @@ export default {
         this.relay_poll_timer = null;
       }
     },
+    async check_cloud_connectivity(silent = true) {
+      const targetUrl = window.location.origin;
+      const startedAt = Date.now();
+      const online = typeof navigator !== 'undefined' ? !!navigator.onLine : true;
+
+      if (!online) {
+        this.cloud_status = {
+          navigator_online: false,
+          server_online: false,
+          http_status: null,
+          response_ms: null,
+          checked_at: frappe.datetime.now_datetime(),
+          message: __('Browser reports no internet connection.'),
+          url: targetUrl,
+        };
+        if (!silent) {
+          evntBus.$emit('show_mesage', {
+            text: __('Internet appears offline on this device.'),
+            color: 'warning',
+          });
+        }
+        return;
+      }
+
+      try {
+        const resp = await fetch(`/api/method/frappe.auth.get_logged_user?_=${Date.now()}`, {
+          method: 'GET',
+          cache: 'no-store',
+          credentials: 'same-origin',
+        });
+        const ms = Date.now() - startedAt;
+        const reachable = resp.ok;
+        this.cloud_status = {
+          navigator_online: true,
+          server_online: reachable,
+          http_status: resp.status,
+          response_ms: ms,
+          checked_at: frappe.datetime.now_datetime(),
+          message: reachable
+            ? __('Frappe Cloud is reachable.')
+            : __('Frappe Cloud responded with an error status.'),
+          url: targetUrl,
+        };
+        if (!silent) {
+          evntBus.$emit('show_mesage', {
+            text: this.cloud_status.message,
+            color: reachable ? 'success' : 'warning',
+          });
+        }
+      } catch (error) {
+        this.cloud_status = {
+          navigator_online: true,
+          server_online: false,
+          http_status: null,
+          response_ms: Date.now() - startedAt,
+          checked_at: frappe.datetime.now_datetime(),
+          message: __('Unable to reach Frappe Cloud from browser/network.'),
+          url: targetUrl,
+        };
+        if (!silent) {
+          evntBus.$emit('show_mesage', {
+            text: __('Unable to reach Frappe Cloud from this POS session.'),
+            color: 'warning',
+          });
+        }
+      }
+    },
+    start_cloud_poll() {
+      if (this.cloud_poll_timer) {
+        clearInterval(this.cloud_poll_timer);
+        this.cloud_poll_timer = null;
+      }
+      this.check_cloud_connectivity(true);
+      this.cloud_poll_timer = setInterval(() => {
+        this.check_cloud_connectivity(true);
+      }, 15000);
+    },
+    stop_cloud_poll() {
+      if (this.cloud_poll_timer) {
+        clearInterval(this.cloud_poll_timer);
+        this.cloud_poll_timer = null;
+      }
+    },
+    on_online_status_change() {
+      this.check_cloud_connectivity(false);
+    },
   },
   created: function () {
     this.$nextTick(function () {
+      this.start_cloud_poll();
+      window.addEventListener('online', this.on_online_status_change);
+      window.addEventListener('offline', this.on_online_status_change);
       evntBus.$on('show_mesage', (data) => {
         this.show_mesage(data);
       });
@@ -426,6 +574,9 @@ export default {
   },
   beforeDestroy() {
     this.stop_relay_poll();
+    this.stop_cloud_poll();
+    window.removeEventListener('online', this.on_online_status_change);
+    window.removeEventListener('offline', this.on_online_status_change);
     evntBus.$off('show_mesage');
     evntBus.$off('set_company');
     evntBus.$off('register_pos_profile');
