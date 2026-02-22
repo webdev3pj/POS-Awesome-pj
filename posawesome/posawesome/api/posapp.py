@@ -76,7 +76,9 @@ def get_opening_dialog_data():
     if len(cline_roles) > 1:
         # Multiple operational roles - block login
         data["user_role"] = ""
-        data["role_error"] = __("User has multiple operational roles ({0}); fix roles in Backend.").format(", ".join(cline_roles))
+        data["role_error"] = frappe._(
+            "User has multiple operational roles ({0}); fix roles in Backend."
+        ).format(", ".join(cline_roles))
     elif len(cline_roles) == 1:
         # Exactly one role - use it
         data["user_role"] = cline_roles[0]
@@ -94,7 +96,9 @@ def get_opening_dialog_data():
         if has_token_workflow:
             # Token workflow enabled but user has no role - block
             data["user_role"] = ""
-            data["role_error"] = __("User has no assigned role. Please contact admin to assign a role (Sales Associate, Cashier, Picker, Dispatch, or Supervisor) in the Backend.")
+            data["role_error"] = frappe._(
+                "User has no assigned role. Please contact admin to assign a role (Sales Associate, Cashier, Picker, Dispatch, or Supervisor) in the Backend."
+            )
         else:
             # No token workflow - allow legacy mode
             data["user_role"] = ""
