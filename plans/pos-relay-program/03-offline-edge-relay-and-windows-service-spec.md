@@ -1,0 +1,453 @@
+# 03 - Offline Edge Relay and Windows Service Specification
+
+## See also
+- `README.md`
+- `00-ai-agent-start-here.md`
+- `01-role-based-workflow-spec.md`
+- `02-master-implementation-plan.md`
+- `phases/phase-3-relay-auth-and-server-side-role-enforcement.md`
+- `phases/phase-4-sa-relay-first-offline-token-creation.md`
+- `phases/phase-5-uat-deployment-observability-hardening.md`
+- `CHANGELOG_PROGRESS.md`
+
+## Purpose
+Define the offline continuity design and operations model for the Edge Relay, including:
+- what is stored locally,
+- how local-first commit and sync work,
+- retry/idempotency semantics,
+- and how the relay is operated on Windows (OptiPlex deployment model).
+
+This is the offline-only reference and should be kept synchronized with `relay/relay/storage.py`, `relay/relay/app.py`, `relay/README.md`, and `relay/SETUP_CHECKLIST_OPTIPLEX.md`.
+
+## Offline Scope and Goals
+### Goals
+- Keep store operations moving during cloud/API outages.
+- Prevent duplicate payment commits (idempotency).
+- Preserve an auditable local event trail for pick/dispatch and sync outcomes.
+- Provide operators/administrators visibility into queue/outbox/transactions.
+
+### Non-goals (current phases)
+- Full offline SA token -> cloud SO sync (deferred to Phase 4).
+- Full enterprise-grade Windows Service packaging in current branch (current bootstrap is startup task + batch launcher).
+
+## Relay Topology
+- POS browser (store devices) talks to local relay over LAN.
+- Relay stores data in local SQLite.
+- Relay sync worker pushes events to ERPNext/Frappe Cloud when reachable.
+- ERPNext cloud may also need to reach relay `/health` for backend diagnostics using a public/tunnel URL (`public_base_url`).
+
+## Relay Configuration Files and Paths
+Defined in `relay/relay/storage.py`:
+- `relay/data/relay.db`: SQLite database
+- `relay/data/relay_config.json`: relay configuration
+
+Default config keys (current code):
+- `frappe_base_url`
+- `api_key`
+- `api_secret`
+- `relay_host` (default `0.0.0.0`)
+- `relay_port` (default `8787`)
+- `public_base_url`
+- `site_name`
+- `offline_mode`
+- `poll_seconds`
+- `allowed_subnet`
+
+## What Relay Stores Locally (Table-by-Table)
+Source of truth: `relay/relay/storage.py` `init_db()`.
+
+### `relay_queue` (legacy compatibility queue)
+Status: `Implemented`, retained for backward compatibility.
+
+Purpose:
+- Legacy generic queue table kept to avoid breaking older relay scaffolding flows.
+
+Key fields:
+- `id`
+- `event_type`
+- `payload`
+- `status`
+- `retries`
+- `last_error`
+- `created_at`, `updated_at`
+
+Notes:
+- v2/v3 flows primarily use `relay_outbox` for local-first sync semantics.
+
+### `relay_tokens`
+Purpose:
+- Store token headers created at SA/draft stage and updated through token lifecycle.
+
+Key fields:
+- `token_id` (PK)
+- `pos_profile_id`
+- `cashier_user_id` (naming legacy; may carry token creator in current payloads)
+- `customer_id`, `customer_name`
+- `status` (`TOKEN_OPEN`, `TOKEN_PAID`, `TOKEN_VOID`, etc.)
+- `expires_at`
+- void fields: `void_reason`, `voided_by`
+- consume fields: `consumed_sale_ref`, `consumed_at`
+- `created_at`, `updated_at`
+
+Semantics:
+- Token creation is idempotent for retried/open states.
+- Paid/void tokens should not be recreated.
+
+### `relay_token_lines`
+Purpose:
+- Store line items for a token.
+
+Key fields:
+- `id`
+- `token_id` (FK to `relay_tokens`)
+- `item_code`, `item_name`
+- `qty`, `uom`, `rate`, `amount`
+- `payload` (raw serialized line)
+- `created_at`
+
+Semantics:
+- Rewritten on idempotent token-create retry if token is reset to open.
+
+### `relay_cashier_sessions`
+Purpose:
+- Track cashier session lifecycle at relay.
+
+Key fields:
+- `session_id` (PK)
+- `pos_profile_id`
+- `cashier_user_id`
+- `role` (current field exists; trust hardening still pending)
+- `device_id`
+- `status` (`OPEN`, closed states)
+- `opened_at`, `closed_at`
+- `close_note`
+- `created_at`, `updated_at`
+
+Semantics:
+- Used by relay commit path to tie commits to a cashier session.
+- Role is stored but not yet enforced as trusted authorization.
+
+### `relay_local_sales`
+Purpose:
+- Primary local-first committed sale header record after successful relay commit.
+
+Key fields:
+- `local_sale_ref` (PK, `LSR-*` style)
+- `token_id`
+- `pos_profile_id`
+- `cashier_user_id`, `cashier_session_id`, `device_id`
+- `idempotency_key` (UNIQUE)
+- sale state fields:
+  - `sale_status`
+  - `pick_status`
+  - `dispatch_status`
+  - `paid`
+- amount/customer fields:
+  - `total`, `net_total`
+  - `customer_id`, `customer_name`
+- payload fields:
+  - `invoice_payload`
+  - `data_payload`
+- cloud sync fields:
+  - `cloud_invoice_name`
+  - `cloud_sync_status`
+  - `cloud_sync_error`
+- release audit fields:
+  - `released_by`, `released_at`
+- `created_at`, `updated_at`
+
+Semantics:
+- Created atomically on relay commit.
+- Serves as the local operational record for pick/dispatch workflows.
+- `idempotency_key` prevents duplicate local sales on retries/double clicks.
+
+### `relay_local_sale_lines`
+Purpose:
+- Store per-line details for each local committed sale.
+
+Key fields:
+- `id`
+- `local_sale_ref` (FK)
+- `item_code`, `item_name`
+- `qty`, `uom`, `rate`, `amount`
+- `line_status`, `pick_status`
+- `payload`
+- `created_at`, `updated_at`
+
+Semantics:
+- Supports pick queue and line-level operational views.
+
+### `relay_idempotency`
+Purpose:
+- Persist request/reply mapping for idempotent commit replay behavior.
+
+Key fields:
+- `idempotency_key` (PK)
+- `token_id`
+- `local_sale_ref`
+- `request_hash`
+- `response_payload`
+- `created_at`, `updated_at`
+
+Semantics:
+- Same idempotency key returns the original commit response instead of duplicating a sale.
+
+### `relay_pick_events`
+Purpose:
+- Append-only pick workflow events.
+
+Key fields:
+- `id`
+- `local_sale_ref` (FK)
+- `picker_user_id`
+- `event_type`
+- `notes`
+- `payload`
+- `created_at`
+
+Semantics:
+- Operational audit log for picker actions and exceptions.
+
+### `relay_dispatch_events`
+Purpose:
+- Append-only dispatch/release workflow events.
+
+Key fields:
+- `id`
+- `local_sale_ref` (FK)
+- `dispatcher_user_id`
+- `event_type`
+- `notes`
+- `payload`
+- `created_at`
+
+Semantics:
+- Operational audit log for gate release actions.
+
+### `relay_customers`
+Purpose:
+- Local customer cache and relay-local customer fallback records.
+
+Key fields:
+- `customer_id` (PK)
+- `customer_name`
+- `mobile_no`, `email_id`, `tax_id`
+- `payload` (full JSON)
+- `updated_at`, `created_at`
+
+Semantics:
+- Supports offline/failed-cloud customer search or local fallback customer handling.
+
+### `relay_items_cache`
+Purpose:
+- Local item search cache for offline continuity and faster lookups.
+
+Key fields:
+- `item_code` (PK)
+- `item_name`
+- `stock_uom`
+- `barcode`
+- `rate`
+- `payload` (full JSON)
+- `updated_at`, `created_at`
+
+Semantics:
+- Refreshed via relay endpoints from cloud or explicit refresh workflows.
+
+### `relay_outbox`
+Purpose:
+- Durable queue of cloud sync events for eventual consistency.
+
+Key fields:
+- `event_id` (PK)
+- `event_type`
+- `idempotency_key`
+- `local_ref`
+- `payload`
+- `status`
+- `retries`
+- `next_attempt_at`
+- `last_error`
+- `cloud_ref`
+- `created_at`, `updated_at`
+
+Semantics:
+- Drives sync worker retries and backoff.
+- `next_attempt_at` schedules future retry attempts.
+
+## Indices and Performance Notes
+Current indices in `init_db()`:
+- `idx_relay_tokens_profile_status`
+- `idx_relay_sessions_profile_status`
+- `idx_relay_sales_profile_pick_dispatch`
+- `idx_relay_outbox_status_next_attempt`
+
+These support common dashboard/query paths and worker polling filters.
+
+## Storage Semantics (How the Relay Behaves)
+### Local-first commit
+- Relay commit endpoint stores local sale and lines before cloud sync.
+- Payment success can be acknowledged locally (with `local_sale_ref`) while cloud sync is deferred.
+
+### Idempotency
+- Commit requests require `idempotency_key`.
+- Replays return original response instead of duplicating a committed local sale.
+
+### Token consumption and double-pay prevention
+- Token lifecycle is updated during commit.
+- Duplicate token payment attempts are rejected or replayed via idempotency semantics.
+
+### Eventual consistency
+- Local operation success and cloud sync success are separate states.
+- Operators must use outbox/transaction views to monitor backlog and failures.
+
+## Sync Event Types and Cloud Mapping (Current Known Behavior)
+Examples present in branch:
+- `SALE_COMMITTED` -> cloud sync path exists (`Implemented` foundation)
+- `PICK_EVENT` -> sync worker handling exists (`Partial`/foundation)
+- `RELEASE_EVENT` -> sync worker handling exists (`Partial`/foundation)
+- `TOKEN_CREATED`, `SESSION_OPEN`, `SESSION_CLOSE` -> currently intentional no-op cloud ack in worker (`Partial parity`)
+
+## What Is NOT Stored on Relay (Current Model)
+- Full ERPNext database records beyond cached/serialized payloads required for local workflows.
+- Final authoritative cloud accounting state (relay stores local snapshots and sync references, not ERPNext as source of truth).
+- Secure authenticated identity guarantees (current role/user payload trust is incomplete; Phase 3 addresses this).
+
+## Failure and Conflict Handling
+### Cloud unreachable
+- Relay continues local commit for supported relay-enabled cashier flows.
+- Outbox accumulates events for later sync.
+
+### Relay unreachable (from POS)
+- Relay-enabled commit path is blocked (direct cloud fallback disabled for relay-enabled profiles in current cashier flow).
+
+### Duplicate submit / double-click
+- Idempotency should return same `local_sale_ref`.
+
+### Partial sync failure
+- Outbox records retries, last error, and next attempt.
+- Dashboard/outbox endpoints provide visibility.
+
+## Relay HTTP/Operational Endpoints (Selected)
+### Health and diagnostics
+- `/health`
+- `/queue`
+- `/api/queue`
+- `/api/outbox`
+- `/api/metrics`
+- `/api/transactions`
+- `/api/transactions/<local_sale_ref>`
+- `/api/erpnext-access-check`
+
+### Relay workflow endpoints
+- `/relay/token/create`
+- `/relay/token/<token_id>`
+- `/relay/token/<token_id>/void`
+- `/relay/session/open`
+- `/relay/session/current`
+- `/relay/session/close`
+- `/relay/customer/upsert`
+- `/relay/customer/search`
+- `/relay/items/search`
+- `/relay/items/refresh`
+- `/relay/items/refresh-from-cloud`
+- `/relay/commit-invoice`
+- `/relay/pick-queue`
+- `/relay/pick/update`
+- `/relay/dispatch/release`
+
+## Windows Operation Model (Current Branch Reality)
+### Current startup model (`Implemented`)
+The current branch documents and supports a practical Windows launcher workflow, not a full Windows Service binary install by default:
+- `relay/start_relay.bat` performs install/bootstrap/start tasks.
+- UI bootstrap creates:
+  - inbound firewall rule,
+  - Windows startup task (launch on user logon).
+
+### Current documented daily usage
+- Start relay via `start_relay.bat`.
+- Check status at `/health`.
+- Monitor queue/outbox via dashboard and JSON endpoints.
+
+## Windows Service Specification (Program Target / Ops Guidance)
+This section is the operational spec for a maintainable Windows deployment, whether implemented via Scheduled Task, NSSM, or native service wrapper later.
+
+### Installation and Update Requirements
+- Fixed install location on always-on machine (OptiPlex).
+- Python runtime and venv pinned/managed.
+- Dependency install from `relay/requirements.txt`.
+- Safe restart procedure after code update.
+- Version/commit recorded in a local text file or dashboard field (recommended future enhancement).
+
+### Run Identity
+- Prefer a dedicated Windows user account for relay runtime (future hardening target).
+- Minimum file permissions to relay folder and `relay/data/`.
+- Do not run with unnecessary admin rights outside bootstrap steps.
+
+### Startup and Recovery
+- Startup mode: automatic on boot or user logon (current implementation uses startup task on logon).
+- Recovery: restart on failure (if wrapped as service) or scheduled task relaunch policy.
+- Document manual restart command and recovery procedure.
+
+### Firewall and Network
+- Allow inbound on relay port (default `8787`) on private profile.
+- Restrict LAN reachability to expected subnet (`allowed_subnet` config where enforced/used).
+- Reserve DHCP lease / static assignment for stable LAN URL.
+
+### Logging and Diagnostics
+Current branch:
+- Browser dashboard + JSON endpoints provide operational visibility.
+- Errors surfaced through outbox rows and API responses.
+
+Recommended operational additions (future):
+- File-based rotating logs.
+- Windows Event Log integration for service lifecycle events.
+
+### Backup and Restore (Relay Data)
+Minimum backup artifacts:
+- `relay/data/relay.db`
+- `relay/data/relay_config.json`
+
+Backup rules:
+- Prefer scheduled backups outside peak hours.
+- Validate restore procedure on a spare machine/dev environment.
+- Document backup retention and privacy handling (contains customer/order payloads).
+
+Restore procedure (high level):
+1. Stop relay process.
+2. Restore `relay.db` and `relay_config.json`.
+3. Start relay.
+4. Verify `/health`, `/api/outbox`, `/api/transactions`.
+5. Confirm outbox resumes retry behavior safely.
+
+## `public_base_url` and Cloud Reachability (Critical)
+### Why it matters
+ERPNext/Frappe Cloud cannot reach LAN-only relay addresses for backend diagnostics.
+
+### Required setup
+- Configure a public/tunnel HTTPS relay URL in relay setup (`public_base_url`).
+- Set POS Profile `custom_edge_relay_url` to a URL ERPNext can reach for server-side checks (or document split LAN/public strategy carefully).
+- Validate via `/api/erpnext-access-check`.
+
+### Common failure mode
+- Relay works on LAN for POS browsers but appears unreachable to ERPNext cloud because only `192.168.x.x` URL is configured.
+
+## Monitoring and Operations Checklist (Condensed)
+- Relay `/health` returns healthy.
+- Dashboard counters update.
+- `/api/outbox` backlog is understood and monitored.
+- `/api/transactions` shows recent local sales.
+- `public_base_url` reachability check passes after network changes.
+- Windows startup/firewall settings remain intact after OS updates.
+
+## Phase Mapping (Offline-Focused)
+- Phase 3: relay auth and authorization hardening.
+- Phase 4: SA relay-first/offline token creation and SO cloud sync.
+- Phase 5: observability, runbooks, backup/restore/UAT hardening.
+
+## See also
+- `01-role-based-workflow-spec.md`
+- `02-master-implementation-plan.md`
+- `phases/phase-3-relay-auth-and-server-side-role-enforcement.md`
+- `phases/phase-4-sa-relay-first-offline-token-creation.md`
+- `phases/phase-5-uat-deployment-observability-hardening.md`

@@ -1,5 +1,7 @@
 # POS Token and Edge Relay - Full Development Context (AI Handoff)
 
+> Note (2026-02-22): This remains useful historical context. For the current branch-accurate, phased implementation and AI-agent handoff docs, start at `plans/pos-relay-program/README.md` and `plans/pos-relay-program/00-ai-agent-start-here.md`.
+
 ## 1. Purpose and Audience
 This document is the authoritative handoff for all development completed so far around POS token flow and Edge Relay integration in this repository. It is intentionally detailed so another AI agent or engineer can resume work with full technical and operational context.
 

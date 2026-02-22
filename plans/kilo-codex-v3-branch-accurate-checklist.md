@@ -1,5 +1,12 @@
 # kilo-codex-v3 Branch-Accurate Relay Implementation Checklist
 
+## Active Program Docs (Read This First)
+- Use the phased docs set in `plans/pos-relay-program/` as the current planning and handoff source of truth.
+- Start with `plans/pos-relay-program/00-ai-agent-start-here.md` for status, next steps, and file map.
+- Use `plans/pos-relay-program/01-role-based-workflow-spec.md` for detailed per-role visibility/action rules.
+- Use `plans/pos-relay-program/02-master-implementation-plan.md` for the full multi-phase roadmap.
+- Use `plans/pos-relay-program/03-offline-edge-relay-and-windows-service-spec.md` for relay/offline/Windows operations.
+
 ## Purpose
 - This checklist converts the generic deep research report into a repo-specific execution checklist for branch `kilo-codex-v3`.
 - It separates what is already implemented from what is still pending, so work can be prioritized correctly.
@@ -220,4 +227,3 @@
 - [ ] Critical P0 and P1 checklist items are complete (or explicitly deferred with rationale).
 - [ ] Known limitations are documented in handoff markdown with operator impact.
 - [ ] Final docs updated and pushed with implementation changes.
-
