@@ -93,12 +93,22 @@ Status tags in the last column reflect current branch state.
 | Read-only current role display | Visible | Visible | Visible | Visible | Visible | `Planned` (Phase 2) |
 | Role-specific shortcuts/actions | Minimal | Cashier-focused | Pick-focused | Dispatch-focused | Supervisor-focused | `Planned` (Phase 2) |
 
+### `WorkflowTicketRail.vue` (left sidebar ticket monitor)
+| Capability | SA | Cashier | Picker | Dispatch | Supervisor | Status |
+|---|---|---|---|---|---|---|
+| See collapsed ticket icon + pending count | Visible | Visible | Visible | Visible | Visible | `Implemented` (local working tree, pending UAT) |
+| Expand monitor panel for current shift | Yes | Yes | Yes | Yes | Yes | `Implemented` (local working tree, pending UAT) |
+| View customer, SA name, order taken time, current status, time in status, grand total | Yes | Yes | Yes | Yes | Yes | `Implemented` (local working tree, pending UAT) |
+| Filter rows by `Mine` (SA owner) | Yes | Yes | Yes | Yes | Yes | `Implemented` (local working tree, pending UAT) |
+| See dispatched rows by default | No | No | No | No | No | `Implemented` (default hidden; API excludes released rows) |
+| Row actions (open/approve/transition) | No | No | No | No | No | `Deferred` (read-only v1, Phase 2+) |
+
 ### `Invoice.vue` (cart/token screen)
 | Capability | SA | Cashier | Picker | Dispatch | Supervisor | Status |
 |---|---|---|---|---|---|---|
 | Add/remove items | Yes | Yes | Limited/No | No | Optional | `Partial` |
 | Select/update customer | Yes | Yes | Read-only | Read-only | Yes | `Partial` |
-| `Save/New` token/order | Yes | Optional | No | No | Optional | `Partial` (currently invoice-based) |
+| `Save/New` token/order | Yes | Optional | No | No | Optional | `Partial` (SO path implemented locally; pending UAT/migration) |
 | `PAY` button visible | Visible but disabled | Visible enabled | Hidden/disabled | Hidden/disabled | Optional | `Partial` (SA disable exists locally; full role gating pending) |
 | `Select S.O` | No (preferred hidden) | Yes | No | No | Optional | `Partial` (Phase 2 role visibility) |
 | Held invoices | No (preferred hidden) | Yes | No | No | Optional | `Planned` (Phase 2) |
@@ -136,9 +146,10 @@ Status tags in the last column reflect current branch state.
 | Action | SA | Cashier | Picker | Dispatch | Supervisor | UI Status | Server/Relay Status |
 |---|---|---|---|---|---|---|---|
 | Open POS shift/session | Yes | Yes | Yes | Yes | Yes | `Implemented` | `Partial` |
+| View ticket monitor rail (read-only) | Yes | Yes | Yes | Yes | Yes | `Implemented` (local working tree) | `N/A` |
 | Create token/order | Yes | Optional | No | No | Optional | `Partial` | `Planned` (SO-first API) |
 | Print token slip | Yes | Optional | No | No | Optional | `Partial` (text token today) | `N/A` |
-| Render QR/barcode token slip | Yes | Optional | No | No | Optional | `Planned` (Phase 1) | `N/A` |
+| Render QR/barcode token slip | Yes | Optional | No | No | Optional | `Partial` (local working tree; pending browser/printer UAT) | `N/A` |
 | Take payment | No | Yes | No | No | Conditional | `Partial` | `Planned` (Phase 3 auth) |
 | Submit SI | No | Yes | No | No | Conditional | `Partial` | `Partial` |
 | Void token | No | No | No | No | Yes | `Planned` | `Partial` (relay endpoint exists; auth missing) |
@@ -153,11 +164,12 @@ Status: `Partial`
 What exists:
 - Role derivation and storage in opening dialog (`Implemented`).
 - SA payment block in UI exists in local working tree changes (`Partial` until committed/UAT).
-- SA can currently save and get a token popup, but token is derived from draft Sales Invoice (`Partial`, wrong audit model).
+- SA SO token API + frontend save path is being implemented locally (`Partial`, requires UAT and migration).
+- SA can see cross-role workflow monitor rail and track status/timing for current shift (`Implemented` in local working tree, pending UAT).
 
 What is missing:
 - SA token must create submitted Sales Order (Phase 1).
-- Token slip QR/barcode printing (Phase 1).
+- Token slip QR/barcode printing (Phase 1, local implementation pending UAT).
 - Full SA-specific visibility (Phase 2).
 - Server/relay authorization (Phase 3).
 
@@ -172,6 +184,7 @@ What exists:
 - Relay-enabled local-first payment commit path (`Implemented` foundation).
 - Direct cloud fallback disabled when relay-enabled commit fails (`Implemented`).
 - SO selection and SO -> SI conversion support exists (`Implemented`).
+- Workflow monitor rail can surface pending order status/timing (read-only) for current shift (`Implemented` local working tree, pending UAT).
 
 What is missing:
 - Prefer/guide cashier flow toward SO-first in role-specific UI (Phase 2).
@@ -227,6 +240,10 @@ Status: `Planned` (Phase 3)
   - SA token as submitted Sales Order (online-first)
   - QR/barcode token slip
   - preserve cashier SO -> SI preference
+- Phase 1B (immediately after Phase 1 core):
+  - ticket sidebar workflow monitor rail (current shift scope, cross-role visibility)
+  - workflow timing timestamps (`order_taken_at`, `paid_at`, `pick_started_at`, `picked_at`, `status_changed_at`)
+  - monitor API for pending order board + `Mine` filter
 - Phase 2:
   - Full role-based UI visibility and operator flows (Cashier/Picker/Dispatch/Supervisor UX)
   - Navbar role display

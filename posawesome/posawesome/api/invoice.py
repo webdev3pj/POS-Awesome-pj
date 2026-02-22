@@ -60,6 +60,11 @@ def add_loyalty_point(invoice_doc):
 
 
 def create_sales_order(doc):
+    # Guard: if invoice already comes from a Sales Order (cashier SO -> SI flow),
+    # do not auto-create another Sales Order on submit.
+    if any(getattr(row, "sales_order", None) for row in (doc.items or [])):
+        return
+
     if (
         doc.posa_pos_opening_shift
         and doc.pos_profile

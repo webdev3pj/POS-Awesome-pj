@@ -118,6 +118,12 @@
 
 ### P1. POS UI role enforcement and role-based visibility
 - [ ] Show current derived role in `Navbar.vue` (read-only display).
+- [ ] Ship and UAT the ticket-style workflow monitor rail (Phase 1B):
+  - left sidebar ticket icon + pending count badge
+  - current-shift pending orders list
+  - `Mine` filter by Sales Order owner (SA attribution)
+  - timing display (`order_taken_at` / time-in-status)
+  - hide rows after dispatch release
 - [ ] Implement role-based UI visibility/disable rules using derived role:
   - Sales Associate
   - Cashier

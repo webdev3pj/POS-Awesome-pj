@@ -102,6 +102,31 @@ Exit criteria:
 - Cashier can still bill from SO.
 - Token slip prints required fields.
 
+## Phase 1B - Workflow Monitor Rail (Ticket Sidebar, Current Shift)
+Goal:
+- Give all roles a live read-only sidebar monitor to track pending orders and time spent in each workflow state.
+
+Business decisions locked:
+- Monitor is visible to all roles (including SA).
+- Default scope is the current POS opening shift.
+- Expanded panel supports a `Mine` filter based on Sales Order `owner` (SA attribution).
+- Rows disappear after dispatch release by default.
+- WebSocket is deferred; v1 uses polling + local event-trigger refresh.
+
+Primary changes:
+- Extend `POS Relay Workflow State` with timing fields (`order_taken_at`, `paid_at`, `pick_started_at`, `picked_at`, `status_changed_at`) and SO linkage support.
+- Add backend monitor API returning row details + summary counts for the sidebar.
+- Add `WorkflowTicketRail.vue` and mount it in `Pos.vue` as a collapsible ticket-style left rail.
+- Emit refresh events after local actions (SA token create, cashier payment success; picker/dispatch later as UI is completed).
+
+Dependencies:
+- Phase 1 SO-first workflow state support (required so unpaid SA orders appear before cashier payment).
+
+Exit criteria:
+- Collapsed ticket icon shows pending count.
+- Expanded panel shows customer, SA, order taken time, current status, time in status, grand total.
+- Rows update via polling and disappear after dispatch release.
+
 ## Phase 2 - Role UI Completion (Cashier / Picker / Dispatch / Supervisor UX)
 Goal:
 - Make the operator experience match role boundaries visually and behaviorally.
@@ -171,14 +196,22 @@ Exit criteria:
 ## Phase Boundaries and Dependencies (Execution Order)
 1. Phase 0 must precede implementation scaling (documentation baseline).
 2. Phase 1 precedes serious business pilot because it fixes the invoice-series audit issue.
-3. Phase 2 and Phase 3 can overlap partially, but role matrices should stabilize before finalizing auth rules.
-4. Phase 4 should not start until the Phase 1 online path is proven in UAT.
-5. Phase 5 spans the end of each phase but culminates after Phase 4.
+3. Phase 1B follows Phase 1 immediately because operational timing visibility depends on SO-first workflow state and is business-critical.
+4. Phase 2 and Phase 3 can overlap partially, but role matrices should stabilize before finalizing auth rules.
+5. Phase 4 should not start until the Phase 1 online path is proven in UAT.
+6. Phase 5 spans the end of each phase but culminates after Phase 4.
 
 ## Frontend Changes by Component (Planned Across Phases)
 ### `OpeningDialog.vue`
 - Keep ERPNext-derived role model.
 - Improve role display messaging and validation feedback.
+
+### `Pos.vue`
+- Phase 1B: mount `WorkflowTicketRail.vue` (left sidebar ticket monitor).
+
+### `WorkflowTicketRail.vue` (new)
+- Phase 1B: read-only cross-role monitor panel (current shift scope, pending count badge, `Mine` filter, timing display).
+- Phase 2+: optional row actions and deeper role-specific affordances if needed.
 
 ### `Navbar.vue`
 - Add read-only role chip (Phase 2).
@@ -207,10 +240,12 @@ Exit criteria:
 ### `posawesome/posawesome/api/posapp.py`
 - Phase 1: add SA `create_sales_order_token(...)` API.
 - Phase 1+: enhance relay workflow state helpers for SO-first linkage.
+- Phase 1B: add `get_relay_workflow_monitor_board(...)` API and workflow timestamp maintenance.
 - Phase 3: add role checks on sensitive APIs.
 
 ### `POS Relay Workflow State` DocType
 - Phase 1: add `sales_order` link field and support SO-first lifecycle.
+- Phase 1B: add workflow timing fields and shift scoping field for monitor board.
 - Keep `sales_invoice` for cashier completion stage.
 
 ### `posawesome/posawesome/api/invoice.py`
@@ -222,6 +257,7 @@ Exit criteria:
 
 ### Planned changes
 - Phase 1: minimal/no schema change (best-effort relay token sync using SO token id).
+- Phase 1B: no relay schema dependency for v1 monitor (ERPNext workflow state is the source); document future relay/offline monitor implications.
 - Phase 3: auth + server-side role enforcement.
 - Phase 4: SA relay-first order/token creation and cloud SO sync workflow.
 
@@ -250,15 +286,19 @@ Exit criteria:
 ## UAT Plan (High Level)
 ### SA
 - Build cart, create token/SO, print slip, confirm SI not created.
+- Confirm ticket sidebar row appears as `Unpaid` with timer and SA name.
 
 ### Cashier
 - Load SO, pay, create SI, confirm relay/cloud behavior.
+- Confirm ticket sidebar row updates to `Paid`.
 
 ### Picker
 - Pick queue and pick update transitions.
+- Confirm ticket sidebar row updates to `Picking` / `Picked`.
 
 ### Dispatch
 - Release only after allowed states.
+- Confirm row removal from default sidebar list after release.
 
 ### Supervisor
 - Exception and override workflows (when implemented).
@@ -292,6 +332,7 @@ Exit criteria:
 ## Acceptance Criteria by Phase (Condensed)
 - Phase 0: docs complete, pushed, usable.
 - Phase 1: SA token creates submitted SO, slip prints required fields, cashier SO->SI works.
+- Phase 1B: ticket sidebar monitor rail shows pending count + current-shift rows with timing.
 - Phase 2: role UI visibility aligns with spec for all roles.
 - Phase 3: relay/server reject unauthorized actions.
 - Phase 4: SA can create token/order offline and sync to cloud later.

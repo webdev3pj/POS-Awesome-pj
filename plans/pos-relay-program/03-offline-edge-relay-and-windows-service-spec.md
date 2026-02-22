@@ -30,11 +30,28 @@ This is the offline-only reference and should be kept synchronized with `relay/r
 - Full offline SA token -> cloud SO sync (deferred to Phase 4).
 - Full enterprise-grade Windows Service packaging in current branch (current bootstrap is startup task + batch launcher).
 
+## Workflow Monitor Data Source (v1 and Future)
+### v1 source of truth (Phase 1B)
+- The ticket sidebar workflow monitor rail uses ERPNext `POS Relay Workflow State` records as the display source.
+- This gives cross-role visibility in the POS UI for current-shift pending orders and timing metrics while the SA online-first Sales Order flow is stabilized.
+- Timing fields expected on the ERPNext workflow state for monitoring:
+  - `order_taken_at`
+  - `paid_at`
+  - `pick_started_at`
+  - `picked_at`
+  - `released_at`
+  - `status_changed_at`
+
+### Future offline implication (Phase 4+)
+- When SA relay-first/offline token creation is introduced, the original local creation timestamp must be preserved so `order_taken_at` remains meaningful after cloud sync.
+- WebSocket/push updates are deferred; v1 monitor uses polling + local event-trigger refresh.
+
 ## Relay Topology
 - POS browser (store devices) talks to local relay over LAN.
 - Relay stores data in local SQLite.
 - Relay sync worker pushes events to ERPNext/Frappe Cloud when reachable.
 - ERPNext cloud may also need to reach relay `/health` for backend diagnostics using a public/tunnel URL (`public_base_url`).
+- POS workflow monitor rail (Phase 1B) reads an ERPNext API and polls for near-real-time updates; it is not a relay-native screen yet.
 
 ## Relay Configuration Files and Paths
 Defined in `relay/relay/storage.py`:
@@ -55,6 +72,11 @@ Default config keys (current code):
 
 ## What Relay Stores Locally (Table-by-Table)
 Source of truth: `relay/relay/storage.py` `init_db()`.
+
+### Monitor note (important)
+- Phase 1B does **not** add a new relay storage table for the sidebar monitor.
+- The v1 monitor is ERPNext workflow-state driven so all roles can view the same normalized state in the POS UI while Phase 1 is stabilized.
+- Relay dashboards/APIs remain the primary local operational source when cloud diagnostics are unavailable.
 
 ### `relay_queue` (legacy compatibility queue)
 Status: `Implemented`, retained for backward compatibility.

@@ -7,6 +7,11 @@
     <NewAddress></NewAddress>
     <MpesaPayments></MpesaPayments>
     <Variants></Variants>
+    <WorkflowTicketRail
+      v-if="!dialog"
+      :pos_profile="pos_profile"
+      :pos_opening_shift="pos_opening_shift"
+    ></WorkflowTicketRail>
     <OpeningDialog v-if="dialog" :dialog="dialog"></OpeningDialog>
     <v-row v-show="!dialog">
       <v-col
@@ -76,6 +81,7 @@ import NewAddress from './NewAddress.vue';
 import Variants from './Variants.vue';
 import Returns from './Returns.vue';
 import MpesaPayments from './Mpesa-Payments.vue';
+import WorkflowTicketRail from './WorkflowTicketRail.vue';
 
 export default {
   data: function () {
@@ -104,6 +110,7 @@ export default {
     Variants,
     MpesaPayments,
     SalesOrders,
+    WorkflowTicketRail,
   },
 
   methods: {

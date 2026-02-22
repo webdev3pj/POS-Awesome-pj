@@ -47,7 +47,7 @@
             :items="invoiceTypes"
             :label="frappe._('Type')"
             v-model="invoiceType"
-            :disabled="invoiceType == 'Return'"
+            :disabled="invoiceType == 'Return' || is_sales_associate_role"
           ></v-select>
         </v-col>
       </v-row>
@@ -754,7 +754,7 @@
               >
             </v-col>
             <v-col
-              v-if="pos_profile.custom_allow_select_sales_order === 1"
+              v-if="pos_profile.custom_allow_select_sales_order === 1 && !is_sales_associate_role"
               cols="6"
               class="pa-1"
             >
@@ -794,7 +794,7 @@
                 class="pa-0"
                 color="accent"
                 dark
-                @click="new_invoice"
+                @click="handle_save_new"
                 >{{ __("Save/New") }}</v-btn
               >
             </v-col>
@@ -805,6 +805,7 @@
                 color="success"
                 @click="show_payment"
                 dark
+                :disabled="is_sales_associate_role"
                 >{{ __("PAY") }}</v-btn
               >
             </v-col>
@@ -868,6 +869,12 @@ export default {
       selcted_delivery_charges: {},
       invoice_posting_date: false,
       posting_date: frappe.datetime.nowdate(),
+      current_role: "",
+      relay_status: {
+        enabled: false,
+        connected: false,
+        profile_relay_url: "",
+      },
       items_headers: [
         {
           text: __("Name"),
@@ -889,6 +896,9 @@ export default {
   },
 
   computed: {
+    is_sales_associate_role() {
+      return (this.current_role || "") === "cline-Sales Associate";
+    },
     total_qty() {
       this.close_payments();
       let qty = 0;
@@ -924,6 +934,450 @@ export default {
   },
 
   methods: {
+    get_current_role() {
+      try {
+        return (localStorage.getItem("pos_current_role") || "").trim();
+      } catch (e) {
+        return "";
+      }
+    },
+    get_relay_base_url() {
+      const raw =
+        (this.pos_profile && this.pos_profile.custom_edge_relay_url) ||
+        (this.relay_status && this.relay_status.profile_relay_url) ||
+        "";
+      return String(raw || "").trim().replace(/\/$/, "");
+    },
+    relay_customer_fallback_enabled() {
+      const relayEnabled =
+        parseInt((this.pos_profile && this.pos_profile.custom_have_token) || 0, 10) === 1;
+      return relayEnabled && !!this.get_relay_base_url();
+    },
+    is_click_event(payload) {
+      return !!(payload && typeof payload === "object" && payload.target && payload.preventDefault);
+    },
+    relayWorkflowEnabled() {
+      return parseInt((this.pos_profile && this.pos_profile.custom_have_token) || 0, 10) === 1;
+    },
+    reset_after_token_save() {
+      this.items = [];
+      this.customer = this.pos_profile.customer;
+      this.invoice_doc = "";
+      this.discount_amount = 0;
+      this.additional_discount_percentage = 0;
+      this.delivery_charges_rate = 0;
+      this.selcted_delivery_charges = {};
+      this.posa_offers = [];
+      evntBus.$emit("set_pos_coupons", []);
+      this.posa_coupons = [];
+      this.return_doc = "";
+      this.invoiceType = "Order";
+      this.invoiceTypes = ["Invoice", "Order"];
+      evntBus.$emit("set_customer_readonly", false);
+    },
+    handle_save_new() {
+      this.current_role = this.get_current_role();
+      if (this.is_sales_associate_role) {
+        return this.save_sales_order_token_and_reset();
+      }
+      return this.new_invoice();
+    },
+    get_sales_order_token_payload() {
+      return {
+        pos_profile: this.pos_profile.name,
+        pos_opening_shift: (this.pos_opening_shift && this.pos_opening_shift.name) || "",
+        company: this.pos_profile.company,
+        customer: this.customer,
+        currency: this.pos_profile.currency,
+        campaign: this.pos_profile.campaign || "",
+        posting_date: this.posting_date,
+        items: this.get_order_items(),
+        discount_amount: flt(this.discount_amount),
+        additional_discount_percentage: flt(this.additional_discount_percentage),
+        posa_offers: this.posa_offers || [],
+        posa_coupons: this.posa_coupons || [],
+        posa_delivery_charges: (this.selcted_delivery_charges || {}).name || "",
+        posa_delivery_charges_rate: this.delivery_charges_rate || 0,
+      };
+    },
+    create_sales_order_token(payload) {
+      return new Promise((resolve, reject) => {
+        frappe.call({
+          method: "posawesome.posawesome.api.posapp.create_sales_order_token",
+          args: { data: payload },
+          async: true,
+          callback: (r) => {
+            if (r && r.exc) {
+              reject(new Error(__("Unable to create Sales Order token.")));
+              return;
+            }
+            if (!r || !r.message) {
+              reject(new Error(__("Empty response while creating Sales Order token.")));
+              return;
+            }
+            resolve(r.message);
+          },
+          error: (err) => {
+            const message =
+              (err && err.message) ||
+              __("Unable to create Sales Order token. Please try again.");
+            reject(new Error(message));
+          },
+        });
+      });
+    },
+    escape_html(value) {
+      return String(value == null ? "" : value)
+        .replace(/&/g, "&amp;")
+        .replace(/</g, "&lt;")
+        .replace(/>/g, "&gt;")
+        .replace(/\"/g, "&quot;")
+        .replace(/'/g, "&#39;");
+    },
+    token_slip_date_time(meta) {
+      const raw = String((meta && meta.order_taken_at) || "");
+      if (!raw) {
+        return {
+          dateLabel: frappe.datetime.str_to_user(this.posting_date || frappe.datetime.nowdate()),
+          timeLabel: frappe.datetime.now_time().split(".")[0],
+        };
+      }
+      const normalized = raw.replace("T", " ").replace("Z", "");
+      const [datePart, timePartRaw] = normalized.split(" ");
+      return {
+        dateLabel: datePart ? frappe.datetime.str_to_user(datePart) : raw,
+        timeLabel: (timePartRaw || "").split(".")[0] || frappe.datetime.now_time().split(".")[0],
+      };
+    },
+    token_slip_qr_payload(meta) {
+      const dt = this.token_slip_date_time(meta);
+      return JSON.stringify({
+        type: "POS-SO-TOKEN",
+        sales_order: meta.sales_order_name,
+        token_id: meta.token_id,
+        token_last4: meta.token_last4,
+        customer_name: meta.customer_name,
+        grand_total: meta.grand_total,
+        currency: meta.currency,
+        sales_associate_user: meta.sales_associate_user || frappe.session.user,
+        sales_associate_name:
+          meta.sales_associate_name || frappe.session.user_fullname || frappe.session.user,
+        order_date: dt.dateLabel,
+        order_time: dt.timeLabel,
+        site: window.location.origin,
+      });
+    },
+    print_sales_order_token_slip(meta) {
+      const printWindow = window.open("", "", "height=700,width=420");
+      if (!printWindow) {
+        evntBus.$emit("show_mesage", {
+          text: __("Popup blocked. Please allow popups to print token slips."),
+          color: "warning",
+        });
+        return;
+      }
+
+      const dt = this.token_slip_date_time(meta);
+      const soName = this.escape_html(meta.sales_order_name || "");
+      const tokenLast4 = this.escape_html(meta.token_last4 || "");
+      const customerName = this.escape_html(meta.customer_name || "");
+      const saName = this.escape_html(
+        meta.sales_associate_name || frappe.session.user_fullname || frappe.session.user
+      );
+      const currency = this.escape_html(this.currencySymbol(meta.currency) || "");
+      const grandTotal = this.escape_html(this.formtCurrency(meta.grand_total || 0));
+      const qrPayload = this.escape_html(this.token_slip_qr_payload(meta));
+      const barcodeValue = this.escape_html(meta.token_id || meta.sales_order_name || "");
+
+      printWindow.document.write(`
+        <html>
+          <head>
+            <title>Sales Order Token Slip</title>
+            <meta charset="utf-8" />
+            <script src="https://cdn.jsdelivr.net/npm/qrcodejs@1.0.0/qrcode.min.js"><\/script>
+            <script src="https://cdn.jsdelivr.net/npm/jsbarcode@3.11.6/dist/JsBarcode.all.min.js"><\/script>
+            <style>
+              body {
+                width: 80mm;
+                margin: 0 auto;
+                padding: 8px;
+                font-family: Arial, sans-serif;
+                color: #111;
+              }
+              .center { text-align: center; }
+              .title { font-size: 16px; font-weight: bold; margin-bottom: 6px; }
+              .muted { color: #555; font-size: 11px; }
+              .row { margin: 3px 0; font-size: 12px; }
+              .token-last4 { font-size: 28px; font-weight: bold; letter-spacing: 2px; margin: 8px 0 4px; }
+              .total { font-size: 15px; font-weight: bold; margin: 6px 0; }
+              .divider { border-top: 1px dashed #999; margin: 8px 0; }
+              #qrcode { width: 128px; height: 128px; margin: 0 auto; }
+              #barcode-wrap { margin-top: 8px; text-align: center; }
+              #barcode { width: 100%; max-width: 280px; }
+              .fallback { font-size: 11px; color: #a33; margin-top: 4px; display: none; }
+            </style>
+          </head>
+          <body>
+            <div class="center title">Sales Order Token</div>
+            <div class="center muted">Full SO: ${soName}</div>
+            <div class="center token-last4">${tokenLast4}</div>
+            <div class="divider"></div>
+            <div class="row"><b>Customer:</b> ${customerName}</div>
+            <div class="row"><b>Sales Associate:</b> ${saName}</div>
+            <div class="row"><b>Date:</b> ${this.escape_html(dt.dateLabel)}</div>
+            <div class="row"><b>Time:</b> ${this.escape_html(dt.timeLabel)}</div>
+            <div class="row total"><b>Grand Total:</b> ${currency} ${grandTotal}</div>
+            <div class="divider"></div>
+            <div id="qrcode" class="center"></div>
+            <div id="barcode-wrap">
+              <svg id="barcode"></svg>
+              <div class="muted">${soName}</div>
+            </div>
+            <div id="render-fallback" class="fallback center">
+              QR/Barcode render failed. Use SO Number / Last4 above.
+            </div>
+            <script>
+              (function() {
+                var failed = false;
+                try {
+                  if (window.QRCode) {
+                    new QRCode(document.getElementById('qrcode'), {
+                      text: ${JSON.stringify("")} + ${JSON.stringify(this.token_slip_qr_payload(meta))},
+                      width: 128,
+                      height: 128,
+                      correctLevel: QRCode.CorrectLevel.M
+                    });
+                  } else {
+                    failed = true;
+                  }
+                  if (window.JsBarcode) {
+                    JsBarcode('#barcode', ${JSON.stringify(meta.token_id || meta.sales_order_name || "")}, {
+                      format: 'CODE128',
+                      width: 1.5,
+                      height: 40,
+                      displayValue: false,
+                      margin: 0
+                    });
+                  } else {
+                    failed = true;
+                  }
+                } catch (e) {
+                  failed = true;
+                }
+                if (failed) {
+                  var fb = document.getElementById('render-fallback');
+                  if (fb) fb.style.display = 'block';
+                }
+                window.focus();
+                setTimeout(function() { window.print(); }, 300);
+              })();
+            <\/script>
+          </body>
+        </html>
+      `);
+
+      printWindow.document.close();
+    },
+    show_sales_order_token_dialog(meta) {
+      const vm = this;
+      const dt = this.token_slip_date_time(meta);
+      const tokenLast4 = this.escape_html(meta.token_last4 || "");
+      const soName = this.escape_html(meta.sales_order_name || "");
+      const customerName = this.escape_html(meta.customer_name || "");
+      const grandTotal = `${this.currencySymbol(meta.currency)} ${this.formtCurrency(meta.grand_total || 0)}`;
+      const d = new frappe.ui.Dialog({
+        title: __("Sales Order Token"),
+        fields: [
+          {
+            fieldname: "token",
+            fieldtype: "HTML",
+            options: `
+              <div style="text-align:center;font-size:42px;padding:0.5rem 0;"><b>${tokenLast4}</b></div>
+              <div style="text-align:center;padding-bottom:0.5rem;"><small><b>SO:</b> ${soName}</small></div>
+              <div style="font-size:13px;line-height:1.5;">
+                <div><b>${__("Customer")}:</b> ${customerName}</div>
+                <div><b>${__("Sales Associate")}:</b> ${this.escape_html(meta.sales_associate_name || frappe.session.user_fullname || frappe.session.user)}</div>
+                <div><b>${__("Date")}:</b> ${this.escape_html(dt.dateLabel)} &nbsp; <b>${__("Time")}:</b> ${this.escape_html(dt.timeLabel)}</div>
+                <div><b>${__("Grand Total")}:</b> ${this.escape_html(grandTotal)}</div>
+              </div>`,
+          },
+          {
+            fieldname: "relay_note",
+            fieldtype: "HTML",
+            options: `<div style="text-align:center;color:#1e88e5;padding-top:0.25rem;"><small>${frappe._(
+              "Sales Order token created. Relay token sync is best-effort."
+            )}</small></div>`,
+          },
+        ],
+        primary_action_label: __("Print"),
+        primary_action() {
+          vm.print_sales_order_token_slip(meta);
+          d.hide();
+        },
+      });
+      d.show();
+    },
+    sync_relay_token_for_sales_order(meta) {
+      const relayEnabled = this.relayWorkflowEnabled();
+      const relayBaseUrl = this.get_relay_base_url();
+      if (!relayEnabled || !relayBaseUrl || !meta || !meta.sales_order) {
+        return;
+      }
+
+      const soDoc = meta.sales_order || {};
+      const tokenPayload = {
+        token_id: meta.token_id || meta.sales_order_name,
+        pos_profile_id: this.pos_profile.name,
+        cashier_user_id: frappe.session.user,
+        customer_id: soDoc.customer || meta.customer,
+        customer_name: soDoc.customer_name || meta.customer_name,
+        source_doctype: "Sales Order",
+        source_name: meta.sales_order_name,
+        role: this.current_role || "",
+        items: (soDoc.items || []).map((row) => ({
+          item_code: row.item_code,
+          item_name: row.item_name,
+          qty: row.qty,
+          uom: row.uom,
+          rate: row.rate,
+          amount: row.amount,
+        })),
+      };
+
+      fetch(`${relayBaseUrl}/relay/token/create`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(tokenPayload),
+      }).catch(() => {
+        evntBus.$emit("show_mesage", {
+          text: __("Sales Order token created, but relay token sync failed. You can continue."),
+          color: "warning",
+        });
+      });
+    },
+    async save_sales_order_token_and_reset() {
+      this.current_role = this.get_current_role();
+      if (!this.customer) {
+        evntBus.$emit("show_mesage", {
+          text: __(`There is no Customer !`),
+          color: "error",
+        });
+        return null;
+      }
+      if (!this.items.length) {
+        evntBus.$emit("show_mesage", {
+          text: __(`There is no Items !`),
+          color: "error",
+        });
+        return null;
+      }
+      if (!this.validate()) {
+        return null;
+      }
+      if (!this.pos_profile.posa_allow_sales_order) {
+        evntBus.$emit("show_mesage", {
+          text: __("POS Profile is not configured to allow Sales Orders."),
+          color: "error",
+        });
+        return null;
+      }
+
+      try {
+        const payload = this.get_sales_order_token_payload();
+        const result = await this.create_sales_order_token(payload);
+        this.show_sales_order_token_dialog(result);
+        this.sync_relay_token_for_sales_order(result);
+        evntBus.$emit("workflow_monitor_refresh_requested");
+        this.reset_after_token_save();
+        evntBus.$emit("show_mesage", {
+          text: __(
+            "Sales Order token created: {0}",
+            [result.sales_order_name || result.token_id || ""]
+          ),
+          color: "success",
+        });
+        frappe.utils.play_sound("submit");
+        return result;
+      } catch (e) {
+        evntBus.$emit("show_mesage", {
+          text: e.message || __("Unable to create Sales Order token."),
+          color: "error",
+        });
+        frappe.utils.play_sound("error");
+        return null;
+      }
+    },
+    apply_relay_customer_info(row) {
+      let payload = (row && row.payload) || {};
+      if (typeof payload === "string") {
+        try {
+          payload = JSON.parse(payload) || {};
+        } catch (e) {
+          payload = {};
+        }
+      }
+      const customerId =
+        payload.customer_id || payload.name || (row && row.customer_id) || this.customer;
+      this.customer_info = {
+        loyalty_points:
+          typeof payload.loyalty_points === "undefined" ? null : payload.loyalty_points,
+        conversion_factor:
+          typeof payload.conversion_factor === "undefined"
+            ? null
+            : payload.conversion_factor,
+        email_id: payload.email_id || (row && row.email_id) || "",
+        mobile_no: payload.mobile_no || (row && row.mobile_no) || "",
+        image: payload.image || "",
+        loyalty_program: payload.loyalty_program || null,
+        customer_price_list: payload.customer_price_list || null,
+        customer_group: payload.customer_group || "",
+        customer_type: payload.customer_type || "Individual",
+        territory: payload.territory || "",
+        birthday: payload.birthday || null,
+        gender: payload.gender || "",
+        tax_id: payload.tax_id || (row && row.tax_id) || "",
+        posa_discount: payload.posa_discount || 0,
+        name: customerId,
+        customer_name:
+          payload.customer_name || (row && row.customer_name) || customerId,
+        customer_group_price_list: payload.customer_group_price_list || null,
+        primary_address: payload.primary_address || "",
+      };
+      this.update_price_list();
+      return true;
+    },
+    async fetch_customer_details_from_relay() {
+      if (!this.customer || !this.relay_customer_fallback_enabled()) {
+        return false;
+      }
+      const base = this.get_relay_base_url();
+      try {
+        const resp = await fetch(
+          `${base}/relay/customer/search?q=${encodeURIComponent(this.customer)}&limit=20`,
+          {
+            method: "GET",
+            headers: {
+              Accept: "application/json",
+            },
+          }
+        );
+        const payload = await resp.json();
+        if (!resp.ok || !payload.ok) {
+          return false;
+        }
+        const rows = payload.rows || [];
+        const row =
+          rows.find((r) => r.customer_id === this.customer) ||
+          rows.find((r) => ((r.payload || {}).name || (r.payload || {}).customer_id) === this.customer) ||
+          rows[0];
+        if (!row) {
+          return false;
+        }
+        return this.apply_relay_customer_info(row);
+      } catch (e) {
+        return false;
+      }
+    },
     remove_item(item) {
       const index = this.items.findIndex(
         (el) => el.posa_row_id == item.posa_row_id
@@ -1562,6 +2016,17 @@ export default {
     },
 
     async show_payment() {
+      this.current_role = this.get_current_role();
+      if (this.is_sales_associate_role) {
+        evntBus.$emit("show_mesage", {
+          text: __(
+            "Sales Associate can prepare the cart and token, but payment must be done by a Cashier."
+          ),
+          color: "warning",
+        });
+        frappe.utils.play_sound("error");
+        return;
+      }
       if (!this.customer) {
         evntBus.$emit("show_mesage", {
           text: __(`There is no Customer !`),
@@ -1944,6 +2409,17 @@ export default {
     fetch_customer_details() {
       const vm = this;
       if (this.customer) {
+        if (
+          String(this.customer || "").startsWith("LCUST-") &&
+          this.relay_customer_fallback_enabled()
+        ) {
+          this.fetch_customer_details_from_relay().then((loaded) => {
+            if (!loaded) {
+              vm.update_price_list();
+            }
+          });
+          return;
+        }
         frappe.call({
           method: "posawesome.posawesome.api.posapp.get_customer_info",
           args: {
@@ -1952,12 +2428,25 @@ export default {
           async: false,
           callback: (r) => {
             const message = r.message;
-            if (!r.exc) {
+            if (!r.exc && message) {
               vm.customer_info = {
                 ...message,
               };
+              vm.update_price_list();
+              return;
             }
-            vm.update_price_list();
+            vm.fetch_customer_details_from_relay().then((loaded) => {
+              if (!loaded) {
+                vm.update_price_list();
+              }
+            });
+          },
+          error: () => {
+            vm.fetch_customer_details_from_relay().then((loaded) => {
+              if (!loaded) {
+                vm.update_price_list();
+              }
+            });
           },
         });
       }
@@ -3000,6 +3489,7 @@ export default {
   mounted() {
     evntBus.$on("register_pos_profile", (data) => {
       this.pos_profile = data.pos_profile;
+      this.current_role = this.get_current_role();
       this.customer = data.pos_profile.customer;
       this.pos_opening_shift = data.pos_opening_shift;
       this.stock_settings = data.stock_settings;
@@ -3056,6 +3546,13 @@ export default {
         this.update_item_detail(item);
       });
     });
+    evntBus.$on("relay_status_changed", (statusPayload) => {
+      this.relay_status = {
+        enabled: !!statusPayload.enabled,
+        connected: !!statusPayload.connected,
+        profile_relay_url: statusPayload.profile_relay_url || "",
+      };
+    });
     evntBus.$on("load_return_invoice", (data) => {
       this.new_invoice(data.invoice_doc);
       this.discount_amount = -data.return_doc.discount_amount;
@@ -3077,8 +3574,10 @@ export default {
     evntBus.$off("update_invoice_offers");
     evntBus.$off("update_invoice_coupons");
     evntBus.$off("set_all_items");
+    evntBus.$off("relay_status_changed");
   },
   created() {
+    this.current_role = this.get_current_role();
     document.addEventListener("keydown", this.shortOpenPayment.bind(this));
     document.addEventListener("keydown", this.shortDeleteFirstItem.bind(this));
     document.addEventListener("keydown", this.shortOpenFirstItem.bind(this));

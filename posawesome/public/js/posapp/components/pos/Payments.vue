@@ -666,6 +666,15 @@
     </v-card>
 
     <v-card flat class="cards mb-0 mt-3 py-0">
+      <v-alert
+        v-if="is_sales_associate_role"
+        dense
+        outlined
+        type="warning"
+        class="ma-0 mb-2"
+      >
+        {{ __("Cashier role is required to submit payment. Sales Associate can prepare the cart and token only.") }}
+      </v-alert>
       <v-row align="start" no-gutters>
         <v-col cols="6">
           <v-btn
@@ -674,7 +683,7 @@
             color="primary"
             dark
             @click="submit"
-            :disabled="vaildatPayment"
+            :disabled="vaildatPayment || is_sales_associate_role"
             >{{ __("Submit") }}</v-btn
           >
         </v-col>
@@ -685,7 +694,7 @@
             color="success"
             dark
             @click="submit(undefined, false, true)"
-            :disabled="vaildatPayment"
+            :disabled="vaildatPayment || is_sales_associate_role"
             >{{ __("Submit & Print") }}</v-btn
           >
         </v-col>
@@ -776,14 +785,37 @@ export default {
       status: "",
     },
     local_sale_ref: "",
+    current_role: "",
   }),
 
   methods: {
+    get_current_role() {
+      try {
+        return (localStorage.getItem("pos_current_role") || "").trim();
+      } catch (e) {
+        return "";
+      }
+    },
+    block_sales_associate_payment() {
+      this.current_role = this.get_current_role();
+      if (!this.is_sales_associate_role) {
+        return false;
+      }
+      evntBus.$emit("show_mesage", {
+        text: __("Sales Associate cannot take payment. Please use a Cashier account."),
+        color: "error",
+      });
+      frappe.utils.play_sound("error");
+      return true;
+    },
     back_to_invoice() {
       evntBus.$emit("show_payment", "false");
       evntBus.$emit("set_customer_readonly", false);
     },
     submit(event, payment_received = false, print = false) {
+      if (this.block_sales_associate_payment()) {
+        return;
+      }
       if (!this.invoice_doc.is_return && this.total_payments < 0) {
         evntBus.$emit("show_mesage", {
           text: `Payments not correct`,
@@ -905,6 +937,9 @@ export default {
       this.back_to_invoice();
     },
     submit_invoice(print) {
+      if (this.block_sales_associate_payment()) {
+        return;
+      }
       let totalPayedAmount = 0;
       this.invoice_doc.payments.forEach((payment) => {
         payment.amount = flt(payment.amount);
@@ -1001,6 +1036,7 @@ export default {
             if (print) {
               vm.load_print_page();
             }
+            evntBus.$emit("workflow_monitor_refresh_requested");
             evntBus.$emit("set_last_invoice", vm.invoice_doc.name);
             evntBus.$emit("show_mesage", {
               text: `Invoice ${r.message.name} is Submited`,
@@ -1058,6 +1094,7 @@ export default {
             pos_profile_id: vm.pos_profile.name,
             cashier_user_id: frappe.session.user,
             device_id: deviceId,
+            role: vm.current_role || "",
           }),
         });
         const openPayload = await openResp.json();
@@ -1081,6 +1118,7 @@ export default {
               cashier_user_id: frappe.session.user,
               cashier_session_id: cashierSessionId,
               device_id: deviceId,
+              role: vm.current_role || "",
               invoice: vm.invoice_doc,
               data: data,
             }),
@@ -1104,6 +1142,7 @@ export default {
             vm.load_print_page();
           }
 
+          evntBus.$emit("workflow_monitor_refresh_requested");
           evntBus.$emit("set_last_invoice", vm.invoice_doc.name || "Queued");
           evntBus.$emit("show_mesage", {
             text: __(
@@ -1497,6 +1536,9 @@ export default {
   },
 
   computed: {
+    is_sales_associate_role() {
+      return (this.current_role || "") === "cline-Sales Associate";
+    },
     total_payments() {
       let total = parseFloat(this.invoice_doc.loyalty_amount);
       if (this.invoice_doc && this.invoice_doc.payments) {
@@ -1589,8 +1631,10 @@ export default {
 
   mounted: function () {
     this.$nextTick(function () {
+      this.current_role = this.get_current_role();
       evntBus.$on("send_invoice_doc_payment", (invoice_doc) => {
         this.invoice_doc = invoice_doc;
+        this.current_role = this.get_current_role();
         const default_payment = this.invoice_doc.payments.find(
           (payment) => payment.default == 1
         );
@@ -1616,6 +1660,7 @@ export default {
       });
       evntBus.$on("register_pos_profile", (data) => {
         this.pos_profile = data.pos_profile;
+        this.current_role = this.get_current_role();
         this.get_mpesa_modes();
       });
       evntBus.$on("relay_status_changed", (statusPayload) => {

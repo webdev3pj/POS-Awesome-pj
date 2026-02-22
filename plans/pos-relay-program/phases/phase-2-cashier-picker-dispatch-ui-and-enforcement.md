@@ -16,6 +16,7 @@ Complete the operator-facing role UX so each role sees the right screens/actions
 - Role-based visibility/disable rules across POS components
 - Picker and Dispatch operator UI workflow completion
 - Supervisor UI affordances for exception handling (frontend layer)
+- Build on Phase 1B ticket monitor rail for role-aware operational visibility (read-only rail exists first; Phase 2 may add deeper affordances)
 
 ## Out of Scope
 - Final server-side/relay authorization (Phase 3)
@@ -26,6 +27,7 @@ Complete the operator-facing role UX so each role sees the right screens/actions
 - Opening dialog role derivation and no/multi-role blocking (`Implemented`).
 - Partial SA payment UI blocking in local working tree (`Partial`).
 - Cashier relay commit UX foundation and status diagnostics (`Implemented`/`Partial`).
+- Phase 1B monitor rail foundation added locally (ticket icon/sidebar, polling, current-shift pending rows, timing display) pending UAT and refinement.
 
 ## Implementation Tasks
 - [ ] Add read-only current role display in `Navbar.vue`.
@@ -34,6 +36,7 @@ Complete the operator-facing role UX so each role sees the right screens/actions
 - [ ] Implement/complete picker workflow UI for pick queue and pick status actions.
 - [ ] Implement/complete dispatch workflow UI for release actions and hold/reason states.
 - [ ] Add supervisor UI affordances for exception review/override (without weakening default restrictions).
+- [ ] Decide whether the ticket monitor rail remains read-only in Phase 2 or gains role-specific row actions (open details, quick filters, transition shortcuts).
 - [ ] Align labels/messages with role terminology used in `01-role-based-workflow-spec.md`.
 - [ ] Update role spec statuses after implementation.
 

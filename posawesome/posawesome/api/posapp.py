@@ -69,6 +69,37 @@ def get_opening_dialog_data():
             "POS Profile", mode["parent"], "currency"
         )
 
+    # Derive role from ERPNext user roles (not user-selectable)
+    user_roles = frappe.get_roles()
+    cline_roles = [r for r in user_roles if r.startswith('cline-')]
+
+    if len(cline_roles) > 1:
+        # Multiple operational roles - block login
+        data["user_role"] = ""
+        data["role_error"] = __("User has multiple operational roles ({0}); fix roles in Backend.").format(", ".join(cline_roles))
+    elif len(cline_roles) == 1:
+        # Exactly one role - use it
+        data["user_role"] = cline_roles[0]
+        data["role_error"] = ""
+    else:
+        # No cline-* roles - check if any POS Profile has token workflow enabled
+        token_enabled_profiles = frappe.get_all(
+            "POS Profile",
+            filters={"disabled": 0, "custom_have_token": 1},
+            fields=["name"],
+            limit_page_length=1,
+        )
+        has_token_workflow = len(token_enabled_profiles) > 0
+
+        if has_token_workflow:
+            # Token workflow enabled but user has no role - block
+            data["user_role"] = ""
+            data["role_error"] = __("User has no assigned role. Please contact admin to assign a role (Sales Associate, Cashier, Picker, Dispatch, or Supervisor) in the Backend.")
+        else:
+            # No token workflow - allow legacy mode
+            data["user_role"] = ""
+            data["role_error"] = ""
+
     return data
 
 
@@ -481,6 +512,189 @@ def _is_relay_workflow_enabled(pos_profile):
     ) == 1
 
 
+def _relay_workflow_meta():
+    if not _relay_workflow_doctype_exists():
+        return None
+    try:
+        return frappe.get_meta("POS Relay Workflow State")
+    except Exception:
+        return None
+
+
+def _relay_workflow_has_field(fieldname):
+    meta = _relay_workflow_meta()
+    return bool(meta and meta.has_field(fieldname))
+
+
+def _set_state_field_if_exists(state_doc, fieldname, value):
+    if value is None:
+        return
+    if _relay_workflow_has_field(fieldname):
+        state_doc.set(fieldname, value)
+
+
+def _get_invoice_linked_sales_order_name(invoice_doc):
+    if not invoice_doc:
+        return ""
+    for row in (invoice_doc.get("items") or []):
+        so_name = cstr(
+            (row.get("sales_order") if hasattr(row, "get") else getattr(row, "sales_order", ""))
+            or ""
+        ).strip()
+        if so_name:
+            return so_name
+    return ""
+
+
+def _get_relay_state_doc_for_sales_order(sales_order_name, pos_profile=None, pos_opening_shift=None):
+    if not sales_order_name or not _relay_workflow_has_field("sales_order"):
+        return None
+
+    state_name = frappe.db.exists(
+        "POS Relay Workflow State", {"sales_order": sales_order_name}
+    )
+    if state_name:
+        return frappe.get_doc("POS Relay Workflow State", state_name)
+
+    payload = {
+        "doctype": "POS Relay Workflow State",
+        "token_id": cstr(sales_order_name),
+        "token_status": "Draft",
+        "picking_status": "Not Started",
+        "dispatch_status": "Pending",
+        "last_sync_status": "Not Applicable",
+    }
+    if pos_profile:
+        payload["pos_profile"] = pos_profile
+    if _relay_workflow_has_field("sales_order"):
+        payload["sales_order"] = sales_order_name
+    if _relay_workflow_has_field("pos_opening_shift") and pos_opening_shift:
+        payload["pos_opening_shift"] = pos_opening_shift
+    return frappe.get_doc(payload)
+
+
+def _apply_relay_workflow_state_updates(
+    state_doc,
+    token_status=None,
+    picking_status=None,
+    dispatch_status=None,
+    exceptions_note=None,
+    is_offline_recorded=None,
+    last_sync_status=None,
+    sync_error=None,
+    pos_profile=None,
+    token_id=None,
+    sales_invoice=None,
+    sales_order=None,
+    pos_opening_shift=None,
+    set_order_taken_at=False,
+):
+    if not state_doc:
+        return None
+
+    now_ts = now_datetime()
+    prev_token_status = cstr(state_doc.get("token_status") or "")
+    prev_picking_status = cstr(state_doc.get("picking_status") or "")
+    prev_dispatch_status = cstr(state_doc.get("dispatch_status") or "")
+    status_changed = False
+
+    if pos_profile:
+        state_doc.pos_profile = pos_profile
+
+    if token_id:
+        state_doc.token_id = cstr(token_id)
+
+    if sales_invoice:
+        state_doc.sales_invoice = sales_invoice
+
+    _set_state_field_if_exists(state_doc, "sales_order", sales_order)
+    _set_state_field_if_exists(state_doc, "pos_opening_shift", pos_opening_shift)
+
+    if set_order_taken_at and _relay_workflow_has_field("order_taken_at") and not state_doc.get("order_taken_at"):
+        state_doc.set("order_taken_at", now_ts)
+
+    if token_status in RELAY_TOKEN_STATUSES and token_status != prev_token_status:
+        state_doc.token_status = token_status
+        status_changed = True
+        if token_status == "Paid" and _relay_workflow_has_field("paid_at") and not state_doc.get("paid_at"):
+            state_doc.set("paid_at", now_ts)
+
+    if picking_status in RELAY_PICKING_STATUSES and picking_status != prev_picking_status:
+        state_doc.picking_status = picking_status
+        status_changed = True
+        if (
+            picking_status == "In Progress"
+            and _relay_workflow_has_field("pick_started_at")
+            and not state_doc.get("pick_started_at")
+        ):
+            state_doc.set("pick_started_at", now_ts)
+        if picking_status == "Picked" and _relay_workflow_has_field("picked_at"):
+            state_doc.set("picked_at", now_ts)
+
+    if dispatch_status in RELAY_DISPATCH_STATUSES and dispatch_status != prev_dispatch_status:
+        state_doc.dispatch_status = dispatch_status
+        status_changed = True
+        if dispatch_status == "Released":
+            if state_doc.get("released_by") in (None, ""):
+                state_doc.released_by = frappe.session.user
+            if not state_doc.get("released_at"):
+                state_doc.released_at = now_ts
+
+    if exceptions_note is not None:
+        state_doc.exceptions_note = exceptions_note
+
+    if is_offline_recorded is not None:
+        state_doc.is_offline_recorded = cint(is_offline_recorded)
+
+    if last_sync_status is not None:
+        state_doc.last_sync_status = last_sync_status
+
+    if sync_error is not None:
+        state_doc.sync_error = sync_error
+
+    if _relay_workflow_has_field("status_changed_at"):
+        if status_changed:
+            state_doc.set("status_changed_at", now_ts)
+        elif state_doc.is_new() and not state_doc.get("status_changed_at"):
+            state_doc.set("status_changed_at", now_ts)
+
+    state_doc.flags.ignore_permissions = True
+    state_doc.save()
+    return state_doc
+
+
+def _upsert_relay_workflow_state_for_sales_order(
+    sales_order_doc,
+    pos_profile=None,
+    pos_opening_shift=None,
+    token_status="Draft",
+):
+    if not sales_order_doc or not sales_order_doc.get("name"):
+        return None
+    if not _relay_workflow_doctype_exists():
+        return None
+    if pos_profile and not _is_relay_workflow_enabled(pos_profile):
+        return None
+
+    state_doc = _get_relay_state_doc_for_sales_order(
+        sales_order_doc.name, pos_profile=pos_profile, pos_opening_shift=pos_opening_shift
+    )
+    if not state_doc:
+        return None
+
+    return _apply_relay_workflow_state_updates(
+        state_doc,
+        pos_profile=pos_profile,
+        token_id=sales_order_doc.name,
+        sales_order=sales_order_doc.name,
+        pos_opening_shift=pos_opening_shift,
+        token_status=token_status if token_status in RELAY_TOKEN_STATUSES else None,
+        picking_status="Not Started",
+        dispatch_status="Pending",
+        set_order_taken_at=True,
+    )
+
+
 def _get_edge_relay_base_url():
     relay_base_url = cstr(
         frappe.conf.get("posa_edge_relay_url")
@@ -719,18 +933,29 @@ def _get_relay_state_doc(invoice_doc):
     if state_name:
         return frappe.get_doc("POS Relay Workflow State", state_name)
 
-    return frappe.get_doc(
-        {
-            "doctype": "POS Relay Workflow State",
-            "sales_invoice": invoice_doc.name,
-            "pos_profile": invoice_doc.pos_profile,
-            "token_id": cstr(invoice_doc.name)[-5:],
-            "token_status": "Draft",
-            "picking_status": "Not Started",
-            "dispatch_status": "Pending",
-            "last_sync_status": "Not Applicable",
-        }
-    )
+    linked_sales_order = _get_invoice_linked_sales_order_name(invoice_doc)
+    if linked_sales_order and _relay_workflow_has_field("sales_order"):
+        state_name = frappe.db.exists(
+            "POS Relay Workflow State", {"sales_order": linked_sales_order}
+        )
+        if state_name:
+            return frappe.get_doc("POS Relay Workflow State", state_name)
+
+    payload = {
+        "doctype": "POS Relay Workflow State",
+        "sales_invoice": invoice_doc.name,
+        "pos_profile": invoice_doc.pos_profile,
+        "token_id": cstr(linked_sales_order or invoice_doc.name),
+        "token_status": "Draft",
+        "picking_status": "Not Started",
+        "dispatch_status": "Pending",
+        "last_sync_status": "Not Applicable",
+    }
+    if linked_sales_order and _relay_workflow_has_field("sales_order"):
+        payload["sales_order"] = linked_sales_order
+    if _relay_workflow_has_field("pos_opening_shift") and invoice_doc.get("posa_pos_opening_shift"):
+        payload["pos_opening_shift"] = invoice_doc.get("posa_pos_opening_shift")
+    return frappe.get_doc(payload)
 
 
 def _upsert_relay_workflow_state(
@@ -753,39 +978,25 @@ def _upsert_relay_workflow_state(
         return None
 
     state_doc = _get_relay_state_doc(invoice_doc)
+    linked_sales_order = _get_invoice_linked_sales_order_name(invoice_doc)
+    pos_opening_shift = invoice_doc.get("posa_pos_opening_shift")
+    token_id = linked_sales_order or cstr(invoice_doc.name)[-5:]
 
-    # Always align key identifiers with invoice
-    state_doc.pos_profile = invoice_doc.pos_profile
-    state_doc.token_id = cstr(invoice_doc.name)[-5:]
-
-    if token_status in RELAY_TOKEN_STATUSES:
-        state_doc.token_status = token_status
-
-    if picking_status in RELAY_PICKING_STATUSES:
-        state_doc.picking_status = picking_status
-
-    if dispatch_status in RELAY_DISPATCH_STATUSES:
-        state_doc.dispatch_status = dispatch_status
-
-    if exceptions_note is not None:
-        state_doc.exceptions_note = exceptions_note
-
-    if is_offline_recorded is not None:
-        state_doc.is_offline_recorded = cint(is_offline_recorded)
-
-    if last_sync_status is not None:
-        state_doc.last_sync_status = last_sync_status
-
-    if sync_error is not None:
-        state_doc.sync_error = sync_error
-
-    if state_doc.dispatch_status == "Released":
-        state_doc.released_by = frappe.session.user
-        state_doc.released_at = now_datetime()
-
-    state_doc.flags.ignore_permissions = True
-    state_doc.save()
-    return state_doc
+    return _apply_relay_workflow_state_updates(
+        state_doc,
+        token_status=token_status,
+        picking_status=picking_status,
+        dispatch_status=dispatch_status,
+        exceptions_note=exceptions_note,
+        is_offline_recorded=is_offline_recorded,
+        last_sync_status=last_sync_status,
+        sync_error=sync_error,
+        pos_profile=invoice_doc.pos_profile,
+        token_id=token_id,
+        sales_invoice=invoice_doc.name,
+        sales_order=linked_sales_order,
+        pos_opening_shift=pos_opening_shift,
+    )
 
 
 @frappe.whitelist()
@@ -835,6 +1046,219 @@ def get_relay_pick_queue(pos_profile=None, picking_status=None, dispatch_status=
         order_by="modified asc",
         limit_page_length=cint(limit_page_length) or 50,
     )
+
+
+def _normalize_monitor_display_status(row):
+    token_status = cstr((row or {}).get("token_status") or "")
+    picking_status = cstr((row or {}).get("picking_status") or "")
+    dispatch_status = cstr((row or {}).get("dispatch_status") or "")
+
+    if dispatch_status == "Released":
+        return "Dispatched"
+    if dispatch_status == "On Hold" or picking_status == "Exception":
+        return "On Hold"
+    if token_status != "Paid":
+        return "Unpaid"
+    if picking_status == "In Progress":
+        return "Picking"
+    if picking_status == "Picked":
+        return "Picked"
+    return "Paid"
+
+
+@frappe.whitelist()
+def get_relay_workflow_monitor_board(
+    pos_profile=None,
+    pos_opening_shift=None,
+    mine_only=0,
+    include_released=0,
+    limit_page_length=200,
+):
+    if not _relay_workflow_doctype_exists():
+        return {"summary": {"pending_count": 0, "server_time": str(now_datetime())}, "rows": []}
+
+    state_fields = [
+        "name",
+        "sales_invoice",
+        "pos_profile",
+        "token_id",
+        "token_status",
+        "picking_status",
+        "dispatch_status",
+        "exceptions_note",
+        "released_by",
+        "released_at",
+        "modified",
+    ]
+    for maybe_field in (
+        "sales_order",
+        "pos_opening_shift",
+        "status_changed_at",
+        "order_taken_at",
+        "paid_at",
+        "pick_started_at",
+        "picked_at",
+    ):
+        if _relay_workflow_has_field(maybe_field):
+            state_fields.append(maybe_field)
+
+    filters = {}
+    if pos_profile:
+        filters["pos_profile"] = pos_profile
+    if _relay_workflow_has_field("pos_opening_shift") and pos_opening_shift:
+        filters["pos_opening_shift"] = pos_opening_shift
+    if not cint(include_released):
+        filters["dispatch_status"] = ["!=", "Released"]
+
+    state_rows = frappe.get_all(
+        "POS Relay Workflow State",
+        filters=filters,
+        fields=state_fields,
+        order_by="modified asc",
+        limit_page_length=max(1, cint(limit_page_length) or 200),
+    )
+
+    so_names = sorted(
+        {cstr((row.get("sales_order") or "")).strip() for row in state_rows if row.get("sales_order")}
+    )
+    si_names = sorted(
+        {cstr((row.get("sales_invoice") or "")).strip() for row in state_rows if row.get("sales_invoice")}
+    )
+
+    so_map = {}
+    if so_names:
+        for doc in frappe.get_all(
+            "Sales Order",
+            filters={"name": ["in", so_names]},
+            fields=[
+                "name",
+                "customer",
+                "customer_name",
+                "grand_total",
+                "currency",
+                "owner",
+                "transaction_date",
+                "creation",
+                "modified",
+            ],
+            limit_page_length=len(so_names),
+        ):
+            so_map[doc.name] = doc
+
+    si_map = {}
+    if si_names:
+        for doc in frappe.get_all(
+            "Sales Invoice",
+            filters={"name": ["in", si_names]},
+            fields=[
+                "name",
+                "customer",
+                "customer_name",
+                "grand_total",
+                "currency",
+                "owner",
+                "posting_date",
+                "posting_time",
+                "creation",
+                "modified",
+                "posa_pos_opening_shift",
+            ],
+            limit_page_length=len(si_names),
+        ):
+            si_map[doc.name] = doc
+
+    user_ids = set()
+    for so in so_map.values():
+        if so.get("owner"):
+            user_ids.add(so.get("owner"))
+    for si in si_map.values():
+        if si.get("owner"):
+            user_ids.add(si.get("owner"))
+
+    user_map = {}
+    if user_ids:
+        for user in frappe.get_all(
+            "User",
+            filters={"name": ["in", list(user_ids)]},
+            fields=["name", "full_name", "first_name", "last_name"],
+            limit_page_length=len(user_ids),
+        ):
+            full_name = cstr(user.get("full_name") or "").strip()
+            if not full_name:
+                full_name = " ".join(
+                    [cstr(user.get("first_name") or "").strip(), cstr(user.get("last_name") or "").strip()]
+                ).strip()
+            user_map[user.name] = full_name or user.name
+
+    mine_only = cint(mine_only)
+    current_user = frappe.session.user
+
+    rows = []
+    status_counts = {}
+    for row in state_rows:
+        so_doc = so_map.get(row.get("sales_order")) if row.get("sales_order") else None
+        si_doc = si_map.get(row.get("sales_invoice")) if row.get("sales_invoice") else None
+
+        sales_associate_user = cstr((so_doc or {}).get("owner") or "").strip()
+        if not sales_associate_user and si_doc and row.get("token_status") != "Paid":
+            sales_associate_user = cstr(si_doc.get("owner") or "").strip()
+
+        if mine_only and sales_associate_user != current_user:
+            continue
+
+        sales_associate_name = user_map.get(sales_associate_user, sales_associate_user)
+        customer_name = (
+            (so_doc or {}).get("customer_name")
+            or (si_doc or {}).get("customer_name")
+            or ""
+        )
+        grand_total = (so_doc or {}).get("grand_total")
+        if grand_total in (None, ""):
+            grand_total = (si_doc or {}).get("grand_total")
+        currency = (so_doc or {}).get("currency") or (si_doc or {}).get("currency") or ""
+
+        order_taken_at = row.get("order_taken_at") or (so_doc or {}).get("creation") or (si_doc or {}).get("creation")
+        status_changed_at = row.get("status_changed_at") or row.get("modified")
+        effective_shift = row.get("pos_opening_shift") or (si_doc or {}).get("posa_pos_opening_shift") or ""
+
+        monitor_row = {
+            "workflow_state": row.get("name"),
+            "sales_order": row.get("sales_order") or "",
+            "sales_invoice": row.get("sales_invoice") or "",
+            "token_id": row.get("token_id") or "",
+            "customer_name": customer_name,
+            "grand_total": grand_total,
+            "currency": currency,
+            "sales_associate_user": sales_associate_user,
+            "sales_associate_name": sales_associate_name,
+            "pos_opening_shift": effective_shift,
+            "token_status": row.get("token_status"),
+            "picking_status": row.get("picking_status"),
+            "dispatch_status": row.get("dispatch_status"),
+            "display_status": _normalize_monitor_display_status(row),
+            "order_taken_at": order_taken_at,
+            "paid_at": row.get("paid_at"),
+            "pick_started_at": row.get("pick_started_at"),
+            "picked_at": row.get("picked_at"),
+            "released_at": row.get("released_at"),
+            "status_changed_at": status_changed_at,
+        }
+        rows.append(monitor_row)
+        status_counts[monitor_row["display_status"]] = status_counts.get(monitor_row["display_status"], 0) + 1
+
+    def _sort_key(item):
+        return cstr(item.get("status_changed_at") or item.get("order_taken_at") or "")
+
+    rows.sort(key=_sort_key)
+
+    return {
+        "summary": {
+            "pending_count": len(rows),
+            "status_counts": status_counts,
+            "server_time": str(now_datetime()),
+        },
+        "rows": rows,
+    }
 
 
 @frappe.whitelist()
@@ -948,6 +1372,139 @@ def update_invoice_from_order(data):
     invoice_doc.update(data)
     invoice_doc.save()
     return invoice_doc
+
+
+@frappe.whitelist()
+def create_sales_order_token(data):
+    if isinstance(data, str):
+        data = json.loads(data or "{}")
+    data = data or {}
+
+    pos_profile = cstr(data.get("pos_profile") or "").strip()
+    pos_opening_shift = cstr(data.get("pos_opening_shift") or "").strip()
+    company = cstr(data.get("company") or "").strip()
+    customer = cstr(data.get("customer") or "").strip()
+    items = data.get("items") or []
+
+    if not pos_profile:
+        frappe.throw(_("POS Profile is required to create Sales Order token."))
+    if not company:
+        frappe.throw(_("Company is required to create Sales Order token."))
+    if not customer:
+        frappe.throw(_("Customer is required to create Sales Order token."))
+    if not items:
+        frappe.throw(_("At least one item is required to create Sales Order token."))
+
+    if not cint(frappe.get_cached_value("POS Profile", pos_profile, "posa_allow_sales_order") or 0):
+        frappe.throw(
+            _("POS Profile {0} is not configured to allow Sales Orders.").format(pos_profile)
+        )
+
+    transaction_date = cstr(data.get("posting_date") or nowdate())
+    sales_order_doc = frappe.new_doc("Sales Order")
+    sales_order_doc.company = company
+    sales_order_doc.customer = customer
+    sales_order_doc.transaction_date = transaction_date
+    sales_order_doc.ignore_pricing_rule = 1
+
+    # Standard optional fields that may be present on POS payload
+    if data.get("currency"):
+        sales_order_doc.currency = data.get("currency")
+    if data.get("campaign"):
+        sales_order_doc.campaign = data.get("campaign")
+
+    selling_price_list = frappe.get_cached_value("POS Profile", pos_profile, "selling_price_list")
+    if selling_price_list and getattr(sales_order_doc, "selling_price_list", None) in (None, ""):
+        sales_order_doc.selling_price_list = selling_price_list
+
+    # POSAwesome custom fields on Sales Order (if migrated)
+    if sales_order_doc.meta.has_field("posa_notes"):
+        sales_order_doc.posa_notes = data.get("posa_notes") or ""
+    if sales_order_doc.meta.has_field("posa_offers") and data.get("posa_offers") is not None:
+        sales_order_doc.set("posa_offers", data.get("posa_offers") or [])
+    if sales_order_doc.meta.has_field("posa_coupons") and data.get("posa_coupons") is not None:
+        sales_order_doc.set("posa_coupons", data.get("posa_coupons") or [])
+    if sales_order_doc.meta.has_field("posa_delivery_charges") and data.get("posa_delivery_charges"):
+        sales_order_doc.posa_delivery_charges = data.get("posa_delivery_charges")
+    if sales_order_doc.meta.has_field("posa_delivery_charges_rate") and data.get("posa_delivery_charges_rate") is not None:
+        sales_order_doc.posa_delivery_charges_rate = data.get("posa_delivery_charges_rate")
+
+    so_item_meta = frappe.get_meta("Sales Order Item")
+    for raw in items:
+        item_code = cstr((raw or {}).get("item_code") or "").strip()
+        if not item_code:
+            continue
+
+        row = sales_order_doc.append("items", {})
+        row.item_code = item_code
+        row.qty = flt((raw or {}).get("qty") or 0)
+        row.uom = (raw or {}).get("uom")
+        if (raw or {}).get("rate") is not None:
+            row.rate = flt((raw or {}).get("rate"))
+        if (raw or {}).get("conversion_factor") is not None:
+            row.conversion_factor = flt((raw or {}).get("conversion_factor") or 1) or 1
+        if so_item_meta.has_field("serial_no") and (raw or {}).get("serial_no"):
+            row.serial_no = (raw or {}).get("serial_no")
+        if so_item_meta.has_field("batch_no") and (raw or {}).get("batch_no"):
+            row.batch_no = (raw or {}).get("batch_no")
+        if so_item_meta.has_field("discount_percentage") and (raw or {}).get("discount_percentage") is not None:
+            row.discount_percentage = flt((raw or {}).get("discount_percentage") or 0)
+        if so_item_meta.has_field("discount_amount") and (raw or {}).get("discount_amount") is not None:
+            row.discount_amount = flt((raw or {}).get("discount_amount") or 0)
+        if so_item_meta.has_field("price_list_rate") and (raw or {}).get("price_list_rate") is not None:
+            row.price_list_rate = flt((raw or {}).get("price_list_rate") or 0)
+        if so_item_meta.has_field("posa_notes") and (raw or {}).get("posa_notes") is not None:
+            row.posa_notes = (raw or {}).get("posa_notes") or ""
+        if so_item_meta.has_field("posa_delivery_date") and (raw or {}).get("posa_delivery_date"):
+            row.posa_delivery_date = (raw or {}).get("posa_delivery_date")
+        # Sales Order requires item delivery date; use row-level if provided, otherwise transaction date.
+        if so_item_meta.has_field("delivery_date"):
+            row.delivery_date = (raw or {}).get("posa_delivery_date") or transaction_date
+
+    if not sales_order_doc.get("items"):
+        frappe.throw(_("No valid items were provided for Sales Order token creation."))
+
+    if data.get("discount_amount") is not None and hasattr(sales_order_doc, "discount_amount"):
+        sales_order_doc.discount_amount = flt(data.get("discount_amount") or 0)
+    if data.get("additional_discount_percentage") is not None and hasattr(sales_order_doc, "additional_discount_percentage"):
+        sales_order_doc.additional_discount_percentage = flt(data.get("additional_discount_percentage") or 0)
+
+    sales_order_doc.flags.ignore_permissions = True
+    frappe.flags.ignore_account_permission = True
+    sales_order_doc.run_method("set_missing_values")
+    if hasattr(sales_order_doc, "calculate_taxes_and_totals"):
+        sales_order_doc.calculate_taxes_and_totals()
+    sales_order_doc.save()
+    sales_order_doc.submit()
+
+    workflow_state = _upsert_relay_workflow_state_for_sales_order(
+        sales_order_doc,
+        pos_profile=pos_profile,
+        pos_opening_shift=pos_opening_shift or None,
+        token_status="Draft",
+    )
+
+    sales_associate_user = frappe.session.user
+    sales_associate_name = (
+        frappe.get_cached_value("User", sales_associate_user, "full_name")
+        or sales_associate_user
+    )
+    order_taken_at = (workflow_state.get("order_taken_at") if workflow_state else None) or now_datetime()
+
+    return {
+        "sales_order_name": sales_order_doc.name,
+        "token_id": sales_order_doc.name,
+        "token_last4": cstr(sales_order_doc.name)[-4:],
+        "customer": sales_order_doc.customer,
+        "customer_name": sales_order_doc.customer_name,
+        "grand_total": sales_order_doc.grand_total,
+        "currency": sales_order_doc.currency,
+        "order_taken_at": str(order_taken_at),
+        "sales_associate_user": sales_associate_user,
+        "sales_associate_name": sales_associate_name,
+        "sales_order": sales_order_doc.as_dict(),
+        "workflow_state": workflow_state.as_dict() if workflow_state else None,
+    }
 
 
 @frappe.whitelist()
