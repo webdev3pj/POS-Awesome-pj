@@ -28,6 +28,14 @@ def create_app():
 
     _start_sync_thread()
 
+    @app.after_request
+    def add_cors_headers(response):
+        # Allow POS browser clients (served from cloud origin) to post to the local relay
+        response.headers["Access-Control-Allow-Origin"] = "*"
+        response.headers["Access-Control-Allow-Methods"] = "GET,POST,OPTIONS"
+        response.headers["Access-Control-Allow-Headers"] = "Content-Type,Authorization"
+        return response
+
     @app.route("/")
     def dashboard():
         cfg = load_config()
@@ -123,6 +131,29 @@ def create_app():
     def relay_release():
         payload = request.get_json(silent=True) or {}
         event_id = enqueue_event("dispatch_release", payload)
+        return jsonify({"ok": True, "event_id": event_id, "status": "queued"})
+
+    @app.route("/relay/submit-invoice", methods=["POST", "OPTIONS"])
+    def relay_submit_invoice():
+        if request.method == "OPTIONS":
+            return ("", 204)
+
+        payload = request.get_json(silent=True) or {}
+        invoice_payload = payload.get("invoice")
+        data_payload = payload.get("data")
+
+        if not invoice_payload or not data_payload:
+            return (
+                jsonify(
+                    {
+                        "ok": False,
+                        "message": "Both 'invoice' and 'data' are required.",
+                    }
+                ),
+                400,
+            )
+
+        event_id = enqueue_event("invoice_submit", payload)
         return jsonify({"ok": True, "event_id": event_id, "status": "queued"})
 
     return app

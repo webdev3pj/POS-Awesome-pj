@@ -117,12 +117,20 @@ What it added:
 
 ### 5.3 Edge Relay Service Responsibilities
 - Receive local events from external systems/devices (token/pick/release)
+- Receive POS invoice submissions for edge-first flow (`/relay/submit-invoice`)
 - Queue events durably (SQLite)
 - Sync to Frappe cloud via API tokens
 - Provide operational visibility:
   - /health
   - /api/metrics
   - /api/queue
+
+### 5.3.1 Edge-First Transaction Path (Current Plan-Aligned Implementation)
+For relay-enabled POS Profiles with `custom_edge_relay_url` configured:
+1. POS submits invoice payload to edge relay endpoint `/relay/submit-invoice`.
+2. Edge relay stores event as `invoice_submit` in local queue.
+3. Relay sync worker pushes queue event to cloud method `submit_invoice`.
+4. If edge relay submit fails from POS browser, frontend falls back to direct cloud submit and shows warning.
 
 ### 5.4 POS UI Status Layer
 In Navbar:
@@ -176,8 +184,10 @@ For one enabled profile:
 2. Set custom_edge_relay_url to target edge host
 3. Open POS and verify both status chips
 4. Create and submit invoice
-5. Validate token/pick/dispatch transitions through relay and cloud
-6. Confirm queue/error handling paths and operator diagnostics
+5. Validate invoice first lands in edge relay queue (`invoice_submit`)
+6. Validate relay sync submits invoice to cloud `submit_invoice`
+7. Validate token/pick/dispatch transitions through relay and cloud
+8. Confirm queue/error handling paths and fallback diagnostics
 
 ### 9.3 Hardening Backlog
 - Add robust retry policy/backoff for sync worker
@@ -271,7 +281,10 @@ If you set POS Profile `custom_edge_relay_url` to `http://192.168.50.168:8787`:
   - Relay Host Type = private_lan
 - If cloud route is present, relay chip shows **Online**.
 - Cloud chip shows **Cloud Online**.
-- Test invoice reaches relay queue and sync path without manual DB intervention.
+- For enabled profile with relay URL configured, submit flow is edge-first:
+  1. Invoice is queued at edge relay (`invoice_submit` event)
+  2. Relay sync submits it to cloud `submit_invoice`
+  3. If relay call fails from browser, system falls back to direct cloud submit with warning.
 
 ## 14. Update Policy for This File
 Whenever testing behavior, deployment status, or runbook steps change, update this markdown and regenerate the sibling PDF in the same folder before finalizing branch work.

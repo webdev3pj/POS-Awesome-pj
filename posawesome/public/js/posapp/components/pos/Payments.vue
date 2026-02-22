@@ -923,6 +923,15 @@ export default {
       data["is_cashback"] = this.is_cashback;
 
       const vm = this;
+
+      const relayEnabled = parseInt(vm.pos_profile.custom_have_token || 0, 10) === 1;
+      const relayBaseUrl = (vm.pos_profile.custom_edge_relay_url || "").trim();
+
+      if (relayEnabled && relayBaseUrl) {
+        vm.submit_invoice_via_relay(relayBaseUrl, data, print);
+        return;
+      }
+
       frappe.call({
         method: "posawesome.posawesome.api.posapp.submit_invoice",
         args: {
@@ -970,6 +979,78 @@ export default {
           }
         },
       });
+    },
+    submit_invoice_via_relay(relayBaseUrl, data, print) {
+      const vm = this;
+      const endpoint = `${relayBaseUrl.replace(/\/$/, "")}/relay/submit-invoice`;
+
+      fetch(endpoint, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({
+          invoice: vm.invoice_doc,
+          data: data,
+        }),
+      })
+        .then(async (response) => {
+          let payload = {};
+          try {
+            payload = await response.json();
+          } catch (e) {
+            payload = {};
+          }
+
+          if (!response.ok || !payload.ok) {
+            throw new Error(payload.message || "Relay submit failed");
+          }
+
+          if (print) {
+            vm.load_print_page();
+          }
+
+          evntBus.$emit("set_last_invoice", vm.invoice_doc.name || "Queued");
+          evntBus.$emit("show_mesage", {
+            text: __(
+              "Invoice queued on Edge Relay (Event #{0}). Cloud sync will happen from relay.",
+              [payload.event_id || "-"]
+            ),
+            color: "success",
+          });
+          frappe.utils.play_sound("submit");
+        })
+        .catch((error) => {
+          evntBus.$emit("show_mesage", {
+            text: __(
+              "Edge Relay submit failed: {0}. Falling back to direct cloud submit.",
+              [error.message || "Unknown error"]
+            ),
+            color: "warning",
+          });
+
+          frappe.call({
+            method: "posawesome.posawesome.api.posapp.submit_invoice",
+            args: {
+              data: data,
+              invoice: vm.invoice_doc,
+            },
+            async: true,
+            callback: function (r) {
+              if (r.message) {
+                if (print) {
+                  vm.load_print_page();
+                }
+                evntBus.$emit("set_last_invoice", vm.invoice_doc.name);
+                evntBus.$emit("show_mesage", {
+                  text: `Invoice ${r.message.name} is Submited (Direct Cloud Fallback)`,
+                  color: "success",
+                });
+                frappe.utils.play_sound("submit");
+              }
+            },
+          });
+        });
     },
     set_full_amount(idx) {
       this.invoice_doc.payments.forEach((payment) => {

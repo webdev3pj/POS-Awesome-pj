@@ -1,5 +1,6 @@
 import time
 import requests
+from json import dumps
 
 from .storage import (
     get_next_queued_event,
@@ -14,16 +15,27 @@ EVENT_ENDPOINTS = {
     "token_create": "api/method/posawesome.posawesome.api.posapp.get_relay_workflow_state",
     "pick_update": "api/method/posawesome.posawesome.api.posapp.update_relay_picking_status",
     "dispatch_release": "api/method/posawesome.posawesome.api.posapp.release_relay_dispatch",
+    "invoice_submit": "api/method/posawesome.posawesome.api.posapp.submit_invoice",
 }
 
 
 def _build_headers(config):
     api_key = (config.get("api_key") or "").strip()
     api_secret = (config.get("api_secret") or "").strip()
-    headers = {"Content-Type": "application/json"}
+    headers = {}
     if api_key and api_secret:
         headers["Authorization"] = f"token {api_key}:{api_secret}"
     return headers
+
+
+def _build_request_payload(event_type, payload):
+    if event_type == "invoice_submit":
+        # submit_invoice expects serialized JSON strings for invoice and data
+        return {
+            "invoice": dumps(payload.get("invoice") or {}, ensure_ascii=False),
+            "data": dumps(payload.get("data") or {}, ensure_ascii=False),
+        }
+    return payload
 
 
 def sync_once():
@@ -53,12 +65,24 @@ def sync_once():
     mark_processing(event["id"])
 
     try:
-        response = requests.post(
-            url,
-            json=event.get("payload") or {},
-            headers=_build_headers(config),
-            timeout=15,
+        payload = _build_request_payload(
+            event.get("event_type"), event.get("payload") or {}
         )
+
+        if event.get("event_type") == "invoice_submit":
+            response = requests.post(
+                url,
+                data=payload,
+                headers=_build_headers(config),
+                timeout=15,
+            )
+        else:
+            response = requests.post(
+                url,
+                json=payload,
+                headers=_build_headers(config),
+                timeout=15,
+            )
         response.raise_for_status()
         mark_done(event["id"])
         return {
