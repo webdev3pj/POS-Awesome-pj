@@ -160,6 +160,68 @@ def update_opening_shift_data(data, pos_profile):
     data["stock_settings"].update({"allow_negative_stock": allow_negative_stock})
 
 
+def _get_single_operational_role():
+    user_roles = frappe.get_roles() or []
+    cline_roles = [r for r in user_roles if cstr(r).startswith("cline-")]
+    if len(cline_roles) != 1:
+        return ""
+    return cstr(cline_roles[0]).strip()
+
+
+@frappe.whitelist()
+def bootstrap_pos_session(pos_profile, company=None):
+    pos_profile = cstr(pos_profile or "").strip()
+    company = cstr(company or "").strip()
+    if not pos_profile:
+        frappe.throw(_("POS Profile is required"))
+
+    pos_profile_doc = frappe.get_doc("POS Profile", pos_profile)
+    target_company = cstr(company or pos_profile_doc.company or "").strip()
+    if not target_company:
+        frappe.throw(_("Company is required"))
+
+    if target_company != cstr(pos_profile_doc.company or "").strip():
+        frappe.throw(_("Selected Company does not match the POS Profile company."))
+
+    role = _get_single_operational_role()
+    if not role:
+        frappe.throw(
+            _(
+                "A single operational role is required for a non-cash POS session. Assign exactly one cline-* role."
+            )
+        )
+
+    if role == "cline-Cashier":
+        frappe.throw(
+            _(
+                "Cashier must open a POS Opening Shift for money accountability. Use the standard opening shift flow."
+            )
+        )
+
+    if role not in (
+        "cline-Sales Associate",
+        "cline-Picker",
+        "cline-Dispatch",
+        "cline-Supervisor",
+    ):
+        frappe.throw(_("Role {0} is not allowed to start a non-cash POS session.").format(role))
+
+    data = {
+        # Keep a lightweight object shape so existing frontend code that reads
+        # `pos_opening_shift.name` does not crash in no-cash role sessions.
+        "pos_opening_shift": {
+            "name": "",
+            "is_virtual_session": 1,
+            "session_role": role or "",
+        },
+        "session_mode": "no_cash_role_session",
+        "session_role": role or "",
+        "session_business_date": nowdate(),
+    }
+    update_opening_shift_data(data, pos_profile)
+    return data
+
+
 @frappe.whitelist()
 def get_items(
     pos_profile, price_list=None, item_group="", search_value="", customer=None
@@ -546,7 +608,9 @@ def _get_invoice_linked_sales_order_name(invoice_doc):
     return ""
 
 
-def _get_relay_state_doc_for_sales_order(sales_order_name, pos_profile=None, pos_opening_shift=None):
+def _get_relay_state_doc_for_sales_order(
+    sales_order_name, pos_profile=None, pos_opening_shift=None, business_date=None
+):
     if not sales_order_name or not _relay_workflow_has_field("sales_order"):
         return None
 
@@ -570,6 +634,8 @@ def _get_relay_state_doc_for_sales_order(sales_order_name, pos_profile=None, pos
         payload["sales_order"] = sales_order_name
     if _relay_workflow_has_field("pos_opening_shift") and pos_opening_shift:
         payload["pos_opening_shift"] = pos_opening_shift
+    if _relay_workflow_has_field("business_date") and business_date:
+        payload["business_date"] = cstr(business_date)
     return frappe.get_doc(payload)
 
 
@@ -587,6 +653,7 @@ def _apply_relay_workflow_state_updates(
     sales_invoice=None,
     sales_order=None,
     pos_opening_shift=None,
+    business_date=None,
     set_order_taken_at=False,
 ):
     if not state_doc:
@@ -609,6 +676,7 @@ def _apply_relay_workflow_state_updates(
 
     _set_state_field_if_exists(state_doc, "sales_order", sales_order)
     _set_state_field_if_exists(state_doc, "pos_opening_shift", pos_opening_shift)
+    _set_state_field_if_exists(state_doc, "business_date", cstr(business_date) if business_date else None)
 
     if set_order_taken_at and _relay_workflow_has_field("order_taken_at") and not state_doc.get("order_taken_at"):
         state_doc.set("order_taken_at", now_ts)
@@ -676,8 +744,12 @@ def _upsert_relay_workflow_state_for_sales_order(
     if pos_profile and not _is_relay_workflow_enabled(pos_profile):
         return None
 
+    so_business_date = cstr(sales_order_doc.get("transaction_date") or nowdate())
     state_doc = _get_relay_state_doc_for_sales_order(
-        sales_order_doc.name, pos_profile=pos_profile, pos_opening_shift=pos_opening_shift
+        sales_order_doc.name,
+        pos_profile=pos_profile,
+        pos_opening_shift=pos_opening_shift,
+        business_date=so_business_date,
     )
     if not state_doc:
         return None
@@ -688,6 +760,7 @@ def _upsert_relay_workflow_state_for_sales_order(
         token_id=sales_order_doc.name,
         sales_order=sales_order_doc.name,
         pos_opening_shift=pos_opening_shift,
+        business_date=so_business_date,
         token_status=token_status if token_status in RELAY_TOKEN_STATUSES else None,
         picking_status="Not Started",
         dispatch_status="Pending",
@@ -955,6 +1028,8 @@ def _get_relay_state_doc(invoice_doc):
         payload["sales_order"] = linked_sales_order
     if _relay_workflow_has_field("pos_opening_shift") and invoice_doc.get("posa_pos_opening_shift"):
         payload["pos_opening_shift"] = invoice_doc.get("posa_pos_opening_shift")
+    if _relay_workflow_has_field("business_date"):
+        payload["business_date"] = cstr(invoice_doc.get("posting_date") or nowdate())
     return frappe.get_doc(payload)
 
 
@@ -981,6 +1056,14 @@ def _upsert_relay_workflow_state(
     linked_sales_order = _get_invoice_linked_sales_order_name(invoice_doc)
     pos_opening_shift = invoice_doc.get("posa_pos_opening_shift")
     token_id = linked_sales_order or cstr(invoice_doc.name)[-5:]
+    business_date = cstr(invoice_doc.get("posting_date") or nowdate())
+    if linked_sales_order:
+        try:
+            so_txn_date = frappe.get_cached_value("Sales Order", linked_sales_order, "transaction_date")
+            if so_txn_date:
+                business_date = cstr(so_txn_date)
+        except Exception:
+            pass
 
     return _apply_relay_workflow_state_updates(
         state_doc,
@@ -996,6 +1079,7 @@ def _upsert_relay_workflow_state(
         sales_invoice=invoice_doc.name,
         sales_order=linked_sales_order,
         pos_opening_shift=pos_opening_shift,
+        business_date=business_date,
     )
 
 
@@ -1069,6 +1153,8 @@ def _normalize_monitor_display_status(row):
 @frappe.whitelist()
 def get_relay_workflow_monitor_board(
     pos_profile=None,
+    business_date=None,
+    scope_mode=None,
     pos_opening_shift=None,
     mine_only=0,
     include_released=0,
@@ -1092,6 +1178,7 @@ def get_relay_workflow_monitor_board(
     ]
     for maybe_field in (
         "sales_order",
+        "business_date",
         "pos_opening_shift",
         "status_changed_at",
         "order_taken_at",
@@ -1102,10 +1189,19 @@ def get_relay_workflow_monitor_board(
         if _relay_workflow_has_field(maybe_field):
             state_fields.append(maybe_field)
 
+    scope_mode = cstr(scope_mode or "business_date").strip().lower()
+    if scope_mode not in ("business_date", "opening_shift"):
+        scope_mode = "business_date"
+    target_business_date = cstr(business_date or nowdate()).strip() or nowdate()
+
     filters = {}
     if pos_profile:
         filters["pos_profile"] = pos_profile
-    if _relay_workflow_has_field("pos_opening_shift") and pos_opening_shift:
+    if (
+        scope_mode == "opening_shift"
+        and _relay_workflow_has_field("pos_opening_shift")
+        and pos_opening_shift
+    ):
         filters["pos_opening_shift"] = pos_opening_shift
     if not cint(include_released):
         filters["dispatch_status"] = ["!=", "Released"]
@@ -1195,9 +1291,31 @@ def get_relay_workflow_monitor_board(
 
     rows = []
     status_counts = {}
+
+    def _derived_business_date(row_obj, so_doc_obj=None, si_doc_obj=None):
+        if row_obj and row_obj.get("business_date"):
+            return cstr(row_obj.get("business_date"))
+        if so_doc_obj and so_doc_obj.get("transaction_date"):
+            return cstr(so_doc_obj.get("transaction_date"))
+        if si_doc_obj and si_doc_obj.get("posting_date"):
+            return cstr(si_doc_obj.get("posting_date"))
+        raw_dt = (row_obj or {}).get("order_taken_at") or (row_obj or {}).get("modified")
+        if raw_dt:
+            raw_text = cstr(raw_dt)
+            if " " in raw_text:
+                return raw_text.split(" ", 1)[0]
+            if "T" in raw_text:
+                return raw_text.split("T", 1)[0]
+        return ""
+
     for row in state_rows:
         so_doc = so_map.get(row.get("sales_order")) if row.get("sales_order") else None
         si_doc = si_map.get(row.get("sales_invoice")) if row.get("sales_invoice") else None
+
+        row_business_date = _derived_business_date(row, so_doc, si_doc)
+        if scope_mode == "business_date" and target_business_date:
+            if row_business_date and row_business_date != target_business_date:
+                continue
 
         sales_associate_user = cstr((so_doc or {}).get("owner") or "").strip()
         if not sales_associate_user and si_doc and row.get("token_status") != "Paid":
@@ -1231,6 +1349,7 @@ def get_relay_workflow_monitor_board(
             "currency": currency,
             "sales_associate_user": sales_associate_user,
             "sales_associate_name": sales_associate_name,
+            "business_date": row_business_date or target_business_date,
             "pos_opening_shift": effective_shift,
             "token_status": row.get("token_status"),
             "picking_status": row.get("picking_status"),
@@ -1256,6 +1375,9 @@ def get_relay_workflow_monitor_board(
             "pending_count": len(rows),
             "status_counts": status_counts,
             "server_time": str(now_datetime()),
+            "scope_mode": scope_mode,
+            "business_date": target_business_date if scope_mode == "business_date" else "",
+            "pos_profile": pos_profile or "",
         },
         "rows": rows,
     }
@@ -1499,6 +1621,7 @@ def create_sales_order_token(data):
         "customer_name": sales_order_doc.customer_name,
         "grand_total": sales_order_doc.grand_total,
         "currency": sales_order_doc.currency,
+        "business_date": cstr(sales_order_doc.get("transaction_date") or nowdate()),
         "order_taken_at": str(order_taken_at),
         "sales_associate_user": sales_associate_user,
         "sales_associate_name": sales_associate_name,

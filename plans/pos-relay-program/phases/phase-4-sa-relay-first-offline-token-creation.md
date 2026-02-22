@@ -1,5 +1,10 @@
 # Phase 4 - SA Relay-First Offline Token Creation
 
+## TL;DR (Business Owner)
+- This phase lets SA continue creating orders/tokens when the cloud is down (using the local relay first).
+- It happens after the online SA flow is proven stable.
+- The relay then syncs those SA orders back to cloud Sales Orders later.
+
 ## See also
 - `../README.md`
 - `../00-ai-agent-start-here.md`

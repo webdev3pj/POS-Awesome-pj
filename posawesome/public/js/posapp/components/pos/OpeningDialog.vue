@@ -4,10 +4,10 @@
       <!-- <template v-slot:activator="{ on, attrs }">
         <v-btn color="primary" dark v-bind="attrs" v-on="on">Open Dialog</v-btn>
       </template>-->
-      <v-card>
+        <v-card>
         <v-card-title>
           <span class="headline primary--text">{{
-            __('Create POS Opening Shift')
+            dialog_title
           }}</span>
         </v-card-title>
         <v-card-text>
@@ -29,7 +29,26 @@
                   required
                 ></v-autocomplete>
               </v-col>
-              <v-col cols="12">
+              <v-col cols="12" v-if="detected_role">
+                <v-alert type="info" dense outlined>
+                  <strong>Role:</strong> {{ detected_role_display }}
+                </v-alert>
+              </v-col>
+              <v-col cols="12" v-if="role_error">
+                <v-alert type="error" dense>
+                  {{ role_error }}
+                </v-alert>
+              </v-col>
+              <v-col cols="12" v-if="is_non_cash_role_session">
+                <v-alert type="info" dense outlined>
+                  {{
+                    __(
+                      'Cash opening/closing is cashier-only. You can start a non-cash POS session to create orders and tokens.'
+                    )
+                  }}
+                </v-alert>
+              </v-col>
+              <v-col cols="12" v-if="requires_cash_opening">
                 <template>
                   <v-data-table
                     :headers="payments_methods_headers"
@@ -93,6 +112,9 @@ export default {
       pos_profiles_data: [],
       pos_profiles: [],
       pos_profile: '',
+      // Role derived from ERPNext user roles (not user-selectable)
+      detected_role: '',
+      role_error: '',
       payments_method_data: [],
       payments_methods: [],
       payments_methods_headers: [
@@ -144,6 +166,28 @@ export default {
       });
     },
   },
+  computed: {
+    // Display role without "cline-" prefix
+    detected_role_display() {
+      if (this.detected_role && this.detected_role.startsWith('cline-')) {
+        return this.detected_role.substring(6);
+      }
+      return this.detected_role;
+    },
+    is_non_cash_role_session() {
+      const role = (this.detected_role || '').trim();
+      if (!role) return false;
+      return role !== 'cline-Cashier';
+    },
+    requires_cash_opening() {
+      return !this.is_non_cash_role_session;
+    },
+    dialog_title() {
+      return this.requires_cash_opening
+        ? __('Create POS Opening Shift')
+        : __('Start POS Session');
+    },
+  },
   methods: {
     close_opening_dialog() {
       evntBus.$emit('close_opening_dialog');
@@ -161,29 +205,55 @@ export default {
             vm.company = vm.companies[0];
             vm.pos_profiles_data = r.message.pos_profiles_data;
             vm.payments_method_data = r.message.payments_method;
+            // Get role from user's ERPNext roles (derived, not user-selected)
+            vm.detected_role = r.message.user_role || '';
+            vm.role_error = r.message.role_error || '';
           }
         },
       });
     },
     submit_dialog() {
-      if (!this.payments_methods.length || !this.company || !this.pos_profile) {
+      if (!this.company || !this.pos_profile) {
+        frappe.msgprint(__('Please select Company and POS Profile'));
+        return;
+      }
+      if (this.requires_cash_opening && !this.payments_methods.length) {
+        frappe.msgprint(__('Please enter opening amounts or configure payment methods for the POS Profile.'));
+        return;
+      }
+      if (this.role_error) {
+        frappe.msgprint(this.role_error);
         return;
       }
       this.is_loading = true;
       const vm = this;
+      // Store role in localStorage for session
+      localStorage.setItem('pos_current_role', this.detected_role);
+      const method = this.requires_cash_opening
+        ? 'posawesome.posawesome.api.posapp.create_opening_voucher'
+        : 'posawesome.posawesome.api.posapp.bootstrap_pos_session';
+      const args = this.requires_cash_opening
+        ? {
+            pos_profile: this.pos_profile,
+            company: this.company,
+            balance_details: this.payments_methods,
+          }
+        : {
+            pos_profile: this.pos_profile,
+            company: this.company,
+          };
       return frappe
-        .call('posawesome.posawesome.api.posapp.create_opening_voucher', {
-          pos_profile: this.pos_profile,
-          company: this.company,
-          balance_details: this.payments_methods,
-        })
+        .call(method, args)
         .then((r) => {
           if (r.message) {
             evntBus.$emit('register_pos_data', r.message);
             evntBus.$emit('set_company', r.message.company);
             vm.close_opening_dialog();
-            is_loading = false;
+            vm.is_loading = false;
           }
+        })
+        .catch(() => {
+          vm.is_loading = false;
         });
     },
     go_desk() {

@@ -1,5 +1,10 @@
 # Phase 2 - Cashier, Picker, Dispatch UI and Role Enforcement (Frontend UX Layer)
 
+## TL;DR (Business Owner)
+- This phase finishes the role-based screens so each role sees only what they should.
+- It builds on Phase 1/1B, where SA tokens and the sidebar monitor foundation are created.
+- The ticket sidebar stays useful across roles, and Phase 2 decides if it remains read-only or gets quick actions later.
+
 ## See also
 - `../README.md`
 - `../00-ai-agent-start-here.md`
@@ -27,7 +32,7 @@ Complete the operator-facing role UX so each role sees the right screens/actions
 - Opening dialog role derivation and no/multi-role blocking (`Implemented`).
 - Partial SA payment UI blocking in local working tree (`Partial`).
 - Cashier relay commit UX foundation and status diagnostics (`Implemented`/`Partial`).
-- Phase 1B monitor rail foundation added locally (ticket icon/sidebar, polling, current-shift pending rows, timing display) pending UAT and refinement.
+- Phase 1B monitor rail foundation added locally (ticket icon/sidebar, polling, profile/date-scoped pending rows, timing display) pending UAT and refinement.
 
 ## Implementation Tasks
 - [ ] Add read-only current role display in `Navbar.vue`.

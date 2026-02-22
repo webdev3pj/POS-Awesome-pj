@@ -1,5 +1,12 @@
 # 01 - Role-Based Workflow Specification (Detailed)
 
+## TL;DR (Business Owner)
+- This file defines exactly what each role should be able to see and do in POS.
+- SA can build orders/tokens and monitor status, but must not take payment or manage cash shifts.
+- Cashier owns payment and cash opening/closing.
+- The left ticket monitor sidebar is visible to all roles and is planned/scoped around `POS Profile + business date`.
+- UI blocks improve safety, but real security still requires server/relay authorization (Phase 3).
+
 ## See also
 - `README.md`
 - `00-ai-agent-start-here.md`
@@ -85,6 +92,8 @@ Status tags in the last column reflect current branch state.
 | Derived role display | Visible | Visible | Visible | Visible | Visible | `Implemented` |
 | Role self-selection | No | No | No | No | No | `Implemented` |
 | Block no/multi role when relay token workflow enabled | Yes | Yes | Yes | Yes | Yes | `Implemented` |
+| Start POS without cash opening table (non-cash roles) | Yes | No | Yes | Yes | Yes | `Implemented` (local working tree, pending UAT) |
+| Require cash opening amounts/table (cashier only) | No | Yes | No | No | No | `Implemented` (local working tree, pending UAT) |
 
 ### `Navbar.vue`
 | Capability | SA | Cashier | Picker | Dispatch | Supervisor | Status |
@@ -97,7 +106,7 @@ Status tags in the last column reflect current branch state.
 | Capability | SA | Cashier | Picker | Dispatch | Supervisor | Status |
 |---|---|---|---|---|---|---|
 | See collapsed ticket icon + pending count | Visible | Visible | Visible | Visible | Visible | `Implemented` (local working tree, pending UAT) |
-| Expand monitor panel for current shift | Yes | Yes | Yes | Yes | Yes | `Implemented` (local working tree, pending UAT) |
+| Expand monitor panel for profile/date scope (opening shift optional metadata) | Yes | Yes | Yes | Yes | Yes | `Implemented` (local working tree, pending UAT) |
 | View customer, SA name, order taken time, current status, time in status, grand total | Yes | Yes | Yes | Yes | Yes | `Implemented` (local working tree, pending UAT) |
 | Filter rows by `Mine` (SA owner) | Yes | Yes | Yes | Yes | Yes | `Implemented` (local working tree, pending UAT) |
 | See dispatched rows by default | No | No | No | No | No | `Implemented` (default hidden; API excludes released rows) |
@@ -145,7 +154,9 @@ Status tags in the last column reflect current branch state.
 ### Action matrix
 | Action | SA | Cashier | Picker | Dispatch | Supervisor | UI Status | Server/Relay Status |
 |---|---|---|---|---|---|---|---|
-| Open POS shift/session | Yes | Yes | Yes | Yes | Yes | `Implemented` | `Partial` |
+| Start POS session (non-cash roles allowed without opening cash) | Yes | Yes | Yes | Yes | Yes | `Implemented` (local working tree, pending UAT) | `Partial` |
+| Open cash shift / enter opening amounts | No | Yes | No | No | No | `Implemented` (local working tree, pending UAT) | `Partial` |
+| Close cash shift | No | Yes | No | No | Conditional | `Partial` (SA hidden/blocked locally; broader role rules pending) | `Partial` |
 | View ticket monitor rail (read-only) | Yes | Yes | Yes | Yes | Yes | `Implemented` (local working tree) | `N/A` |
 | Create token/order | Yes | Optional | No | No | Optional | `Partial` | `Planned` (SO-first API) |
 | Print token slip | Yes | Optional | No | No | Optional | `Partial` (text token today) | `N/A` |
@@ -165,7 +176,7 @@ What exists:
 - Role derivation and storage in opening dialog (`Implemented`).
 - SA payment block in UI exists in local working tree changes (`Partial` until committed/UAT).
 - SA SO token API + frontend save path is being implemented locally (`Partial`, requires UAT and migration).
-- SA can see cross-role workflow monitor rail and track status/timing for current shift (`Implemented` in local working tree, pending UAT).
+- SA can see cross-role workflow monitor rail and track status/timing for profile/date-scoped pending orders (`Implemented` in local working tree, pending UAT).
 
 What is missing:
 - SA token must create submitted Sales Order (Phase 1).
@@ -184,7 +195,7 @@ What exists:
 - Relay-enabled local-first payment commit path (`Implemented` foundation).
 - Direct cloud fallback disabled when relay-enabled commit fails (`Implemented`).
 - SO selection and SO -> SI conversion support exists (`Implemented`).
-- Workflow monitor rail can surface pending order status/timing (read-only) for current shift (`Implemented` local working tree, pending UAT).
+- Workflow monitor rail can surface pending order status/timing (read-only) for profile/date scope (`Implemented` local working tree, pending UAT).
 
 What is missing:
 - Prefer/guide cashier flow toward SO-first in role-specific UI (Phase 2).
@@ -241,7 +252,7 @@ Status: `Planned` (Phase 3)
   - QR/barcode token slip
   - preserve cashier SO -> SI preference
 - Phase 1B (immediately after Phase 1 core):
-  - ticket sidebar workflow monitor rail (current shift scope, cross-role visibility)
+  - ticket sidebar workflow monitor rail (default `POS Profile + business date` scope, cross-role visibility)
   - workflow timing timestamps (`order_taken_at`, `paid_at`, `pick_started_at`, `picked_at`, `status_changed_at`)
   - monitor API for pending order board + `Mine` filter
 - Phase 2:

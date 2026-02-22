@@ -1,5 +1,10 @@
 # Phase 3 - Relay Authentication and Server-Side Role Enforcement
 
+## TL;DR (Business Owner)
+- This phase is the security hardening phase.
+- It prevents users/devices from faking roles or calling relay actions they should not use.
+- UI restrictions are not enough without this phase.
+
 ## See also
 - `../README.md`
 - `../00-ai-agent-start-here.md`

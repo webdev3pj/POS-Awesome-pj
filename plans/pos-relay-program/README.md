@@ -1,5 +1,12 @@
 # POS Relay Program Docs (Active Planning Set)
 
+## TL;DR (Business Owner)
+- These are the live planning docs for the POS role workflow and offline relay work on branch `kilo-codex-v3`.
+- The current top priority is the SA flow: SA creates a `Sales Order` token, cashier later creates the `Sales Invoice`.
+- A live ticket-style sidebar monitor is being added so staff can track order status and delays.
+- SA should not open/close cash shifts; cashier owns cash opening/closing.
+- Use `00-ai-agent-start-here.md` first if you want the fastest summary of what is done and what is next.
+
 ## Purpose
 This folder is the active, branch-accurate planning and handoff set for the POS token/edge relay program on `kilo-codex-v3`.
 
@@ -57,8 +64,9 @@ It consolidates:
 - Relay local-first foundation exists and is substantial.
 - Role derivation foundation exists in POS Opening dialog.
 - Cashier relay commit path is the most complete implemented role flow.
-- SA payment is blocked in UI (local working tree), but SA token is still invoice-based in committed branch.
-- SA token must be converted to submitted Sales Order in Phase 1.
+- SA payment is blocked in UI in local work, and SA no-cash session support is being implemented so SA can work without opening a cash shift.
+- SA token conversion to submitted Sales Order is in active implementation/UAT preparation (Phase 1).
+- Ticket monitor rail scope is moving to `POS Profile + business date` so SA orders remain visible before cashier opens shift.
 - Relay auth and server-side role enforcement are still missing (critical).
 
 ## Source Documents Used (Context)

@@ -11,6 +11,7 @@
       v-if="!dialog"
       :pos_profile="pos_profile"
       :pos_opening_shift="pos_opening_shift"
+      :business_date="session_business_date"
     ></WorkflowTicketRail>
     <OpeningDialog v-if="dialog" :dialog="dialog"></OpeningDialog>
     <v-row v-show="!dialog">
@@ -89,6 +90,7 @@ export default {
       dialog: false,
       pos_profile: '',
       pos_opening_shift: '',
+      session_business_date: '',
       payment: false,
       offers: false,
       coupons: false,
@@ -123,6 +125,10 @@ export default {
           if (r.message) {
             this.pos_profile = r.message.pos_profile;
             this.pos_opening_shift = r.message.pos_opening_shift;
+            this.session_business_date =
+              r.message.session_business_date ||
+              (r.message.pos_opening_shift && r.message.pos_opening_shift.posting_date) ||
+              frappe.datetime.nowdate();
             this.get_offers(this.pos_profile.name);
             evntBus.$emit('register_pos_profile', r.message);
             evntBus.$emit('set_company', r.message.company);
@@ -136,6 +142,13 @@ export default {
       this.dialog = true;
     },
     get_closing_data() {
+      if (!this.pos_opening_shift || !this.pos_opening_shift.name) {
+        evntBus.$emit('show_mesage', {
+          text: __('Close Shift is only available for a cashier opening shift session.'),
+          color: 'warning',
+        });
+        return Promise.resolve();
+      }
       return frappe
         .call(
           'posawesome.posawesome.doctype.pos_closing_shift.pos_closing_shift.make_closing_shift_from_opening',
@@ -201,6 +214,10 @@ export default {
         this.pos_profile = data.pos_profile;
         this.get_offers(this.pos_profile.name);
         this.pos_opening_shift = data.pos_opening_shift;
+        this.session_business_date =
+          data.session_business_date ||
+          (data.pos_opening_shift && data.pos_opening_shift.posting_date) ||
+          frappe.datetime.nowdate();
         evntBus.$emit('register_pos_profile', data);
         console.info('LoadPosProfile');
       });

@@ -8,6 +8,7 @@
   "sales_invoice",
   "sales_order",
   "pos_profile",
+  "business_date",
   "pos_opening_shift",
   "token_id",
   "section_break_status",
@@ -57,6 +58,12 @@
    "label": "POS Profile",
    "options": "POS Profile",
    "reqd": 1
+  },
+  {
+   "fieldname": "business_date",
+   "fieldtype": "Date",
+   "in_standard_filter": 1,
+   "label": "Business Date"
   },
   {
    "fieldname": "pos_opening_shift",

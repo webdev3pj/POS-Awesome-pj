@@ -1,5 +1,12 @@
 # kilo-codex-v3 Branch-Accurate Relay Implementation Checklist
 
+## TL;DR (Business Owner)
+- This is the branch-specific checklist for what is already built vs what is still missing.
+- The current business priority is finishing and testing the SA frontend workflow (Sales Order token + sidebar monitor).
+- SA should not open/close cash shifts; cashier owns cash accountability.
+- The sidebar monitor is moving to `POS Profile + business date` scope so SA orders show up before cashier opens shift.
+- Use the `plans/pos-relay-program/` docs for full details and step-by-step implementation/testing.
+
 ## Active Program Docs (Read This First)
 - Use the phased docs set in `plans/pos-relay-program/` as the current planning and handoff source of truth.
 - Start with `plans/pos-relay-program/00-ai-agent-start-here.md` for status, next steps, and file map.
@@ -120,10 +127,12 @@
 - [ ] Show current derived role in `Navbar.vue` (read-only display).
 - [ ] Ship and UAT the ticket-style workflow monitor rail (Phase 1B):
   - left sidebar ticket icon + pending count badge
-  - current-shift pending orders list
+  - profile/date-scoped pending orders list (`POS Profile + business date`; opening shift optional metadata)
   - `Mine` filter by Sales Order owner (SA attribution)
   - timing display (`order_taken_at` / time-in-status)
   - hide rows after dispatch release
+- [ ] Implement/verify SA no-cash POS session entry (cash opening remains cashier-only).
+- [ ] Near-term follow-up: add POS Profile-specific Sales Order naming series setting (`posa_sales_order_naming_series`) for per-profile SO numbering; current testing uses default SO series.
 - [ ] Implement role-based UI visibility/disable rules using derived role:
   - Sales Associate
   - Cashier

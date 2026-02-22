@@ -1,5 +1,10 @@
 # CHANGELOG / Progress Ledger
 
+## TL;DR (Business Owner)
+- This file is the running history of what changed, what was tested, and what remains.
+- Check the latest dated entry to see the current implementation/testing status.
+- It is the fastest way to know whether something is planned, local-only, or actually verified.
+
 ## How to use
 Append a new dated entry after each significant implementation, validation, or deployment event.
 
@@ -42,7 +47,7 @@ Entry format:
   - Updated `POS Relay Workflow State` DocType JSON for `sales_order`, shift scoping, and timing fields (`order_taken_at`, `paid_at`, `pick_started_at`, `picked_at`, `status_changed_at`) and made `sales_invoice` optional at initial creation.
   - Added duplicate Sales Order guard in `posawesome/posawesome/api/invoice.py` when SI already originates from SO.
   - Updated `Invoice.vue` SA `Save/New` flow toward SO token creation and token slip printing (QR/barcode) and relay best-effort token sync.
-  - Added `WorkflowTicketRail.vue` and mounted it in `Pos.vue` (ticket icon, badge count, expandable current-shift monitor, `Mine` filter, polling).
+  - Added `WorkflowTicketRail.vue` and mounted it in `Pos.vue` (ticket icon, badge count, expandable monitor, `Mine` filter, polling).
   - Emitted `workflow_monitor_refresh_requested` from SA token creation and payment success paths.
   - Updated docs to introduce Phase 1B ticket monitor rail requirement and tracking.
 - What was verified:
@@ -56,4 +61,28 @@ Entry format:
 - Links:
   - `phases/phase-1-sa-sales-order-token-online-first.md`
   - `01-role-based-workflow-spec.md`
+  - `02-master-implementation-plan.md`
+
+## 2026-02-22 - SA no-cash session + profile/date monitor scope implementation (local, pending deploy/UAT)
+- Branch: `kilo-codex-v3`
+- Summary: Updated Phase 1B implementation locally so SA can enter POS without cash opening and the ticket monitor rail scopes by `POS Profile + business date` instead of requiring a cashier shift.
+- What changed:
+  - Added `bootstrap_pos_session(...)` in `posawesome/posawesome/api/posapp.py` for non-cash role sessions (SA/picker/dispatch/supervisor) while keeping cashier on opening shift flow.
+  - Updated opening dialog and POS shell (`OpeningDialog.vue`, `Pos.vue`) to support no-cash sessions and virtual/no-opening-shift session payloads.
+  - Updated ticket monitor API and `WorkflowTicketRail.vue` to use default `POS Profile + business date` scope and keep `pos_opening_shift` optional metadata.
+  - Added `business_date` to `POS Relay Workflow State` DocType and workflow-state helper updates for monitor scoping and timing continuity.
+  - Added SA close-shift UI guard/hide behavior in `Navbar.vue`.
+  - Added Cypress watch-mode SA workflow spec draft (`cypress/e2e/sa_workflow_frontend_watch.cy.js`) for post-deploy validation.
+  - Updated docs with business-owner TL;DR sections and recorded near-term follow-up for POS Profile-specific Sales Order series (use default series for current tests).
+- What was verified:
+  - Code review of local diffs completed.
+  - Runtime UAT pending deploy + migrate.
+- What remains:
+  - Commit/push these changes.
+  - Deploy + migrate dev site.
+  - Set `cline` to SA-only operational role for SA watch-mode test.
+  - Run Cypress in watch mode (Chrome) and document results in a UAT report.
+- Links:
+  - `phases/phase-1-sa-sales-order-token-online-first.md`
+  - `00-ai-agent-start-here.md`
   - `02-master-implementation-plan.md`

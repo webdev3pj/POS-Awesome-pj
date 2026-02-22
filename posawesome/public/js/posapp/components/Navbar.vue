@@ -141,7 +141,7 @@
               <v-list-item-group v-model="menu_item" color="primary">
                 <v-list-item
                   @click="close_shift_dialog"
-                  v-if="!pos_profile.posa_hide_closing_shift && item == 0"
+                  v-if="can_show_close_shift_action && item == 0"
                 >
                   <v-list-item-icon>
                     <v-icon>mdi-content-save-move-outline</v-icon>
@@ -295,9 +295,17 @@ export default {
         url: '',
       },
       cloud_poll_timer: null,
+      current_role: '',
     };
   },
   computed: {
+    is_sales_associate_role() {
+      return (this.current_role || '') === 'cline-Sales Associate';
+    },
+    can_show_close_shift_action() {
+      if (!this.pos_profile || this.pos_profile.posa_hide_closing_shift) return false;
+      return !this.is_sales_associate_role;
+    },
     relay_status_chip_text() {
       if (this.relay_status.connected) {
         return __('Relay Online');
@@ -343,6 +351,13 @@ export default {
     },
   },
   methods: {
+    sync_current_role() {
+      try {
+        this.current_role = (localStorage.getItem('pos_current_role') || '').trim();
+      } catch (e) {
+        this.current_role = '';
+      }
+    },
     changePage(key) {
       this.$emit('changePage', key);
     },
@@ -358,6 +373,14 @@ export default {
       win.focus();
     },
     close_shift_dialog() {
+      this.sync_current_role();
+      if (this.is_sales_associate_role) {
+        evntBus.$emit('show_mesage', {
+          text: __('Close Shift is cashier-only. Sales Associates do not open or close cash shifts.'),
+          color: 'warning',
+        });
+        return;
+      }
       evntBus.$emit('open_closing_dialog');
     },
     show_mesage(data) {
@@ -571,6 +594,7 @@ export default {
   },
   created: function () {
     this.$nextTick(function () {
+      this.sync_current_role();
       this.start_cloud_poll();
       window.addEventListener('online', this.on_online_status_change);
       window.addEventListener('offline', this.on_online_status_change);
@@ -584,6 +608,7 @@ export default {
           : this.company_img;
       });
       evntBus.$on('register_pos_profile', (data) => {
+        this.sync_current_role();
         this.pos_profile = data.pos_profile;
         const payments = { text: 'Payments', icon: 'mdi-cash-register' };
         if (

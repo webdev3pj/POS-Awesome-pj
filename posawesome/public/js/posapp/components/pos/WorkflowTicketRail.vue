@@ -42,7 +42,7 @@
             <div>
               <div class="workflow-ticket-rail-title">{{ __('Order Monitor') }}</div>
               <div class="workflow-ticket-rail-subtitle">
-                {{ openingShiftLabel }}
+                {{ monitorScopeLabel }}
               </div>
             </div>
             <v-btn icon small @click="toggleExpanded(false)">
@@ -52,7 +52,7 @@
 
           <div class="workflow-ticket-rail-filters">
             <v-btn-toggle v-model="filterMode" dense mandatory>
-              <v-btn small value="all">{{ __('All (shift)') }}</v-btn>
+              <v-btn small value="all">{{ __('All (date)') }}</v-btn>
               <v-btn small value="mine">{{ __('Mine') }}</v-btn>
             </v-btn-toggle>
             <v-btn icon small @click="manualRefresh" :disabled="loading">
@@ -80,12 +80,12 @@
             {{ errorText }}
           </div>
 
-          <div v-if="!profileName || !openingShiftName" class="workflow-ticket-rail-empty">
-            {{ __('Open a POS shift to monitor workflow orders.') }}
+          <div v-if="!profileName" class="workflow-ticket-rail-empty">
+            {{ __('Open POS with a profile to monitor workflow orders.') }}
           </div>
 
           <div v-else-if="!rows.length && !loading" class="workflow-ticket-rail-empty">
-            {{ __('No pending orders in this shift.') }}
+            {{ __('No pending orders for this profile/date.') }}
           </div>
 
           <v-list v-else dense class="workflow-ticket-rail-list">
@@ -142,6 +142,10 @@ export default {
       type: [Object, String],
       default: null,
     },
+    business_date: {
+      type: String,
+      default: '',
+    },
   },
   data() {
     return {
@@ -172,6 +176,14 @@ export default {
     openingShiftName() {
       return this.extractDocName(this.pos_opening_shift);
     },
+    scopeBusinessDate() {
+      const explicit = (this.business_date || '').trim();
+      if (explicit) return explicit;
+      if (typeof frappe !== 'undefined' && frappe.datetime && frappe.datetime.nowdate) {
+        return frappe.datetime.nowdate();
+      }
+      return new Date().toISOString().slice(0, 10);
+    },
     mineOnly() {
       return this.filterMode === 'mine';
     },
@@ -181,8 +193,10 @@ export default {
     isMobile() {
       return this.viewportWidth < 960;
     },
-    openingShiftLabel() {
-      return this.openingShiftName || __('No shift');
+    monitorScopeLabel() {
+      const profile = this.profileName || __('No profile');
+      const dateLabel = this.scopeBusinessDate || '-';
+      return `${__('Profile')}: ${profile} | ${__('Date')}: ${dateLabel}`;
     },
     summaryChips() {
       const raw = (this.summary && this.summary.status_counts) || {};
@@ -210,6 +224,10 @@ export default {
         this.restartPolling();
       },
       deep: true,
+    },
+    business_date() {
+      this.fetchBoard(true);
+      this.restartPolling();
     },
     filterMode() {
       this.fetchBoard(false);
@@ -252,7 +270,7 @@ export default {
     },
     restartPolling() {
       this.stopPolling();
-      if (!this.profileName || !this.openingShiftName) {
+      if (!this.profileName) {
         return;
       }
       this.scheduleNextPoll();
@@ -305,7 +323,7 @@ export default {
       });
     },
     async fetchBoard(silent) {
-      if (!this.profileName || !this.openingShiftName) {
+      if (!this.profileName) {
         this.rows = [];
         this.summary = { pending_count: 0, status_counts: {}, server_time: '' };
         this.errorText = '';
@@ -319,7 +337,9 @@ export default {
       try {
         const payload = await this.requestApi({
           pos_profile: this.profileName,
-          pos_opening_shift: this.openingShiftName,
+          business_date: this.scopeBusinessDate,
+          scope_mode: 'business_date',
+          pos_opening_shift: this.openingShiftName || '',
           mine_only: this.mineOnly ? 1 : 0,
           include_released: 0,
           limit_page_length: 200,

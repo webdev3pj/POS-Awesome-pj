@@ -1,5 +1,10 @@
 # Phase 5 - UAT, Deployment, Observability, and Hardening
 
+## TL;DR (Business Owner)
+- This phase is where we prove the system works in real life and collect evidence.
+- It covers UAT, deployment checklists, rollback steps, and monitoring/runbooks.
+- Cypress watch-mode testing on the live dev site is part of this phase.
+
 ## See also
 - `../README.md`
 - `../00-ai-agent-start-here.md`

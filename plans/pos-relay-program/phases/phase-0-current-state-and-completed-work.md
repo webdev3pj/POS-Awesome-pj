@@ -1,5 +1,10 @@
 # Phase 0 - Current State and Completed Work
 
+## TL;DR (Business Owner)
+- This document is the baseline snapshot: what is already in the branch vs what exists only locally on a developer machine.
+- It prevents confusion about what is truly deployed and what is still being prepared.
+- Use it to check whether a feature is committed/pushed before testing or deployment.
+
 ## See also
 - `../README.md`
 - `../00-ai-agent-start-here.md`

@@ -1,5 +1,12 @@
 # Phase 1 - SA Sales Order Token (Online-First)
 
+## TL;DR (Business Owner)
+- This phase makes SA create a `Sales Order` token instead of consuming a `Sales Invoice` number.
+- It protects invoice numbering for audit purposes because only cashier creates the invoice.
+- It also includes the first version of the ticket sidebar monitor and timing fields.
+- SA should be able to start a POS session without opening cash; cashier still owns cash opening/closing.
+- Current testing will use the default Sales Order series; per-profile SO series is a follow-up feature.
+
 ## See also
 - `../README.md`
 - `../00-ai-agent-start-here.md`
@@ -17,13 +24,15 @@ Convert the Sales Associate token flow from draft `Sales Invoice`-based token ge
 - Cashier-preferred `SO -> SI` flow preserved
 - Workflow state support for SO-first token lifecycle
 - Best-effort relay token sync using SO token id
-- Phase 1B: ticket sidebar workflow monitor rail (current shift scope, read-only) and workflow timing timestamps
+- Phase 1B: ticket sidebar workflow monitor rail (default `POS Profile + business date` scope, read-only) and workflow timing timestamps
+- SA no-cash POS session bootstrap (cash opening remains cashier-only)
 
 ## Out of Scope
 - SA relay-first/offline token creation (Phase 4)
 - Relay authentication and server-side role authorization (Phase 3)
 - Full role UI completion for all roles (Phase 2)
 - SA-stage `sales_partner` capture (deferred)
+- POS Profile-specific Sales Order naming series (document now, implement soon; default SO series for current tests)
 
 ## Completed So Far
 ### Relevant existing capabilities to reuse
@@ -42,13 +51,14 @@ Convert the Sales Associate token flow from draft `Sales Invoice`-based token ge
 - [x] Return token slip metadata (SO name, token last4, customer, SA user, totals, timestamps). *(local working tree; pending UAT)*
 - [x] Add/extend relay workflow state helper to support `sales_order` linkage and timing field updates. *(local working tree; pending migration/UAT)*
 - [x] Add monitor board API for ticket sidebar (`get_relay_workflow_monitor_board`). *(Phase 1B, local working tree)*
+- [x] Add non-cash session bootstrap API for SA/non-cash roles (`bootstrap_pos_session`). *(Phase 1B, local working tree; pending UAT)*
 - [x] When cashier later creates SI, attach SI to existing SO-linked workflow state (without breaking invoice-first legacy records). *(helper fallback/update path implemented locally; verify in UAT)*
 
 ### DocType (`POS Relay Workflow State`)
 - [x] Add `sales_order` Link field to `Sales Order`. *(local working tree; migrate required)*
 - [x] Allow SO-first record creation (do not require `sales_invoice` at initial creation). *(local working tree; migrate required)*
 - [x] Preserve `sales_invoice` for cashier completion stage. *(local working tree)*
-- [x] Add monitor timing fields (`order_taken_at`, `paid_at`, `pick_started_at`, `picked_at`, `status_changed_at`) and `pos_opening_shift`. *(Phase 1B, local working tree; migrate required)*
+- [x] Add monitor timing fields (`order_taken_at`, `paid_at`, `pick_started_at`, `picked_at`, `status_changed_at`) and scope metadata (`business_date`, optional `pos_opening_shift`). *(Phase 1B, local working tree; migrate required)*
 
 ### Frontend (`Invoice.vue`)
 - [x] Route SA `Save/New` to new SO token API instead of invoice draft token path. *(local working tree; pending UAT)*
@@ -67,8 +77,10 @@ Convert the Sales Associate token flow from draft `Sales Invoice`-based token ge
 ### Frontend (`Pos.vue`, `WorkflowTicketRail.vue`) - Phase 1B
 - [x] Add ticket-style left sidebar icon/rail visible in POS shell. *(local working tree; pending UAT)*
 - [x] Show collapsed pending count badge and expandable panel. *(local working tree; pending UAT)*
-- [x] Poll monitor API and support `All (shift)` / `Mine` filter. *(local working tree; pending UAT/load testing)*
+- [x] Poll monitor API and support `All (date)` / `Mine` filter. *(local working tree; pending UAT/load testing)*
 - [x] Show customer, SA name, order taken time, current status, time in status, and grand total. *(local working tree; pending UAT)*
+- [x] Default monitor scope to `POS Profile + business date` so rows appear before cashier shift open. *(local working tree; pending UAT)*
+- [x] Support SA no-cash POS session entry and virtual/no-opening-shift session payload handling. *(local working tree; pending UAT/migration)*
 - [ ] Validate mobile overlay behavior and responsiveness on target devices.
 
 ### Backend hook (`posawesome/posawesome/api/invoice.py`)
@@ -80,6 +92,7 @@ Convert the Sales Associate token flow from draft `Sales Invoice`-based token ge
 
 ### Documentation updates during implementation
 - [x] Add Phase 1B ticket sidebar workflow monitor requirement to core docs. *(local working tree)*
+- [x] Document SA no-cash session + profile/date monitor scope and SO series follow-up in plans docs. *(local working tree)*
 - [ ] Update `../01-role-based-workflow-spec.md` statuses from `Partial` -> `Implemented` for Phase 1 items after UAT confirmation.
 - [ ] Log commit IDs and verification notes in `../CHANGELOG_PROGRESS.md` after commit.
 
@@ -90,7 +103,8 @@ Convert the Sales Associate token flow from draft `Sales Invoice`-based token ge
 - [ ] SA creates SO token using first available item
 - [ ] Token dialog shows SO-backed token details
 - [ ] Slip print content contains required text/QR/barcode placeholders
-- [ ] Ticket sidebar count increases after SA token creation and row shows required fields/timer
+- [ ] Ticket sidebar count increases after SA token creation and row shows required fields/timer (profile/date scope, no cashier shift required)
+- [ ] SA can enter POS without opening cash amounts table (non-cash session bootstrap)
 
 ### Manual / UAT (dev site)
 - [ ] Confirm submitted `Sales Order` created (not SI) when SA creates token
@@ -98,7 +112,7 @@ Convert the Sales Associate token flow from draft `Sales Invoice`-based token ge
 - [ ] Confirm no SI number consumed at SA stage
 - [ ] Confirm cashier can `Select S.O` and pay to create SI
 - [ ] Confirm relay token sync is non-blocking if relay token create fails
-- [ ] Confirm ticket sidebar row appears immediately (or within polling interval) for current shift
+- [ ] Confirm ticket sidebar row appears immediately (or within polling interval) using `PJ7 CASHIER` + business date scope (even before cashier shift open)
 - [ ] Confirm `Mine` filter shows SA-owned order rows
 - [ ] Confirm row status/timer updates after cashier payment and pick/dispatch transitions
 
@@ -112,13 +126,14 @@ Convert the Sales Associate token flow from draft `Sales Invoice`-based token ge
 - Add explicit visible Sales Order field for SA attribution (owner is accepted for now).
 - SA relay-first/offline token creation (Phase 4).
 - Ticket sidebar row actions (open/approve/transition) beyond read-only monitor.
+- POS Profile-specific Sales Order naming series (`posa_sales_order_naming_series`); default SO series is accepted for current testing.
 
 ## Exit Criteria
 - SA token is a submitted `Sales Order`.
 - Token slip prints required fields (customer, SA, date/time, total, QR, barcode, token last4).
 - SI is created only at cashier payment step in the preferred flow.
 - Cashier SO -> SI flow remains operational.
-- Ticket sidebar monitor rail is visible to all roles and tracks current-shift pending orders with timing.
+- Ticket sidebar monitor rail is visible to all roles and tracks profile/date-scoped pending orders with timing.
 - Phase 1 docs updated with verification evidence and remaining defects.
 
 ## Cross-References

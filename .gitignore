@@ -12,3 +12,14 @@ relay/.venv/
 relay/data/*
 !relay/data/.gitkeep
 relay/*.log
+
+# Local test secrets (never commit)
+.env
+.env.local
+.env.*.local
+!.env.example
+
+# Cypress artifacts
+cypress/screenshots/
+cypress/videos/
+cypress/downloads/

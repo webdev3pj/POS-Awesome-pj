@@ -1,5 +1,12 @@
 # 02 - Master Implementation Plan (Phased, End-to-End)
 
+## TL;DR (Business Owner)
+- We are delivering the workflow in phases so we fix audit-critical issues first without breaking the store.
+- Phase 1/1B is the immediate business priority: SA creates `Sales Order` tokens, plus a live sidebar monitor for pending orders.
+- SA should be able to work without opening a cash shift; cashier still owns cash opening/closing.
+- The sidebar monitor should show orders by `POS Profile + business date` so SA orders appear even before a cashier opens shift.
+- Profile-specific Sales Order numbering is a near-term follow-up; current testing uses the default SO series.
+
 ## See also
 - `README.md`
 - `00-ai-agent-start-here.md`
@@ -102,29 +109,31 @@ Exit criteria:
 - Cashier can still bill from SO.
 - Token slip prints required fields.
 
-## Phase 1B - Workflow Monitor Rail (Ticket Sidebar, Current Shift)
+## Phase 1B - Workflow Monitor Rail (Ticket Sidebar, Profile + Business Date Scope)
 Goal:
 - Give all roles a live read-only sidebar monitor to track pending orders and time spent in each workflow state.
 
 Business decisions locked:
 - Monitor is visible to all roles (including SA).
-- Default scope is the current POS opening shift.
+- Default scope is `POS Profile + business date`; `POS Opening Shift` is optional metadata, not the primary visibility key.
 - Expanded panel supports a `Mine` filter based on Sales Order `owner` (SA attribution).
 - Rows disappear after dispatch release by default.
 - WebSocket is deferred; v1 uses polling + local event-trigger refresh.
 
 Primary changes:
 - Extend `POS Relay Workflow State` with timing fields (`order_taken_at`, `paid_at`, `pick_started_at`, `picked_at`, `status_changed_at`) and SO linkage support.
+- Add/maintain `business_date` on workflow state rows for monitor scoping before cashier shift open.
 - Add backend monitor API returning row details + summary counts for the sidebar.
 - Add `WorkflowTicketRail.vue` and mount it in `Pos.vue` as a collapsible ticket-style left rail.
 - Emit refresh events after local actions (SA token create, cashier payment success; picker/dispatch later as UI is completed).
 
 Dependencies:
 - Phase 1 SO-first workflow state support (required so unpaid SA orders appear before cashier payment).
+- SA no-cash POS session bootstrap (so SA can create orders before cashier shift open).
 
 Exit criteria:
 - Collapsed ticket icon shows pending count.
-- Expanded panel shows customer, SA, order taken time, current status, time in status, grand total.
+- Expanded panel shows customer, SA, order taken time, current status, time in status, grand total for the selected profile/date scope.
 - Rows update via polling and disappear after dispatch release.
 
 ## Phase 2 - Role UI Completion (Cashier / Picker / Dispatch / Supervisor UX)
@@ -205,17 +214,20 @@ Exit criteria:
 ### `OpeningDialog.vue`
 - Keep ERPNext-derived role model.
 - Improve role display messaging and validation feedback.
+- Phase 1B: support non-cash session bootstrap for SA/picker/dispatch/supervisor and keep cashier opening shift flow for cash accountability.
 
 ### `Pos.vue`
 - Phase 1B: mount `WorkflowTicketRail.vue` (left sidebar ticket monitor).
+- Phase 1B: tolerate `pos_opening_shift = null/virtual` and carry `session_business_date` for monitor scope.
 
 ### `WorkflowTicketRail.vue` (new)
-- Phase 1B: read-only cross-role monitor panel (current shift scope, pending count badge, `Mine` filter, timing display).
+- Phase 1B: read-only cross-role monitor panel (default profile/date scope, pending count badge, `Mine` filter, timing display).
 - Phase 2+: optional row actions and deeper role-specific affordances if needed.
 
 ### `Navbar.vue`
 - Add read-only role chip (Phase 2).
 - Keep relay/cloud status chips.
+- Phase 1B: hide/block cash close-shift action for SA.
 
 ### `Invoice.vue`
 - Phase 1: SA `Save/New` -> submitted SO token path + QR/barcode slip.
@@ -240,12 +252,12 @@ Exit criteria:
 ### `posawesome/posawesome/api/posapp.py`
 - Phase 1: add SA `create_sales_order_token(...)` API.
 - Phase 1+: enhance relay workflow state helpers for SO-first linkage.
-- Phase 1B: add `get_relay_workflow_monitor_board(...)` API and workflow timestamp maintenance.
+- Phase 1B: add `bootstrap_pos_session(...)` (non-cash role session) and `get_relay_workflow_monitor_board(...)` API; maintain workflow timestamps and `business_date`.
 - Phase 3: add role checks on sensitive APIs.
 
 ### `POS Relay Workflow State` DocType
 - Phase 1: add `sales_order` link field and support SO-first lifecycle.
-- Phase 1B: add workflow timing fields and shift scoping field for monitor board.
+- Phase 1B: add workflow timing fields and `business_date` for monitor scope (`pos_opening_shift` remains optional metadata).
 - Keep `sales_invoice` for cashier completion stage.
 
 ### `posawesome/posawesome/api/invoice.py`
@@ -282,11 +294,12 @@ Exit criteria:
 
 ### Configuration alignment
 - POS Profile `custom_have_token` and `custom_edge_relay_url` must match the intended relay mode and URL.
+- Near-term follow-up: add dedicated `POS Profile.posa_sales_order_naming_series` for per-profile SO numbering (default SO series used until implemented).
 
 ## UAT Plan (High Level)
 ### SA
-- Build cart, create token/SO, print slip, confirm SI not created.
-- Confirm ticket sidebar row appears as `Unpaid` with timer and SA name.
+- Enter POS without opening cash shift, build cart, create token/SO, print slip, confirm SI not created.
+- Confirm ticket sidebar row appears as `Unpaid` with timer and SA name using profile/date scope.
 
 ### Cashier
 - Load SO, pay, create SI, confirm relay/cloud behavior.
@@ -332,7 +345,7 @@ Exit criteria:
 ## Acceptance Criteria by Phase (Condensed)
 - Phase 0: docs complete, pushed, usable.
 - Phase 1: SA token creates submitted SO, slip prints required fields, cashier SO->SI works.
-- Phase 1B: ticket sidebar monitor rail shows pending count + current-shift rows with timing.
+- Phase 1B: ticket sidebar monitor rail shows pending count + profile/date-scoped rows with timing.
 - Phase 2: role UI visibility aligns with spec for all roles.
 - Phase 3: relay/server reject unauthorized actions.
 - Phase 4: SA can create token/order offline and sync to cloud later.

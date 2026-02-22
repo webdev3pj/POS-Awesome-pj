@@ -1,5 +1,12 @@
 # 03 - Offline Edge Relay and Windows Service Specification
 
+## TL;DR (Business Owner)
+- This file explains what the local relay stores, how it syncs later, and how it runs on the Windows store machine.
+- The relay is what protects store operations when the cloud is down, especially for cashier commits.
+- The new POS sidebar monitor is not a relay screen yet; it reads ERPNext workflow state first (v1).
+- SA offline-first order creation is planned later (Phase 4), after the online SA flow is stable.
+- Windows service/runbook details stay here so deployment and support are repeatable.
+
 ## See also
 - `README.md`
 - `00-ai-agent-start-here.md`
@@ -33,7 +40,7 @@ This is the offline-only reference and should be kept synchronized with `relay/r
 ## Workflow Monitor Data Source (v1 and Future)
 ### v1 source of truth (Phase 1B)
 - The ticket sidebar workflow monitor rail uses ERPNext `POS Relay Workflow State` records as the display source.
-- This gives cross-role visibility in the POS UI for current-shift pending orders and timing metrics while the SA online-first Sales Order flow is stabilized.
+- This gives cross-role visibility in the POS UI for profile/date-scoped pending orders and timing metrics while the SA online-first Sales Order flow is stabilized.
 - Timing fields expected on the ERPNext workflow state for monitoring:
   - `order_taken_at`
   - `paid_at`
@@ -44,6 +51,7 @@ This is the offline-only reference and should be kept synchronized with `relay/r
 
 ### Future offline implication (Phase 4+)
 - When SA relay-first/offline token creation is introduced, the original local creation timestamp must be preserved so `order_taken_at` remains meaningful after cloud sync.
+- When business-date monitor scoping is active, relay/cloud sync must preserve the original order business date so dashboard timing remains accurate across outages.
 - WebSocket/push updates are deferred; v1 monitor uses polling + local event-trigger refresh.
 
 ## Relay Topology

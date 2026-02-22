@@ -1,5 +1,12 @@
 # 00 - AI Agent Start Here (Handoff and Context)
 
+## TL;DR (Business Owner)
+- This branch is building a role-based store workflow: SA creates orders/tokens, cashier takes payment, then picker and dispatch complete fulfillment.
+- The immediate work is finishing and testing the SA frontend flow end-to-end, including the left sidebar ticket counter/monitor.
+- SA must not open/close cash shifts; cashier owns money-related opening/closing.
+- The ticket sidebar monitor is now planned to use `POS Profile + business date` (not only opening shift), so SA orders appear even before a cashier opens shift.
+- Sales Order series per POS Profile is a near-term follow-up feature; current tests use the default Sales Order series.
+
 ## See also
 - `README.md`
 - `01-role-based-workflow-spec.md`
@@ -22,7 +29,7 @@ Key business rules currently agreed:
 - Branch: `kilo-codex-v3`
 - Current state: relay foundation is implemented; role derivation exists; cashier relay commit path exists; role enforcement and full role UI visibility are incomplete.
 - Priority implementation target: `Phase 1` SA token -> submitted Sales Order (online-first).
-- Immediate follow-on target: `Phase 1B` ticket-style workflow monitor rail (left sidebar) with timing metrics for the current POS opening shift.
+- Immediate follow-on target: `Phase 1B` ticket-style workflow monitor rail (left sidebar) with timing metrics scoped by `POS Profile + business date` (opening shift remains optional metadata).
 
 ## What Is Already Implemented (Branch-Accurate)
 ### Relay foundation (`Implemented`)
@@ -72,7 +79,7 @@ Key business rules currently agreed:
 - SA relay-first/offline token creation until online-first path is stable.
 
 ## Immediate Next Recommended Task
-Complete and verify `Phase 1 + Phase 1B`: Sales Associate token creation as a submitted `Sales Order` (online-first), plus the cross-role ticket sidebar monitor rail for current-shift pending orders and timing.
+Complete and verify `Phase 1 + Phase 1B`: Sales Associate token creation as a submitted `Sales Order` (online-first), SA no-cash POS session bootstrap, and the cross-role ticket sidebar monitor rail for profile/date-scoped pending orders and timing.
 
 Why this is next:
 - It resolves a core audit requirement.
@@ -87,7 +94,9 @@ Why this is next:
 - SA attribution on Sales Order uses Frappe `owner` for now.
 - Slip will include QR + barcode + customer/SA/date/time/grand total/token last4.
 - Cypress post-deploy tests can use first available item for SA flow validation (initial automation strategy).
-- Add a cross-role ticket sidebar monitor rail (current shift scope, `Mine` filter, hide after dispatch) using polling first; WebSocket deferred.
+- Add a cross-role ticket sidebar monitor rail (default scope: `POS Profile + business date`, `Mine` filter, hide after dispatch) using polling first; WebSocket deferred.
+- Sales Associate must not open/close cash shift; cashier owns cash accountability.
+- POS Profile-specific Sales Order naming series is a near-term follow-up (default SO series is acceptable for current testing).
 
 ### Deferred
 - Capture `sales_partner` during SA stage.
@@ -97,14 +106,14 @@ Why this is next:
 ## Critical File Map
 ### POS Frontend (Vue)
 - `posawesome/public/js/posapp/components/pos/OpeningDialog.vue`
-  - Role derivation display/validation at shift open.
+  - Role derivation display/validation and SA no-cash session entry.
 - `posawesome/public/js/posapp/components/pos/Invoice.vue`
   - Current token popup/print behavior, save/new flow, held orders, SO selection triggers.
   - Phase 1 primary frontend change point.
 - `posawesome/public/js/posapp/components/pos/Pos.vue`
   - POS shell layout; host for cross-role workflow monitor rail.
 - `posawesome/public/js/posapp/components/pos/WorkflowTicketRail.vue`
-  - Phase 1B read-only ticket sidebar monitor (pending orders for current shift, live polling, timing display).
+  - Phase 1B read-only ticket sidebar monitor (pending orders for profile/date scope, live polling, timing display).
 - `posawesome/public/js/posapp/components/pos/Payments.vue`
   - Payment submit, relay commit, role-based SA payment block, sales person/partner fields.
 - `posawesome/public/js/posapp/components/pos/SalesOrders.vue`
@@ -154,7 +163,7 @@ Why this is next:
 7. Cashier later loads SO (prefer `Select S.O`) and converts SO -> SI for payment.
 8. Cashier submits payment (cloud or relay-enabled path depending profile and availability).
 9. Relay/cashier workflow state continues through pick and dispatch.
-10. Ticket sidebar monitor rail shows live status/timing updates for pending orders (current shift, all roles, optional `Mine` filter).
+10. Ticket sidebar monitor rail shows live status/timing updates for pending orders (profile/date scope, all roles, optional `Mine` filter).
 
 ## How To Validate
 ### Code/Docs validation (no deployment needed)
