@@ -7,6 +7,7 @@ import json
 import frappe
 import copy
 import requests
+from urllib.parse import urlparse
 from frappe.utils import nowdate, flt, cstr, getdate, cint, now_datetime
 from frappe import _
 from erpnext.accounts.doctype.sales_invoice.sales_invoice import get_bank_cash_account
@@ -498,6 +499,27 @@ def _get_pos_profile_edge_relay_url(pos_profile):
     return relay_url.rstrip("/")
 
 
+def _is_private_lan_host(hostname):
+    host = cstr(hostname or "").strip().lower()
+    if not host:
+        return False
+
+    if host in ("localhost", "127.0.0.1"):
+        return True
+
+    return (
+        host.startswith("10.")
+        or host.startswith("192.168.")
+        or host.startswith("172.16.")
+        or host.startswith("172.17.")
+        or host.startswith("172.18.")
+        or host.startswith("172.19.")
+        or host.startswith("172.2")
+        or host.startswith("172.30.")
+        or host.startswith("172.31.")
+    )
+
+
 @frappe.whitelist()
 def get_relay_connectivity_status(pos_profile):
     pos_profile = cstr(pos_profile or "").strip()
@@ -544,6 +566,9 @@ def get_relay_connectivity_status(pos_profile):
     timeout_seconds = max(1, cint(frappe.conf.get("posa_edge_relay_timeout") or 3))
     health_url = "{0}/health".format(relay_base_url)
     relay_source = "pos_profile" if profile_relay_url else "site_config"
+    parsed_url = urlparse(relay_base_url)
+    relay_host = parsed_url.hostname or ""
+    is_private_lan = _is_private_lan_host(relay_host)
 
     try:
         response = requests.get(health_url, timeout=timeout_seconds)
@@ -563,6 +588,9 @@ def get_relay_connectivity_status(pos_profile):
             "status": "online" if relay_ok else "offline",
             "relay_url": relay_base_url,
             "relay_source": relay_source,
+            "relay_host": relay_host,
+            "relay_host_type": "private_lan" if is_private_lan else "public_or_routable",
+            "relay_config_identified": True,
             "profile_relay_url": profile_relay_url,
             "site_relay_url": site_relay_url,
             "message": _("Edge Relay reachable.")
@@ -575,6 +603,9 @@ def get_relay_connectivity_status(pos_profile):
                 "pos_profile": pos_profile,
                 "relay_health_url": health_url,
                 "timeout_seconds": timeout_seconds,
+                "cloud_reachability_note": _(
+                    "Frappe Cloud checks reachability from cloud network, not from your local browser."
+                ),
             },
         }
     except requests.exceptions.Timeout:
@@ -585,6 +616,9 @@ def get_relay_connectivity_status(pos_profile):
             "status": "timeout",
             "relay_url": relay_base_url,
             "relay_source": relay_source,
+            "relay_host": relay_host,
+            "relay_host_type": "private_lan" if is_private_lan else "public_or_routable",
+            "relay_config_identified": True,
             "profile_relay_url": profile_relay_url,
             "site_relay_url": site_relay_url,
             "message": _(
@@ -596,6 +630,9 @@ def get_relay_connectivity_status(pos_profile):
                 "relay_health_url": health_url,
                 "timeout_seconds": timeout_seconds,
                 "hint": _("Try opening the relay URL from the ERP server network."),
+                "cloud_reachability_note": _(
+                    "If this is a LAN IP like 192.168.x.x, Frappe Cloud cannot reach it without VPN/tunnel/public routing."
+                ),
             },
         }
     except requests.exceptions.ConnectionError:
@@ -606,6 +643,9 @@ def get_relay_connectivity_status(pos_profile):
             "status": "connection_error",
             "relay_url": relay_base_url,
             "relay_source": relay_source,
+            "relay_host": relay_host,
+            "relay_host_type": "private_lan" if is_private_lan else "public_or_routable",
+            "relay_config_identified": True,
             "profile_relay_url": profile_relay_url,
             "site_relay_url": site_relay_url,
             "message": _(
@@ -616,6 +656,9 @@ def get_relay_connectivity_status(pos_profile):
                 "pos_profile": pos_profile,
                 "relay_health_url": health_url,
                 "hint": _("Ensure relay machine allows inbound traffic on relay port."),
+                "cloud_reachability_note": _(
+                    "Configured relay is identified, but cloud reachability still requires network path from Frappe Cloud."
+                ),
             },
         }
     except requests.exceptions.HTTPError as exc:
@@ -627,6 +670,9 @@ def get_relay_connectivity_status(pos_profile):
             "status": "http_error",
             "relay_url": relay_base_url,
             "relay_source": relay_source,
+            "relay_host": relay_host,
+            "relay_host_type": "private_lan" if is_private_lan else "public_or_routable",
+            "relay_config_identified": True,
             "profile_relay_url": profile_relay_url,
             "site_relay_url": site_relay_url,
             "message": _("Edge Relay returned HTTP error status."),
@@ -636,6 +682,9 @@ def get_relay_connectivity_status(pos_profile):
                 "pos_profile": pos_profile,
                 "relay_health_url": health_url,
                 "hint": _("Check relay app logs and health endpoint response."),
+                "cloud_reachability_note": _(
+                    "Configured relay is identified; HTTP error means target responded but health endpoint returned non-2xx."
+                ),
             },
         }
     except Exception:
@@ -646,6 +695,9 @@ def get_relay_connectivity_status(pos_profile):
             "status": "offline",
             "relay_url": relay_base_url,
             "relay_source": relay_source,
+            "relay_host": relay_host,
+            "relay_host_type": "private_lan" if is_private_lan else "public_or_routable",
+            "relay_config_identified": True,
             "profile_relay_url": profile_relay_url,
             "site_relay_url": site_relay_url,
             "message": _("Edge Relay is unreachable from this server."),
@@ -653,6 +705,9 @@ def get_relay_connectivity_status(pos_profile):
             "debug": {
                 "pos_profile": pos_profile,
                 "relay_health_url": health_url,
+                "cloud_reachability_note": _(
+                    "Configured relay is identified, but no working route from Frappe Cloud to relay host."
+                ),
             },
         }
 

@@ -46,10 +46,18 @@
             <div class="mb-2"><b>{{ __('POS Profile Relay URL') }}:</b> {{ relay_status.profile_relay_url || __('Not set') }}</div>
             <div class="mb-2"><b>{{ __('Site Relay URL') }}:</b> {{ relay_status.site_relay_url || __('Not set') }}</div>
             <div class="mb-2"><b>{{ __('Using') }}:</b> {{ relay_status.relay_source || '-' }}</div>
+            <div class="mb-2"><b>{{ __('Relay Identified') }}:</b> {{ relay_status.relay_config_identified ? __('Yes') : __('No') }}</div>
+            <div class="mb-2"><b>{{ __('Relay Host') }}:</b> {{ relay_status.relay_host || '-' }}</div>
+            <div class="mb-2"><b>{{ __('Relay Host Type') }}:</b> {{ relay_status.relay_host_type || '-' }}</div>
+            <div class="mb-2" v-if="relay_status.relay_host_type === 'private_lan'">
+              <b>{{ __('LAN Note') }}:</b>
+              {{ __('Private LAN address detected. Frappe Cloud can identify this relay config, but it is reachable only if cloud has a network route (VPN/tunnel/public mapping).') }}
+            </div>
             <div class="mb-2"><b>{{ __('Health URL') }}:</b> {{ relay_status.debug && relay_status.debug.relay_health_url ? relay_status.debug.relay_health_url : '-' }}</div>
             <div class="mb-2" v-if="relay_status.http_status"><b>{{ __('HTTP Status') }}:</b> {{ relay_status.http_status }}</div>
             <div class="mb-2"><b>{{ __('Checked At') }}:</b> {{ relay_status.checked_at || '-' }}</div>
             <div class="mb-2" v-if="relay_status.debug && relay_status.debug.hint"><b>{{ __('Hint') }}:</b> {{ relay_status.debug.hint }}</div>
+            <div class="mb-2" v-if="relay_status.debug && relay_status.debug.cloud_reachability_note"><b>{{ __('Cloud Reachability Note') }}:</b> {{ relay_status.debug.cloud_reachability_note }}</div>
             <div class="mb-2" v-if="relay_status.queue && relay_status.connected">
               <b>{{ __('Queue') }}:</b>
               {{ __('Queued') }} {{ relay_status.queue.queued || 0 }},
@@ -248,6 +256,9 @@ export default {
         status: '',
         message: '',
         relay_source: '',
+        relay_config_identified: false,
+        relay_host: '',
+        relay_host_type: '',
         profile_relay_url: '',
         site_relay_url: '',
         http_status: null,
@@ -284,6 +295,9 @@ export default {
       }
       if (this.relay_status.status === 'http_error') {
         return __('Relay HTTP Error');
+      }
+      if (this.relay_status.status === 'connection_error' && this.relay_status.relay_config_identified) {
+        return __('Relay Identified / Not Reachable');
       }
       return __('Relay Offline');
     },
@@ -379,6 +393,9 @@ export default {
           status: '',
           message: '',
           relay_source: '',
+          relay_config_identified: false,
+          relay_host: '',
+          relay_host_type: '',
           profile_relay_url: '',
           site_relay_url: '',
           http_status: null,
@@ -403,6 +420,9 @@ export default {
             status: relay.status || '',
             message: relay.message || '',
             relay_source: relay.relay_source || '',
+            relay_config_identified: !!relay.relay_config_identified,
+            relay_host: relay.relay_host || '',
+            relay_host_type: relay.relay_host_type || '',
             profile_relay_url: relay.profile_relay_url || '',
             site_relay_url: relay.site_relay_url || '',
             http_status: relay.http_status || null,

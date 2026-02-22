@@ -248,17 +248,28 @@ That means:
 ### 13.4 Fast troubleshooting checklist
 - Relay chip says **Not Configured**:
   - POS Profile `custom_edge_relay_url` empty and no site fallback configured.
-- Relay chip says **Connection Error/Timeout**:
-  - URL not reachable from cloud, relay not running, firewall blocked, wrong host/port.
+- Relay chip says **Relay Identified / Not Reachable** or **Connection Error/Timeout**:
+  - URL is configured and recognized, but not reachable from cloud path.
+  - Check relay runtime, firewall, and cloud->relay routing.
 - Cloud chip says **Internet Offline**:
   - local browser/device network down.
 - Cloud chip says **Cloud Unreachable**:
   - browser can’t reach Frappe cloud endpoint or cloud returns error.
 
-### 13.5 Expected success criteria
-- POS Profile contains reachable `custom_edge_relay_url`.
-- Relay health endpoint returns ok.
-- POS relay chip shows **Online**.
+### 13.5 Specific case: OptiPlex LAN IP 192.168.50.168
+If you set POS Profile `custom_edge_relay_url` to `http://192.168.50.168:8787`:
+1. System **will identify** this relay configuration from POS Profile.
+2. If Frappe Cloud has no network route to your LAN, relay status shows identified but unreachable.
+3. To make it fully reachable from cloud, expose route via VPN/tunnel/public mapping/port forward (secured).
+4. Once route exists, status should transition to online if `/health` responds successfully.
+
+### 13.6 Expected success criteria
+- POS Profile contains target `custom_edge_relay_url` (example `http://192.168.50.168:8787`).
+- Relay diagnostics show:
+  - Relay Identified = Yes
+  - Relay Host = 192.168.50.168
+  - Relay Host Type = private_lan
+- If cloud route is present, relay chip shows **Online**.
 - Cloud chip shows **Cloud Online**.
 - Test invoice reaches relay queue and sync path without manual DB intervention.
 
