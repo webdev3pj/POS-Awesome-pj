@@ -1491,6 +1491,36 @@ export default {
           }
         },
       });
+
+      const relayEnabled = parseInt(this.pos_profile.custom_have_token || 0, 10) === 1;
+      const relayBaseUrl = (this.pos_profile.custom_edge_relay_url || "").trim();
+      if (relayEnabled && relayBaseUrl && this.invoice_doc && this.invoice_doc.docstatus === 0) {
+        const tokenPayload = {
+          token_id: (this.invoice_doc.name || "").slice(-5),
+          pos_profile_id: this.pos_profile.name,
+          cashier_user_id: frappe.session.user,
+          customer_id: this.invoice_doc.customer,
+          customer_name: this.invoice_doc.customer_name,
+          items: (this.invoice_doc.items || []).map((row) => ({
+            item_code: row.item_code,
+            item_name: row.item_name,
+            qty: row.qty,
+            uom: row.uom,
+            rate: row.rate,
+            amount: row.amount,
+          })),
+        };
+
+        fetch(`${relayBaseUrl.replace(/\/$/, "")}/relay/token/create`, {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+          },
+          body: JSON.stringify(tokenPayload),
+        }).catch(() => {
+          // non-blocking: token sync is best-effort at draft stage
+        });
+      }
       return this.invoice_doc;
     },
 

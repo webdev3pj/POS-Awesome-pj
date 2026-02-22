@@ -73,6 +73,24 @@
           </v-card-actions>
         </v-card>
       </v-menu>
+      <v-chip
+        v-if="relay_status.enabled && !relay_status.connected"
+        small
+        class="mr-2"
+        color="error"
+        text-color="white"
+      >
+        {{ __('RELAY DOWN (Offline continuity unavailable)') }}
+      </v-chip>
+      <v-chip
+        v-if="relay_status.enabled && relay_status.connected && !cloud_status.server_online"
+        small
+        class="mr-2"
+        color="warning"
+        text-color="white"
+      >
+        {{ __('OFFLINE MODE (Relay Active)') }}
+      </v-chip>
       <v-menu bottom offset-y>
         <template v-slot:activator="{ on, attrs }">
           <v-chip
@@ -430,6 +448,8 @@ export default {
             queue: relay.queue || {},
             debug: relay.debug || {},
           };
+
+          evntBus.$emit('relay_status_changed', this.relay_status);
 
           if (!silent && relay.enabled) {
             evntBus.$emit('show_mesage', {

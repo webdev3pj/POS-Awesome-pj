@@ -288,3 +288,190 @@ If you set POS Profile `custom_edge_relay_url` to `http://192.168.50.168:8787`:
 
 ## 14. Update Policy for This File
 Whenever testing behavior, deployment status, or runbook steps change, update this markdown and regenerate the sibling PDF in the same folder before finalizing branch work.
+
+## 15. Brainstorm and Gap Analysis for Offline Continuity Spec v2
+
+This section maps the latest master spec to current implementation state and identifies exact gaps that must be closed in branch `kilo-codex-v2`.
+
+### 15.1 High-level conclusion
+Current implementation has a **good relay scaffold and profile gating**, but it is still **cloud-anchored** for core sale lifecycle and does **not yet satisfy full local-first offline continuity** across SA -> Cashier -> Picking -> Dispatch when cloud is down.
+
+### 15.2 Gap matrix by requirement area
+
+| Area | Requirement summary | Current state | Gap status |
+|---|---|---|---|
+| Master flag | `custom_have_token` ON enables workflow, OFF keeps current behavior | Implemented in POS/backend checks | Covered |
+| Edge relay URL per profile | `custom_edge_relay_url` on POS Profile | Implemented | Covered |
+| SA offline customer create/find | Must work while cloud down | No local customer store API in relay | Missing |
+| SA offline item search | Must work while cloud down from relay cache | No relay item cache/search API | Missing |
+| Token create/retrieve lifecycle | Local durable token store with expiry/void states | Relay has queue endpoint only, no token state DB/API | Missing |
+| Cashier commit with idempotency | Mandatory idempotency key + first success wins | `submit-invoice` exists but no idempotency table/lock | Missing |
+| Stable local sale reference | Return `local_sale_ref` immediately after commit | Not implemented | Missing |
+| Double-pay prevention | Two cashiers must not pay same token | No atomic token consume lock | Missing |
+| Multi-cashier sessions | Per-cashier per-device sessions, concurrent for same profile | Not implemented | Missing |
+| Offline shift close | Session close local-first with sync later | Not implemented | Missing |
+| Pick queue local-first | Queue from locally committed paid sales | Not implemented in relay local DB | Missing |
+| Dispatch release gate | Paid + picked ready check offline | Not implemented in relay local DB/API | Missing |
+| Durable outbox breadth | Queue all required event classes | Queue exists but event model incomplete | Partial |
+| Cloud idempotent sync | Retries must not duplicate cloud records | No robust cloud idempotency mapping yet | Missing |
+| Offline UX mode banner | Relay OK + cloud down allow full ops | Chips exist, strict mode banner/blocking incomplete | Partial |
+| Acceptance tests 1..5 | Multi-device offline continuity + idempotency proofs | Not yet implemented as formal tests | Missing |
+
+### 15.3 Architecture direction locked for v2
+1. Relay becomes local system of record for pre-sync operations.
+2. `commit_invoice` becomes atomic local transaction with token lock + idempotency key uniqueness.
+3. Sync worker handles eventual cloud create/submit reconciliation from durable outbox.
+4. POS UI enforces relay-required actions when profile is enabled and relay is unavailable.
+
+## 16. v2 Target Local-First Architecture
+
+```mermaid
+flowchart LR
+SA[Sales Associate Device] --> RELAY[Edge Relay Local API]
+CASH[Cashier Device] --> RELAY
+PICK[Picker Device] --> RELAY
+GATE[Dispatch Device] --> RELAY
+RELAY --> DB[Relay SQLite Local Store]
+RELAY --> OUTBOX[Durable Outbox]
+OUTBOX --> SYNC[Sync Worker]
+SYNC --> CLOUD[Frappe Cloud API]
+```
+
+### 16.1 Core local entities to add
+- Token
+- Token Line
+- Cashier Session
+- Local Sale
+- Local Sale Line
+- Idempotency Record
+- Pick Event
+- Dispatch Event
+- Outbox Event with cloud correlation fields
+
+### 16.2 Required relay APIs to add
+- `POST /relay/token/create`
+- `GET /relay/token/<token_id>`
+- `POST /relay/token/<token_id>/void`
+- `POST /relay/session/open`
+- `POST /relay/session/close`
+- `POST /relay/commit-invoice`
+- `GET /relay/pick-queue`
+- `POST /relay/pick/update`
+- `POST /relay/dispatch/release`
+- `GET /relay/items/search`
+- `POST /relay/customer/upsert`
+
+### 16.3 Commit idempotency rules
+1. `idempotency_key` required.
+2. Unique constraint on `idempotency_key`.
+3. Unique token consume rule so only first commit for a token succeeds.
+4. Replay with same key returns same `local_sale_ref` payload.
+
+## 17. Phased Execution Plan for Branch kilo-codex-v2
+
+### Phase 1 - Schema and atomic local sale commit
+1. Extend relay DB schema with local-first entities and indexes.
+2. Implement transaction-safe `commit_invoice` with token payment lock.
+3. Generate and return durable `local_sale_ref`.
+
+### Phase 2 - Token and session lifecycle
+1. Implement token create/get/void and expiry enforcement.
+2. Implement per-cashier session open/close with device metadata.
+3. Allow concurrent sessions on same POS Profile.
+
+### Phase 3 - Pick and dispatch offline workflows
+1. Build local pick queue from paid local sales.
+2. Implement pick status transitions and exception states.
+3. Implement release gate checks and immutable release audit records.
+
+### Phase 4 - Offline catalog and customer continuity
+1. Implement local item cache and search endpoint.
+2. Implement offline customer upsert and lookup path.
+3. Add best-effort refresh jobs when cloud is available.
+
+### Phase 5 - Outbox hardening and cloud reconciliation
+1. Expand outbox event model to required classes.
+2. Add retry and backoff strategy and poison event handling.
+3. Add cloud idempotency correlation fields and replay-safe linking.
+
+### Phase 6 - POS UI and profile-gated behavior enforcement
+1. For enabled profiles, route token/commit/pick/dispatch strictly through relay APIs.
+2. Show explicit banner states:
+   - OFFLINE MODE Relay Active
+   - RELAY DOWN Offline continuity unavailable
+3. Block relay-dependent actions if relay is down for enabled profile.
+
+### Phase 7 - Test and evidence pack
+1. Implement automated tests for acceptance tests 1..5.
+2. Execute LAN outage simulations and capture outputs.
+3. Produce operator validation checklist and final proof logs.
+
+## 18. Exact Next To-Do List from This Brainstorm
+1. Add v2 execution checklist markdown under `plans/` with acceptance criteria traceability.
+2. Switch to Code mode for implementation across Python and Vue files.
+3. Implement relay schema and APIs first before POS UI wiring.
+4. Implement sync reliability and idempotency reconciliation next.
+5. Implement strict relay-required UI behavior for enabled profiles.
+6. Run acceptance tests 1..5 and capture evidence.
+7. Update this handoff markdown and regenerate PDF.
+8. Push all changes to new branch `kilo-codex-v2`.
+
+## 19. Open Clarifications to Confirm Before Coding
+1. For enabled profiles, should direct cloud fallback be fully disabled when relay is unreachable.
+2. Whether item rate in offline cache is hard snapshot only or must include branch price rules.
+3. Whether dispatch partial release is enabled in v2 baseline or kept supervisor-gated only.
+
+## 20. v2 Implementation Progress Snapshot (kilo-codex-v2)
+
+### 20.1 Completed in this cycle
+1. Created branch `kilo-codex-v2`.
+2. Implemented relay local-first persistence model in `relay/relay/storage.py`:
+   - token/session/local-sale entities
+   - idempotency table
+   - outbox table with retry metadata
+   - pick/dispatch event tables
+   - customer cache and item cache
+3. Implemented new relay APIs in `relay/relay/app.py`:
+   - `/relay/token/create`, `/relay/token/<token_id>`, `/relay/token/<token_id>/void`
+   - `/relay/session/open`, `/relay/session/current`, `/relay/session/close`
+   - `/relay/customer/upsert`, `/relay/customer/search`
+   - `/relay/items/search`, `/relay/items/refresh`, `/relay/items/refresh-from-cloud`
+   - `/relay/commit-invoice`
+   - `/relay/pick-queue`, `/relay/pick/update`, `/relay/dispatch/release`
+   - `/api/outbox`
+4. Added outbox sync logic in `relay/relay/sync_worker.py` with retry/backoff and cloud posting path for `SALE_COMMITTED`.
+5. Added offline cache helper module `relay/relay/offline_sync.py`.
+6. Updated relay dashboard/docs/checklists for outbox visibility and v2 endpoints.
+7. Updated POS UI behavior:
+   - `Payments.vue`: relay-enabled profiles block submit when relay down; direct-cloud fallback disabled in relay path; commit via `/relay/commit-invoice`; local sale ref displayed.
+   - `Navbar.vue`: explicit mode chips for
+     - `RELAY DOWN (Offline continuity unavailable)`
+     - `OFFLINE MODE (Relay Active)`
+   - `Invoice.vue`: best-effort token create call to relay at draft update stage.
+8. Added automated acceptance test suite:
+   - `relay/tests/test_offline_workflow.py`
+   - validates acceptance tests 1..5 at relay API level.
+
+### 20.2 Validation results
+Executed:
+- `python -m compileall relay/relay`
+- `python -m relay.selftest`
+- `python -m unittest tests.test_offline_workflow -v`
+
+Result summary:
+- Compile OK
+- Self-test OK
+- 5/5 acceptance tests passed (relay integration level)
+
+### 20.3 Known limitations remaining after this cycle
+1. Cloud sync idempotency reconciliation is improved but still phase-1 level for non-sale events (pick/release/session/token are partially queued and partially cloud-mapped).
+2. POS SA offline customer/item UX is backend-capable via relay endpoints but not yet fully wired into existing POS search/input widgets.
+3. Current token identity in POS still derives from draft invoice suffix; QR payload remains token id only as required.
+4. Full ERPNext closing artifact reconciliation from local session close is still pending for deeper POS shift parity.
+
+### 20.4 Immediate next tasks
+1. Wire `Customer.vue` and item selector components to relay cache endpoints during cloud outage windows.
+2. Extend sync worker endpoint mapping and cloud-side idempotency correlation for `PICK_EVENT`, `RELEASE_EVENT`, `SESSION_*`, `TOKEN_CREATED`.
+3. Add operator-facing pick/dispatch UI screens in POS (or dedicated relay UI) for role flows.
+4. Replace UTC deprecation-sensitive calls with timezone-aware datetime helpers.
+5. Finalize cloud deployment script and run outage recovery test against real cloud site.

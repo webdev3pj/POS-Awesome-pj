@@ -770,6 +770,12 @@ export default {
     pos_settings: "",
     customer_info: "",
     mpesa_modes: [],
+    relay_status: {
+      enabled: false,
+      connected: false,
+      status: "",
+    },
+    local_sale_ref: "",
   }),
 
   methods: {
@@ -927,7 +933,33 @@ export default {
       const relayEnabled = parseInt(vm.pos_profile.custom_have_token || 0, 10) === 1;
       const relayBaseUrl = (vm.pos_profile.custom_edge_relay_url || "").trim();
 
+      if (relayEnabled && !relayBaseUrl) {
+        evntBus.$emit("show_mesage", {
+          text: __("Relay workflow is enabled but Edge Relay URL is not configured for this POS Profile."),
+          color: "error",
+        });
+        frappe.utils.play_sound("error");
+        return;
+      }
+
+      if (relayEnabled && !this.relay_status.connected) {
+        evntBus.$emit("show_mesage", {
+          text: __("RELAY DOWN: Offline continuity unavailable. Submit is blocked until relay is reachable."),
+          color: "error",
+        });
+        frappe.utils.play_sound("error");
+        return;
+      }
+
       if (relayEnabled && relayBaseUrl) {
+        if (!this.invoice_doc.customer || this.invoice_doc.customer === this.pos_profile.customer) {
+          evntBus.$emit("show_mesage", {
+            text: __("Customer is required before relay-backed commit."),
+            color: "error",
+          });
+          frappe.utils.play_sound("error");
+          return;
+        }
         vm.submit_invoice_via_relay(relayBaseUrl, data, print);
         return;
       }
@@ -982,18 +1014,78 @@ export default {
     },
     submit_invoice_via_relay(relayBaseUrl, data, print) {
       const vm = this;
-      const endpoint = `${relayBaseUrl.replace(/\/$/, "")}/relay/submit-invoice`;
+      const base = relayBaseUrl.replace(/\/$/, "");
+      const endpoint = `${base}/relay/commit-invoice`;
 
-      fetch(endpoint, {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-        },
-        body: JSON.stringify({
-          invoice: vm.invoice_doc,
-          data: data,
-        }),
-      })
+      const fallbackTokenId = (vm.invoice_doc.name || "").slice(-5);
+      const tokenId = vm.invoice_doc.token_id || fallbackTokenId;
+      const idempotencyKey = `${
+        vm.invoice_doc.name || "DRAFT"
+      }|${Date.now()}|${Math.random().toString(36).slice(2, 10)}`;
+
+      const deviceId =
+        localStorage.getItem("posa_relay_device_id") ||
+        `POS-${Math.random().toString(36).slice(2, 8).toUpperCase()}`;
+      localStorage.setItem("posa_relay_device_id", deviceId);
+
+      const ensureSession = async () => {
+        const queryUrl = `${base}/relay/session/current?pos_profile_id=${encodeURIComponent(
+          vm.pos_profile.name
+        )}&cashier_user_id=${encodeURIComponent(frappe.session.user)}&device_id=${encodeURIComponent(
+          deviceId
+        )}`;
+        try {
+          const currentResp = await fetch(queryUrl, {
+            method: "GET",
+            headers: {
+              Accept: "application/json",
+            },
+          });
+          const currentPayload = await currentResp.json();
+          if (currentResp.ok && currentPayload.ok && currentPayload.session) {
+            return currentPayload.session.session_id;
+          }
+        } catch (e) {
+          // continue to open session
+        }
+
+        const openResp = await fetch(`${base}/relay/session/open`, {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+          },
+          body: JSON.stringify({
+            pos_profile_id: vm.pos_profile.name,
+            cashier_user_id: frappe.session.user,
+            device_id: deviceId,
+          }),
+        });
+        const openPayload = await openResp.json();
+        if (!openResp.ok || !openPayload.ok || !openPayload.session) {
+          throw new Error(openPayload.message || "Unable to open cashier relay session");
+        }
+        return openPayload.session.session_id;
+      };
+
+      ensureSession()
+        .then((cashierSessionId) => {
+          return fetch(endpoint, {
+            method: "POST",
+            headers: {
+              "Content-Type": "application/json",
+            },
+            body: JSON.stringify({
+              token_id: tokenId,
+              idempotency_key: idempotencyKey,
+              pos_profile_id: vm.pos_profile.name,
+              cashier_user_id: frappe.session.user,
+              cashier_session_id: cashierSessionId,
+              device_id: deviceId,
+              invoice: vm.invoice_doc,
+              data: data,
+            }),
+          });
+        })
         .then(async (response) => {
           let payload = {};
           try {
@@ -1003,8 +1095,10 @@ export default {
           }
 
           if (!response.ok || !payload.ok) {
-            throw new Error(payload.message || "Relay submit failed");
+            throw new Error(payload.message || payload.code || "Relay commit failed");
           }
+
+          vm.local_sale_ref = payload.local_sale_ref || "";
 
           if (print) {
             vm.load_print_page();
@@ -1013,8 +1107,8 @@ export default {
           evntBus.$emit("set_last_invoice", vm.invoice_doc.name || "Queued");
           evntBus.$emit("show_mesage", {
             text: __(
-              "Invoice queued on Edge Relay (Event #{0}). Cloud sync will happen from relay.",
-              [payload.event_id || "-"]
+              "Sale committed locally. Local Sale Ref: {0}. Cloud sync will happen from relay.",
+              [payload.local_sale_ref || "-"]
             ),
             color: "success",
           });
@@ -1023,33 +1117,12 @@ export default {
         .catch((error) => {
           evntBus.$emit("show_mesage", {
             text: __(
-              "Edge Relay submit failed: {0}. Falling back to direct cloud submit.",
+              "Edge Relay commit failed: {0}. Direct cloud fallback is disabled for relay-enabled profiles.",
               [error.message || "Unknown error"]
             ),
-            color: "warning",
+            color: "error",
           });
-
-          frappe.call({
-            method: "posawesome.posawesome.api.posapp.submit_invoice",
-            args: {
-              data: data,
-              invoice: vm.invoice_doc,
-            },
-            async: true,
-            callback: function (r) {
-              if (r.message) {
-                if (print) {
-                  vm.load_print_page();
-                }
-                evntBus.$emit("set_last_invoice", vm.invoice_doc.name);
-                evntBus.$emit("show_mesage", {
-                  text: `Invoice ${r.message.name} is Submited (Direct Cloud Fallback)`,
-                  color: "success",
-                });
-                frappe.utils.play_sound("submit");
-              }
-            },
-          });
+          frappe.utils.play_sound("error");
         });
     },
     set_full_amount(idx) {
@@ -1545,6 +1618,13 @@ export default {
         this.pos_profile = data.pos_profile;
         this.get_mpesa_modes();
       });
+      evntBus.$on("relay_status_changed", (statusPayload) => {
+        this.relay_status = {
+          enabled: !!statusPayload.enabled,
+          connected: !!statusPayload.connected,
+          status: statusPayload.status || "",
+        };
+      });
       evntBus.$on("add_the_new_address", (data) => {
         this.addresses.push(data);
         this.$forceUpdate();
@@ -1588,6 +1668,7 @@ export default {
     evntBus.$off("set_customer_info_to_edit");
     evntBus.$off("update_invoice_coupons");
     evntBus.$off("set_mpesa_payment");
+    evntBus.$off("relay_status_changed");
   },
 
   destroyed() {

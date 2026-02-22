@@ -3,6 +3,8 @@ import os
 import sqlite3
 import sys
 
+from .storage import init_db
+
 
 def main():
     root = os.path.abspath(os.path.join(os.path.dirname(__file__), ".."))
@@ -31,24 +33,37 @@ def main():
                 indent=2,
             )
 
-    # DB check/create
+    # DB check/create (legacy + v2 schema)
+    init_db()
+
+    # Basic schema sanity checks
     conn = sqlite3.connect(db_path)
     try:
-        conn.execute(
+        expected_tables = [
+            "relay_queue",
+            "relay_tokens",
+            "relay_token_lines",
+            "relay_cashier_sessions",
+            "relay_local_sales",
+            "relay_local_sale_lines",
+            "relay_idempotency",
+            "relay_pick_events",
+            "relay_dispatch_events",
+            "relay_customers",
+            "relay_items_cache",
+            "relay_outbox",
+        ]
+
+        cur = conn.execute(
             """
-            CREATE TABLE IF NOT EXISTS relay_queue (
-                id INTEGER PRIMARY KEY AUTOINCREMENT,
-                event_type TEXT NOT NULL,
-                payload TEXT NOT NULL,
-                status TEXT NOT NULL DEFAULT 'queued',
-                retries INTEGER NOT NULL DEFAULT 0,
-                last_error TEXT,
-                created_at TEXT NOT NULL,
-                updated_at TEXT NOT NULL
-            )
+            SELECT name FROM sqlite_master WHERE type='table'
             """
         )
-        conn.commit()
+        existing = {r[0] for r in cur.fetchall()}
+        missing = [t for t in expected_tables if t not in existing]
+        if missing:
+            print("SELFTEST_ERROR_MISSING_TABLES=" + ",".join(missing))
+            return 1
     finally:
         conn.close()
 

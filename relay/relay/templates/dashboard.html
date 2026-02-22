@@ -30,12 +30,25 @@
 </div>
 
 <div class="card">
+  <h2>Outbox Counters (v2 Local-First)</h2>
+  {% set outbox = outbox_counts if outbox_counts else {'queued':0,'processing':0,'done':0,'failed':0,'total':0} %}
+  <div class="grid cols-2">
+    <div><span class="pill queued">Queued: {{ outbox.queued }}</span></div>
+    <div><span class="pill">Processing: {{ outbox.processing }}</span></div>
+    <div><span class="pill done">Done: {{ outbox.done }}</span></div>
+    <div><span class="pill failed">Failed: {{ outbox.failed }}</span></div>
+  </div>
+  <p class="muted" style="margin-top:10px">Total outbox events: {{ outbox.total }}</p>
+</div>
+
+<div class="card">
   <h2>Quick Actions</h2>
   <div class="actions">
     <form method="post" action="/api/sync-now">
       <button type="submit">Sync One Event Now</button>
     </form>
     <a href="/queue"><button class="secondary" type="button">Open Queue</button></a>
+    <a href="/api/outbox"><button class="secondary" type="button">Open Outbox JSON</button></a>
     <a href="/setup"><button class="secondary" type="button">Open Setup</button></a>
   </div>
 </div>

@@ -48,16 +48,30 @@ Go to `System Setup` and fill:
 - [ ] Open Dashboard (`/`)
 - [ ] Open Queue (`/queue`)
 - [ ] Verify real-time refresh updates counters
+- [ ] Verify outbox counters are visible on dashboard
+- [ ] Open Outbox JSON (`/api/outbox`) and verify list response
 
 ## 7) Simple run instructions (daily)
 
 - [ ] To start relay: double-click [`start_relay.bat`](relay/start_relay.bat)
 - [ ] To check status: open `http://127.0.0.1:8787/health`
 - [ ] To view queue live: open `http://127.0.0.1:8787/queue`
+- [ ] To view outbox live (JSON): open `http://127.0.0.1:8787/api/outbox`
 
 ## 6) POS integration usage
 
 - [ ] POS clients target relay using `http://192.168.50.168:8787`
 - [ ] Keep feature enabled only for selected POS Profile
 - [ ] Keep all other POS Profiles unchanged
+
+## 8) Local-first endpoint smoke tests (v2)
+
+- [ ] POST `/relay/session/open` with `pos_profile_id`, `cashier_user_id`, `device_id`
+- [ ] POST `/relay/token/create` with `pos_profile_id` and `items`
+- [ ] GET `/relay/token/<token_id>` returns `TOKEN_OPEN`
+- [ ] POST `/relay/commit-invoice` with `idempotency_key` and invoice payload
+- [ ] GET `/relay/pick-queue` includes created sale
+- [ ] POST `/relay/pick/update` to `PICKED_READY_FOR_RELEASE`
+- [ ] POST `/relay/dispatch/release` succeeds and returns `RELEASED`
+- [ ] POST same `/relay/commit-invoice` with same `idempotency_key` returns same `local_sale_ref`
 
