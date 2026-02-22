@@ -24,6 +24,7 @@ def main():
                     "api_secret": "",
                     "relay_host": "0.0.0.0",
                     "relay_port": 8787,
+                    "public_base_url": "",
                     "site_name": "",
                     "offline_mode": True,
                     "poll_seconds": 5,

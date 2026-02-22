@@ -31,6 +31,10 @@
         <input type="number" name="relay_port" value="{{ config.relay_port }}" />
       </div>
       <div>
+        <label>Public Relay URL (for ERPNext reachability checks)</label>
+        <input name="public_base_url" value="{{ config.public_base_url }}" placeholder="https://relay.yourdomain.com or https://xxxx.ngrok.app" />
+      </div>
+      <div>
         <label>Allowed Subnet</label>
         <input name="allowed_subnet" value="{{ config.allowed_subnet }}" placeholder="192.168.50.0/24" />
       </div>

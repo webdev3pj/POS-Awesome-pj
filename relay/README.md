@@ -62,6 +62,22 @@ After start, verify:
 - `POST /relay/pick/update`
 - `POST /relay/dispatch/release`
 
+## ERPNext accessibility requirement (critical)
+
+For ERPNext/Frappe Cloud to mark relay as reachable in backend diagnostics, ERPNext must be able to reach:
+
+- `<Edge Relay URL>/health`
+
+Recommended setup:
+
+1. Keep LAN URL for local POS browser paths if needed.
+2. Configure a **public or tunnel HTTPS URL** for ERPNext reachability.
+3. Put that URL in POS Profile `custom_edge_relay_url`.
+4. In relay setup, set **Public Relay URL** and run check:
+   - `GET /api/erpnext-access-check`
+
+If this check fails with LAN-only address (`192.168.x.x`), ERPNext cloud has no route and relay will show unreachable from server-side checks.
+
 ## Important notes
 
 - This is a practical v1 admin + queue monitor relay scaffold.

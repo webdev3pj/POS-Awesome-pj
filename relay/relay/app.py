@@ -9,9 +9,11 @@ from .storage import (
     close_cashier_session,
     enqueue_event,
     enqueue_outbox_event,
+    get_local_sale_detail,
     get_pick_queue,
     get_token,
     init_db,
+    list_local_sales,
     list_outbox,
     list_queue,
     load_config,
@@ -56,12 +58,46 @@ def create_app():
     @app.route("/")
     def dashboard():
         cfg = load_config()
+        tx_limit = int(request.args.get("tx_limit") or 150)
+        tx_limit = max(1, min(500, tx_limit))
+        tx_pos_profile = (request.args.get("tx_pos_profile") or "").strip() or None
+        tx_search = (request.args.get("tx_search") or "").strip() or None
+        tx_rows = list_local_sales(limit=tx_limit, pos_profile_id=tx_pos_profile, search=tx_search)
+
+        tx_summary = {
+            "total": len(tx_rows),
+            "sync_pending": 0,
+            "synced": 0,
+            "dispatch_released": 0,
+            "pick_exceptions": 0,
+            "sync_errors": 0,
+        }
+        for row in tx_rows:
+            sync_status = (row.get("cloud_sync_status") or "").upper()
+            dispatch_status = (row.get("dispatch_status") or "").upper()
+            pick_status = (row.get("pick_status") or "").upper()
+            if sync_status == "SALE_SYNCED_SI_SUBMITTED":
+                tx_summary["synced"] += 1
+            else:
+                tx_summary["sync_pending"] += 1
+            if dispatch_status == "RELEASED":
+                tx_summary["dispatch_released"] += 1
+            if pick_status == "PICK_EXCEPTION":
+                tx_summary["pick_exceptions"] += 1
+            if row.get("cloud_sync_error"):
+                tx_summary["sync_errors"] += 1
+
         return render_template(
             "dashboard.html",
             title="POS Relay Dashboard",
             config=cfg,
             counts=queue_counts(),
             outbox_counts=outbox_counts(),
+            tx_rows=tx_rows,
+            tx_summary=tx_summary,
+            tx_limit=tx_limit,
+            tx_pos_profile=tx_pos_profile or "",
+            tx_search=tx_search or "",
         )
 
     @app.route("/queue")
@@ -82,6 +118,7 @@ def create_app():
                 "api_secret": (request.form.get("api_secret") or "").strip(),
                 "relay_host": (request.form.get("relay_host") or "0.0.0.0").strip(),
                 "relay_port": int(request.form.get("relay_port") or 8787),
+                "public_base_url": (request.form.get("public_base_url") or "").strip(),
                 "site_name": (request.form.get("site_name") or "").strip(),
                 "poll_seconds": int(request.form.get("poll_seconds") or 5),
                 "allowed_subnet": (request.form.get("allowed_subnet") or "192.168.50.0/24").strip(),
@@ -115,10 +152,113 @@ def create_app():
                     "allowed_subnet": cfg.get("allowed_subnet"),
                 },
                 "frappe_base_url": cfg.get("frappe_base_url"),
+                "public_base_url": cfg.get("public_base_url"),
                 "queue": queue_counts(),
                 "outbox": outbox_counts(),
             }
         )
+
+    @app.route("/api/erpnext-access-check", methods=["GET"])
+    def api_erpnext_access_check():
+        """
+        Validates if the configured relay URL is reachable from ERPNext/cloud perspective.
+        This is best-effort and uses the same method ERPNext backend uses: HTTP GET /health.
+        """
+        cfg = load_config()
+        target_url = (request.args.get("relay_url") or "").strip()
+        if not target_url:
+            target_url = (cfg.get("public_base_url") or "").strip()
+        if not target_url:
+            return (
+                jsonify(
+                    {
+                        "ok": False,
+                        "status": "not_configured",
+                        "message": "Relay URL is not configured. Set public_base_url in relay setup or pass relay_url query.",
+                    }
+                ),
+                400,
+            )
+
+        if target_url.endswith("/"):
+            target_url = target_url.rstrip("/")
+        health_url = f"{target_url}/health"
+
+        import requests
+
+        try:
+            resp = requests.get(health_url, timeout=5)
+            resp.raise_for_status()
+            payload = {}
+            try:
+                payload = resp.json() or {}
+            except Exception:
+                payload = {}
+            return jsonify(
+                {
+                    "ok": True,
+                    "status": "reachable",
+                    "relay_url": target_url,
+                    "health_url": health_url,
+                    "http_status": resp.status_code,
+                    "relay_ok": bool(payload.get("ok")) if isinstance(payload, dict) else True,
+                    "message": "Relay URL is reachable via /health.",
+                }
+            )
+        except requests.exceptions.Timeout:
+            return (
+                jsonify(
+                    {
+                        "ok": False,
+                        "status": "timeout",
+                        "relay_url": target_url,
+                        "health_url": health_url,
+                        "message": "Timeout while checking relay URL.",
+                    }
+                ),
+                504,
+            )
+        except requests.exceptions.ConnectionError:
+            return (
+                jsonify(
+                    {
+                        "ok": False,
+                        "status": "connection_error",
+                        "relay_url": target_url,
+                        "health_url": health_url,
+                        "message": "Connection failed while checking relay URL.",
+                    }
+                ),
+                503,
+            )
+        except requests.exceptions.HTTPError as exc:
+            status_code = exc.response.status_code if getattr(exc, "response", None) else None
+            return (
+                jsonify(
+                    {
+                        "ok": False,
+                        "status": "http_error",
+                        "relay_url": target_url,
+                        "health_url": health_url,
+                        "http_status": status_code,
+                        "message": "Relay URL responded with HTTP error.",
+                    }
+                ),
+                502,
+            )
+        except Exception as exc:
+            return (
+                jsonify(
+                    {
+                        "ok": False,
+                        "status": "error",
+                        "relay_url": target_url,
+                        "health_url": health_url,
+                        "message": str(exc),
+                    }
+                ),
+                500,
+            )
 
     @app.route("/api/metrics")
     def api_metrics():
@@ -131,6 +271,22 @@ def create_app():
     @app.route("/api/outbox")
     def api_outbox():
         return jsonify({"rows": list_outbox(500), "counts": outbox_counts()})
+
+    @app.route("/api/transactions")
+    def api_transactions():
+        limit = int(request.args.get("limit") or 200)
+        limit = max(1, min(1000, limit))
+        pos_profile_id = (request.args.get("pos_profile_id") or "").strip() or None
+        search = (request.args.get("search") or "").strip() or None
+        rows = list_local_sales(limit=limit, pos_profile_id=pos_profile_id, search=search)
+        return jsonify({"rows": rows, "count": len(rows)})
+
+    @app.route("/api/transactions/<local_sale_ref>")
+    def api_transaction_detail(local_sale_ref):
+        detail = get_local_sale_detail(local_sale_ref)
+        if not detail:
+            return jsonify({"ok": False, "code": "SALE_NOT_FOUND"}), 404
+        return jsonify({"ok": True, **detail})
 
     @app.route("/api/sync-now", methods=["POST"])
     def api_sync_now():

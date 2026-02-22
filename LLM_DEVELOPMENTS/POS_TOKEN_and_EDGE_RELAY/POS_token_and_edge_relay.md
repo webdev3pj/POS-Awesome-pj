@@ -475,3 +475,35 @@ Result summary:
 3. Add operator-facing pick/dispatch UI screens in POS (or dedicated relay UI) for role flows.
 4. Replace UTC deprecation-sensitive calls with timezone-aware datetime helpers.
 5. Finalize cloud deployment script and run outage recovery test against real cloud site.
+
+## 21. ERPNext-to-Relay Accessibility (Critical Requirement)
+
+### 21.1 Requirement
+ERPNext server-side checks must be able to reach relay health endpoint:
+
+- `<custom_edge_relay_url>/health`
+
+If ERPNext is on Frappe Cloud and `custom_edge_relay_url` is LAN-only (for example `http://192.168.50.168:8787`), server-side reachability will fail unless VPN/tunnel/public route exists.
+
+### 21.2 Implementation update completed
+1. Added relay config key `public_base_url` in relay config model.
+2. Added relay setup UI field for `public_base_url`.
+3. Added relay endpoint `GET /api/erpnext-access-check` to verify reachability to configured public URL `/health`.
+4. Added dashboard visibility for public URL and quick access-check action.
+5. Updated setup/runbook docs to enforce cloud-reachable URL guidance.
+
+### 21.3 Operational rule
+1. POS browser local continuity can still use LAN route.
+2. ERPNext/Frappe Cloud backend diagnostics require cloud-reachable URL.
+3. In cloud deployments, set POS Profile `custom_edge_relay_url` to cloud-reachable HTTPS URL.
+
+### 21.4 Validation path
+From relay host, call:
+
+- `/api/erpnext-access-check`
+
+Expected success payload includes:
+- `ok: true`
+- `status: "reachable"`
+
+If not reachable, fix network path (tunnel/VPN/public route/firewall) before relying on ERPNext server-side relay status.

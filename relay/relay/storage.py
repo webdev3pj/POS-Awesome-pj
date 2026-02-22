@@ -18,6 +18,7 @@ DEFAULT_CONFIG = {
     "api_secret": "",
     "relay_host": "0.0.0.0",
     "relay_port": 8787,
+    "public_base_url": "",
     "site_name": "",
     "offline_mode": True,
     "poll_seconds": 5,
@@ -479,24 +480,64 @@ def create_token(payload, expiry_minutes=120):
     lines = (payload or {}).get("items") or (payload or {}).get("lines") or []
 
     with get_db() as conn:
-        conn.execute(
+        existing = conn.execute(
             """
-            INSERT INTO relay_tokens (
-                token_id, pos_profile_id, cashier_user_id, customer_id, customer_name,
-                status, expires_at, created_at, updated_at
-            ) VALUES (?, ?, ?, ?, ?, 'TOKEN_OPEN', ?, ?, ?)
+            SELECT token_id, status, expires_at
+            FROM relay_tokens
+            WHERE token_id = ?
             """,
-            (
-                token_id,
-                pos_profile_id,
-                (payload or {}).get("cashier_user_id"),
-                (payload or {}).get("customer_id"),
-                (payload or {}).get("customer_name"),
-                expires_at,
-                now,
-                now,
-            ),
-        )
+            (token_id,),
+        ).fetchone()
+
+        if existing:
+            # idempotent behavior for token creation retries
+            if existing["status"] in ("TOKEN_OPEN", "TOKEN_EXPIRED"):
+                conn.execute(
+                    """
+                    UPDATE relay_tokens
+                    SET pos_profile_id = ?, cashier_user_id = ?, customer_id = ?, customer_name = ?,
+                        status = 'TOKEN_OPEN', expires_at = ?, updated_at = ?,
+                        void_reason = NULL, voided_by = NULL, consumed_sale_ref = NULL, consumed_at = NULL
+                    WHERE token_id = ?
+                    """,
+                    (
+                        pos_profile_id,
+                        (payload or {}).get("cashier_user_id"),
+                        (payload or {}).get("customer_id"),
+                        (payload or {}).get("customer_name"),
+                        expires_at,
+                        now,
+                        token_id,
+                    ),
+                )
+                conn.execute(
+                    """
+                    DELETE FROM relay_token_lines WHERE token_id = ?
+                    """,
+                    (token_id,),
+                )
+            else:
+                # TOKEN_PAID / TOKEN_VOID should not be recreated
+                raise ValueError(f"Token {token_id} already exists with status {existing['status']}")
+        else:
+            conn.execute(
+                """
+                INSERT INTO relay_tokens (
+                    token_id, pos_profile_id, cashier_user_id, customer_id, customer_name,
+                    status, expires_at, created_at, updated_at
+                ) VALUES (?, ?, ?, ?, ?, 'TOKEN_OPEN', ?, ?, ?)
+                """,
+                (
+                    token_id,
+                    pos_profile_id,
+                    (payload or {}).get("cashier_user_id"),
+                    (payload or {}).get("customer_id"),
+                    (payload or {}).get("customer_name"),
+                    expires_at,
+                    now,
+                    now,
+                ),
+            )
 
         for line in lines:
             qty = float((line or {}).get("qty") or 0)
@@ -1306,4 +1347,134 @@ def get_latest_local_sale(local_sale_ref):
         data["invoice_payload"] = _loads(data.get("invoice_payload"))
         data["data_payload"] = _loads(data.get("data_payload"))
         return data
+
+
+def list_local_sales(limit=200, pos_profile_id=None, search=None):
+    query = """
+        SELECT local_sale_ref, token_id, pos_profile_id, cashier_user_id,
+               cashier_session_id, device_id, idempotency_key,
+               sale_status, pick_status, dispatch_status, paid,
+               total, net_total, customer_id, customer_name,
+               cloud_invoice_name, cloud_sync_status, cloud_sync_error,
+               released_by, released_at, created_at, updated_at
+        FROM relay_local_sales
+        WHERE 1 = 1
+    """
+    params = []
+
+    if pos_profile_id:
+        query += " AND pos_profile_id = ?"
+        params.append(pos_profile_id)
+
+    if search:
+        like = f"%{search}%"
+        query += """
+            AND (
+                local_sale_ref LIKE ?
+                OR token_id LIKE ?
+                OR customer_id LIKE ?
+                OR customer_name LIKE ?
+                OR cloud_invoice_name LIKE ?
+            )
+        """
+        params.extend([like, like, like, like, like])
+
+    query += " ORDER BY created_at DESC LIMIT ?"
+    params.append(int(limit))
+
+    with get_db() as conn:
+        cur = conn.execute(query, tuple(params))
+        return [dict(r) for r in cur.fetchall()]
+
+
+def get_local_sale_detail(local_sale_ref):
+    with get_db() as conn:
+        sale_row = conn.execute(
+            """
+            SELECT local_sale_ref, token_id, pos_profile_id, cashier_user_id,
+                   cashier_session_id, device_id, idempotency_key,
+                   sale_status, pick_status, dispatch_status, paid,
+                   total, net_total, customer_id, customer_name,
+                   invoice_payload, data_payload,
+                   cloud_invoice_name, cloud_sync_status, cloud_sync_error,
+                   released_by, released_at, created_at, updated_at
+            FROM relay_local_sales
+            WHERE local_sale_ref = ?
+            """,
+            (local_sale_ref,),
+        ).fetchone()
+
+        if not sale_row:
+            return None
+
+        line_rows = conn.execute(
+            """
+            SELECT id, local_sale_ref, item_code, item_name, qty, uom, rate, amount,
+                   line_status, pick_status, payload, created_at, updated_at
+            FROM relay_local_sale_lines
+            WHERE local_sale_ref = ?
+            ORDER BY id ASC
+            """,
+            (local_sale_ref,),
+        ).fetchall()
+
+        pick_rows = conn.execute(
+            """
+            SELECT id, local_sale_ref, picker_user_id, event_type, notes, payload, created_at
+            FROM relay_pick_events
+            WHERE local_sale_ref = ?
+            ORDER BY id ASC
+            """,
+            (local_sale_ref,),
+        ).fetchall()
+
+        dispatch_rows = conn.execute(
+            """
+            SELECT id, local_sale_ref, dispatcher_user_id, event_type, notes, payload, created_at
+            FROM relay_dispatch_events
+            WHERE local_sale_ref = ?
+            ORDER BY id ASC
+            """,
+            (local_sale_ref,),
+        ).fetchall()
+
+        outbox_rows = conn.execute(
+            """
+            SELECT event_id, event_type, idempotency_key, local_ref, payload,
+                   status, retries, next_attempt_at, last_error, cloud_ref,
+                   created_at, updated_at
+            FROM relay_outbox
+            WHERE local_ref = ?
+            ORDER BY created_at DESC
+            """,
+            (local_sale_ref,),
+        ).fetchall()
+
+    sale = dict(sale_row)
+    sale["invoice_payload"] = _loads(sale.get("invoice_payload"))
+    sale["data_payload"] = _loads(sale.get("data_payload"))
+
+    lines = [dict(r) for r in line_rows]
+    for row in lines:
+        row["payload"] = _loads(row.get("payload"))
+
+    pick_events = [dict(r) for r in pick_rows]
+    for row in pick_events:
+        row["payload"] = _loads(row.get("payload"))
+
+    dispatch_events = [dict(r) for r in dispatch_rows]
+    for row in dispatch_events:
+        row["payload"] = _loads(row.get("payload"))
+
+    outbox_events = [dict(r) for r in outbox_rows]
+    for row in outbox_events:
+        row["payload"] = _loads(row.get("payload"))
+
+    return {
+        "sale": sale,
+        "lines": lines,
+        "pick_events": pick_events,
+        "dispatch_events": dispatch_events,
+        "outbox_events": outbox_events,
+    }
 

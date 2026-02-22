@@ -113,6 +113,41 @@
       .actions > * {
         width: auto;
       }
+      .mono {
+        font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+      }
+      .small {
+        font-size: 12px;
+      }
+      .nowrap {
+        white-space: nowrap;
+      }
+      .wrap-anywhere {
+        overflow-wrap: anywhere;
+        word-break: break-word;
+      }
+      .code-block {
+        max-height: 180px;
+        overflow: auto;
+        display: block;
+        white-space: pre-wrap;
+      }
+      details summary {
+        cursor: pointer;
+        color: var(--brand);
+      }
+      .table-scroll {
+        overflow-x: auto;
+      }
+      .pill.synced {
+        color: var(--ok);
+      }
+      .pill.pending {
+        color: var(--warn);
+      }
+      .pill.error {
+        color: var(--err);
+      }
     </style>
   </head>
   <body>

@@ -34,8 +34,15 @@ Go to `System Setup` and fill:
 - [ ] API Secret
 - [ ] Relay Host: `0.0.0.0`
 - [ ] Relay Port: `8787` (or your chosen fixed port)
+- [ ] Public Relay URL: HTTPS/tunnel/public URL reachable by ERPNext cloud
 - [ ] Allowed Subnet: `192.168.50.0/24`
 - [ ] Save Configuration
+
+### Critical reachability note
+
+- [ ] If ERPNext is on Frappe Cloud, **LAN URL alone is not enough** for server-side reachability checks.
+- [ ] Ensure POS Profile `custom_edge_relay_url` points to URL ERPNext cloud can reach.
+- [ ] Validate from relay side using `/api/erpnext-access-check`.
 
 ## 4) One-click bootstrap (Windows)
 

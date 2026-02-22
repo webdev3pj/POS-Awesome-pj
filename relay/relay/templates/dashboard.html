@@ -15,6 +15,11 @@
       <p><code>{{ config.frappe_base_url or "(not set)" }}</code></p>
       <p class="muted">API auth: {{ "configured" if config.api_key and config.api_secret else "missing" }}</p>
     </div>
+    <div>
+      <h3>Public Relay URL</h3>
+      <p><code>{{ config.public_base_url or "(not set)" }}</code></p>
+      <p class="muted">Use this URL in ERPNext POS Profile `custom_edge_relay_url` for cloud reachability checks.</p>
+    </div>
   </div>
 </div>
 
@@ -42,6 +47,103 @@
 </div>
 
 <div class="card">
+  <h2>Transaction Status Overview</h2>
+  <div class="grid cols-2">
+    <div><span class="pill">Loaded: {{ tx_summary.total }}</span></div>
+    <div><span class="pill pending">Sync Pending: {{ tx_summary.sync_pending }}</span></div>
+    <div><span class="pill synced">Synced: {{ tx_summary.synced }}</span></div>
+    <div><span class="pill">Released: {{ tx_summary.dispatch_released }}</span></div>
+    <div><span class="pill error">Pick Exceptions: {{ tx_summary.pick_exceptions }}</span></div>
+    <div><span class="pill error">Sync Errors: {{ tx_summary.sync_errors }}</span></div>
+  </div>
+
+  <form method="get" action="/" class="grid cols-2" style="margin-top:12px">
+    <div>
+      <label class="small muted">POS Profile Filter</label>
+      <input type="text" name="tx_pos_profile" value="{{ tx_pos_profile }}" placeholder="e.g. MAIN-POS" />
+    </div>
+    <div>
+      <label class="small muted">Search</label>
+      <input type="text" name="tx_search" value="{{ tx_search }}" placeholder="local_sale_ref / token / customer / cloud invoice" />
+    </div>
+    <div>
+      <label class="small muted">Rows</label>
+      <input type="number" name="tx_limit" value="{{ tx_limit }}" min="1" max="500" />
+    </div>
+    <div class="actions" style="align-items:flex-end; display:flex;">
+      <button type="submit">Apply Filters</button>
+    </div>
+  </form>
+</div>
+
+<div class="card">
+  <h2>Transaction Timeline (Local Sales)</h2>
+  <div class="table-scroll">
+    <table>
+      <thead>
+        <tr>
+          <th>Local Sale Ref</th>
+          <th>Token</th>
+          <th>POS / Cashier / Device</th>
+          <th>Customer</th>
+          <th>Amount</th>
+          <th>Pick</th>
+          <th>Dispatch</th>
+          <th>Cloud Sync</th>
+          <th>Cloud Invoice</th>
+          <th>Error</th>
+          <th>Timestamps</th>
+          <th>Details</th>
+        </tr>
+      </thead>
+      <tbody>
+        {% for tx in tx_rows %}
+        {% set sync_status = tx.cloud_sync_status or "" %}
+        <tr>
+          <td class="mono nowrap">{{ tx.local_sale_ref }}</td>
+          <td class="mono nowrap">{{ tx.token_id or "-" }}</td>
+          <td class="small wrap-anywhere">
+            <div><strong>{{ tx.pos_profile_id or "-" }}</strong></div>
+            <div>Cashier: {{ tx.cashier_user_id or "-" }}</div>
+            <div>Session: {{ tx.cashier_session_id or "-" }}</div>
+            <div class="mono">{{ tx.device_id or "-" }}</div>
+          </td>
+          <td class="small wrap-anywhere">
+            <div>{{ tx.customer_name or "-" }}</div>
+            <div class="mono">{{ tx.customer_id or "-" }}</div>
+          </td>
+          <td class="nowrap">{{ "%.2f"|format(tx.total or 0) }}</td>
+          <td><span class="pill">{{ tx.pick_status }}</span></td>
+          <td><span class="pill">{{ tx.dispatch_status }}</span></td>
+          <td>
+            <span class="pill {% if sync_status == 'SALE_SYNCED_SI_SUBMITTED' %}synced{% elif tx.cloud_sync_error %}error{% else %}pending{% endif %}">
+              {{ sync_status or "UNKNOWN" }}
+            </span>
+          </td>
+          <td class="mono nowrap">{{ tx.cloud_invoice_name or "-" }}</td>
+          <td class="small wrap-anywhere">{{ tx.cloud_sync_error or "" }}</td>
+          <td class="small nowrap">
+            <div>C: {{ tx.created_at }}</div>
+            <div>U: {{ tx.updated_at }}</div>
+            <div>R: {{ tx.released_at or "-" }}</div>
+          </td>
+          <td>
+            <button type="button" class="secondary" onclick="loadTxDetail('{{ tx.local_sale_ref }}')">View</button>
+          </td>
+        </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+</div>
+
+<div class="card" id="tx-detail-card">
+  <h2>Transaction Detail</h2>
+  <p class="muted">Select a transaction row and click <strong>View</strong>.</p>
+  <div id="tx-detail-body" class="small muted">No transaction selected.</div>
+</div>
+
+<div class="card">
   <h2>Quick Actions</h2>
   <div class="actions">
     <form method="post" action="/api/sync-now">
@@ -49,11 +151,103 @@
     </form>
     <a href="/queue"><button class="secondary" type="button">Open Queue</button></a>
     <a href="/api/outbox"><button class="secondary" type="button">Open Outbox JSON</button></a>
+    <a href="/api/transactions"><button class="secondary" type="button">Open Transactions JSON</button></a>
+    <a href="/api/erpnext-access-check"><button class="secondary" type="button">Run ERPNext Access Check</button></a>
     <a href="/setup"><button class="secondary" type="button">Open Setup</button></a>
   </div>
 </div>
 
 <script>
+  async function loadTxDetail(localSaleRef) {
+    const target = document.getElementById('tx-detail-body');
+    target.textContent = 'Loading ' + localSaleRef + ' ...';
+    try {
+      const resp = await fetch('/api/transactions/' + encodeURIComponent(localSaleRef));
+      const data = await resp.json();
+      if (!resp.ok || !data.ok) {
+        target.textContent = 'Failed to load detail: ' + (data.message || data.code || resp.statusText);
+        return;
+      }
+
+      const sale = data.sale || {};
+      const lines = data.lines || [];
+      const pickEvents = data.pick_events || [];
+      const dispatchEvents = data.dispatch_events || [];
+      const outboxEvents = data.outbox_events || [];
+
+      const esc = (v) => {
+        if (v === null || v === undefined) return '';
+        return String(v)
+          .replaceAll('&', '&amp;')
+          .replaceAll('<', '&lt;')
+          .replaceAll('>', '&gt;')
+          .replaceAll('"', '&quot;')
+          .replaceAll("'", '&#39;');
+      };
+      const jsonBlock = (obj) => '<code class="code-block mono">' + esc(JSON.stringify(obj, null, 2)) + '</code>';
+
+      target.innerHTML = `
+        <div class="grid cols-2">
+          <div>
+            <h3>Core Status</h3>
+            <div><strong>Local Ref:</strong> <span class="mono">${esc(sale.local_sale_ref || '')}</span></div>
+            <div><strong>Token:</strong> <span class="mono">${esc(sale.token_id || '-')}</span></div>
+            <div><strong>Sale:</strong> ${esc(sale.sale_status || '-')}</div>
+            <div><strong>Pick:</strong> ${esc(sale.pick_status || '-')}</div>
+            <div><strong>Dispatch:</strong> ${esc(sale.dispatch_status || '-')}</div>
+            <div><strong>Cloud Sync:</strong> ${esc(sale.cloud_sync_status || '-')}</div>
+            <div><strong>Cloud Invoice:</strong> <span class="mono">${esc(sale.cloud_invoice_name || '-')}</span></div>
+            <div><strong>Cloud Error:</strong> ${esc(sale.cloud_sync_error || '')}</div>
+          </div>
+          <div>
+            <h3>Commercial</h3>
+            <div><strong>Total:</strong> ${esc(sale.total ?? 0)}</div>
+            <div><strong>Net:</strong> ${esc(sale.net_total ?? 0)}</div>
+            <div><strong>Customer:</strong> ${esc(sale.customer_name || '-')} <span class="mono">${esc(sale.customer_id || '')}</span></div>
+            <div><strong>POS:</strong> ${esc(sale.pos_profile_id || '-')}</div>
+            <div><strong>Cashier:</strong> ${esc(sale.cashier_user_id || '-')}</div>
+            <div><strong>Session:</strong> <span class="mono">${esc(sale.cashier_session_id || '-')}</span></div>
+            <div><strong>Device:</strong> <span class="mono">${esc(sale.device_id || '-')}</span></div>
+            <div><strong>Idempotency:</strong> <span class="mono">${esc(sale.idempotency_key || '-')}</span></div>
+          </div>
+        </div>
+
+        <details open>
+          <summary>Invoice Payload</summary>
+          ${jsonBlock(sale.invoice_payload || {})}
+        </details>
+
+        <details>
+          <summary>Data Payload</summary>
+          ${jsonBlock(sale.data_payload || {})}
+        </details>
+
+        <details>
+          <summary>Sale Lines (${lines.length})</summary>
+          ${jsonBlock(lines)}
+        </details>
+
+        <details>
+          <summary>Pick Events (${pickEvents.length})</summary>
+          ${jsonBlock(pickEvents)}
+        </details>
+
+        <details>
+          <summary>Dispatch Events (${dispatchEvents.length})</summary>
+          ${jsonBlock(dispatchEvents)}
+        </details>
+
+        <details>
+          <summary>Outbox Events (${outboxEvents.length})</summary>
+          ${jsonBlock(outboxEvents)}
+        </details>
+      `;
+      document.getElementById('tx-detail-card').scrollIntoView({ behavior: 'smooth', block: 'start' });
+    } catch (err) {
+      target.textContent = 'Error loading transaction detail: ' + (err?.message || String(err));
+    }
+  }
+
   setTimeout(() => window.location.reload(), 5000);
 </script>
 {% endblock %}
