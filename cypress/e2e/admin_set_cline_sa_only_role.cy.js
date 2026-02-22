@@ -112,13 +112,46 @@ function parseLabelFromOtpUri(uri) {
 
 describe("Admin preflight: set cline to SA-only operational role", () => {
   it("keeps non-cline roles but leaves only cline-Sales Associate among cline-* roles", () => {
-    const targetOperationalRole = "cline-Sales Associate";
+    let targetOperationalRole = "cline-Sales Associate";
     const loginUser = String(Cypress.env("username") || "").trim();
     const explicitUserDocname = String(Cypress.env("userDocname") || "").trim();
     const otpLabelCandidate = parseLabelFromOtpUri(Cypress.env("totpUri"));
 
     loginWithOtp();
     cy.visit("/app");
+
+    frappeCall("frappe.client.get_list", {
+      doctype: "Role",
+      fields: ["name"],
+      limit_page_length: 1000,
+    }).then((roleResp) => {
+      const roleRows = Array.isArray(roleResp && roleResp.message) ? roleResp.message : [];
+      const roleNames = roleRows.map((r) => String((r && r.name) || "").trim()).filter(Boolean);
+      const clineRoles = roleNames.filter((name) => name.startsWith("cline-"));
+
+      const exact = clineRoles.find((r) => r === "cline-Sales Associate");
+      const caseInsensitive = clineRoles.find(
+        (r) => r.toLowerCase() === "cline-sales associate".toLowerCase()
+      );
+      const fuzzy = clineRoles.find((r) => {
+        const t = r.toLowerCase();
+        return t.includes("sales") && t.includes("associate");
+      });
+
+      const resolved = exact || caseInsensitive || fuzzy || "";
+      if (!resolved) {
+        throw new Error(
+          [
+            "Precondition failed: No Sales Associate cline role exists on this site.",
+            `Available cline-* roles: ${clineRoles.length ? clineRoles.join(", ") : "(none)"}`,
+            "Fix by ensuring role fixtures are installed/migrated, then rerun this spec.",
+          ].join(" ")
+        );
+      }
+
+      targetOperationalRole = resolved;
+      cy.log(`Resolved SA operational role: ${targetOperationalRole}`);
+    });
 
     frappeCall("frappe.client.get_list", {
       doctype: "User",
@@ -200,12 +233,12 @@ describe("Admin preflight: set cline to SA-only operational role", () => {
       const roles = Array.isArray(saved.roles) ? saved.roles : [];
       const clineRoles = roles.map((r) => String((r && r.role) || "")).filter((r) => r.startsWith("cline-"));
 
-      expect(clineRoles, "remaining cline-* roles").to.deep.equal(["cline-Sales Associate"]);
+      expect(clineRoles, "remaining cline-* roles").to.deep.equal([targetOperationalRole]);
       cy.log(`Operational roles now: ${clineRoles.join(", ")}`);
 
       // Reload the User form so the change is visible in the UI for watch mode.
       cy.reload();
-      cy.get("body", { timeout: 60000 }).should("contain.text", "cline-Sales Associate");
+      cy.get("body", { timeout: 60000 }).should("contain.text", targetOperationalRole);
     });
   });
 });

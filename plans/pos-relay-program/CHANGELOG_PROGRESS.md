@@ -86,3 +86,24 @@ Entry format:
   - `phases/phase-1-sa-sales-order-token-online-first.md`
   - `00-ai-agent-start-here.md`
   - `02-master-implementation-plan.md`
+
+## 2026-02-22 - Dev-site Cypress watch/headed runs (login pass, SA blocked by missing roles)
+- Branch: `kilo-codex-v3`
+- Summary: Ran Cypress against the live dev site in visible Chrome mode and CLI-headed mode; login passed, but SA workflow testing is blocked by missing `cline-*` roles on the site.
+- What changed:
+  - Executed `admin_set_cline_sa_only_role.cy.js`, `frappe_login_otp.cy.js`, and `sa_workflow_frontend_watch.cy.js` against `https://devpjjamaica.v.frappe.cloud/`.
+  - Improved `admin_set_cline_sa_only_role.cy.js` to auto-detect SA role name and fail with explicit available `cline-*` role list.
+  - Identified and fixed opening dialog API `NameError: '_' is not defined` (translation helper typo) and pushed hotfix commit `172c149`.
+  - Updated UAT evidence doc with actual run outcomes and blockers.
+- What was verified:
+  - OTP login automation works on the live dev site.
+  - Dev site currently returns no `cline-*` roles (`Available cline-* roles: (none)`), blocking role assignment and SA flow.
+  - SA spec reaches POS opening dialog and correctly surfaces “no assigned role” blocker.
+- What remains:
+  - Ensure `cline-*` roles exist on the site (fixtures/migrate).
+  - Rerun role preflight spec to set `cline` to SA-only.
+  - Rerun SA workflow + ticket rail spec after role setup.
+- Links:
+  - `uat/2026-02-22-dev-site-sa-watch-mode-cypress.md`
+  - `phases/phase-1-sa-sales-order-token-online-first.md`
+  - `01-role-based-workflow-spec.md`
