@@ -8,7 +8,6 @@
     "vuetify": "^2.6.10"
   },
   "devDependencies": {
-    "cross-env": "^10.1.0",
     "cypress": "^14.5.4",
     "dotenv": "^17.3.1",
     "otpauth": "^9.5.0"
