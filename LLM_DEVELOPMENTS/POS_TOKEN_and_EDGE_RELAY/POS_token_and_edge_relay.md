@@ -193,11 +193,14 @@ For one enabled profile:
 
 ## 11. Final State Snapshot
 - Branch: kilo-codex-v1
-- Latest commit expected in remote before this document work: 760c7c9
+- Latest known docs/layout commit: 99416d0
+- Relay handoff assets now live in:
+  - LLM_DEVELOPMENTS/POS_TOKEN_and_EDGE_RELAY/
 - Includes:
-  - profile-specific relay URL setting
+  - profile-specific relay URL setting (from POS Profile)
   - detailed relay diagnostics
   - cloud internet/connectivity diagnostics
+  - naming scheme documentation for future AI agents
 
 ## 12. Quick Resume Checklist for Next AI
 1. Pull latest kilo-codex-v1.
@@ -206,3 +209,58 @@ For one enabled profile:
 4. Validate relay + cloud chips in POS header.
 5. Execute full invoice -> relay -> workflow state UAT.
 6. Resolve any runtime errors with reproducible logs and commit minimal scoped fixes.
+
+## 13. Operator Runbook: Testing on the Same OptiPlex (Dev Site + Relay)
+This section answers the practical operator question: **Yes**, the Edge Relay address is set from ERPNext front-end on the POS Profile using field `custom_edge_relay_url`.
+
+### 13.1 Where to set the relay URL (front-end)
+1. Open ERPNext desk (dev site).
+2. Go to **POS Profile** and open the profile you want to test.
+3. Enable `Have Token!` (`custom_have_token`).
+4. In `Edge Relay URL` (`custom_edge_relay_url`), enter the relay base URL.
+5. Save POS Profile.
+
+### 13.2 Important network rule (critical)
+Relay status in POS is calculated by backend method `get_relay_connectivity_status`, which makes a server-side request from Frappe Cloud to `<Edge Relay URL>/health`.
+
+That means:
+- If you set `http://127.0.0.1:8787`, it points to loopback of the cloud server (not your OptiPlex), so relay status will show unreachable.
+- For true cloud-to-edge validation, URL must be reachable from cloud (public IP, secure tunnel, VPN, or port-forwarded address with firewall rules).
+
+### 13.3 Same-machine test sequence (recommended)
+1. On OptiPlex, start relay with `relay/start_relay.bat`.
+2. Open relay setup page and set:
+   - Frappe URL: your dev cloud URL
+   - API key and API secret
+3. Confirm relay health locally:
+   - open `http://127.0.0.1:8787/health`
+4. Expose relay so cloud can reach it (choose one):
+   - static/public IP + firewall/port route, or
+   - secure tunnel endpoint.
+5. Put that reachable URL in POS Profile `custom_edge_relay_url`.
+6. Open POS session for that profile.
+7. Verify top chips:
+   - Relay chip: Online/Offline with diagnostics
+   - Cloud chip: Cloud Online/Unreachable and internet state
+8. Create and submit a test invoice.
+9. Verify queue and state transitions in relay dashboard and POS workflow status.
+
+### 13.4 Fast troubleshooting checklist
+- Relay chip says **Not Configured**:
+  - POS Profile `custom_edge_relay_url` empty and no site fallback configured.
+- Relay chip says **Connection Error/Timeout**:
+  - URL not reachable from cloud, relay not running, firewall blocked, wrong host/port.
+- Cloud chip says **Internet Offline**:
+  - local browser/device network down.
+- Cloud chip says **Cloud Unreachable**:
+  - browser can’t reach Frappe cloud endpoint or cloud returns error.
+
+### 13.5 Expected success criteria
+- POS Profile contains reachable `custom_edge_relay_url`.
+- Relay health endpoint returns ok.
+- POS relay chip shows **Online**.
+- Cloud chip shows **Cloud Online**.
+- Test invoice reaches relay queue and sync path without manual DB intervention.
+
+## 14. Update Policy for This File
+Whenever testing behavior, deployment status, or runbook steps change, update this markdown and regenerate the sibling PDF in the same folder before finalizing branch work.
