@@ -1,12 +1,36 @@
+import os
+import tempfile
 import unittest
 
+import relay.app as relay_app_module
+import relay.storage as relay_storage
 from relay.app import create_app
 
 
 class OfflineWorkflowTests(unittest.TestCase):
     def setUp(self):
+        self._tmpdir = tempfile.TemporaryDirectory()
+        self._orig_data_dir = relay_storage.DATA_DIR
+        self._orig_db_path = relay_storage.DB_PATH
+        self._orig_config_path = relay_storage.CONFIG_PATH
+        self._orig_run_sync_loop = relay_app_module.run_sync_loop
+
+        relay_storage.DATA_DIR = self._tmpdir.name
+        relay_storage.DB_PATH = os.path.join(self._tmpdir.name, "relay-test.db")
+        relay_storage.CONFIG_PATH = os.path.join(self._tmpdir.name, "relay-config.json")
+
+        # Disable the background sync loop during unit tests; tests exercise HTTP handlers/storage behavior.
+        relay_app_module.run_sync_loop = lambda **kwargs: None
+
         self.app = create_app()
         self.client = self.app.test_client()
+
+    def tearDown(self):
+        relay_app_module.run_sync_loop = self._orig_run_sync_loop
+        relay_storage.DATA_DIR = self._orig_data_dir
+        relay_storage.DB_PATH = self._orig_db_path
+        relay_storage.CONFIG_PATH = self._orig_config_path
+        self._tmpdir.cleanup()
 
     def _open_session(self, cashier_user_id, device_id="DEVICE-A"):
         resp = self.client.post(

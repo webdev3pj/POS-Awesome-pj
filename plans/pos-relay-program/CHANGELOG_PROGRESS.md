@@ -140,6 +140,25 @@ Entry format:
   - `phases/phase-2-cashier-picker-dispatch-ui-and-enforcement.md`
   - `00-ai-agent-start-here.md`
 
+## 2026-02-23 - Local edge relay acceptance + HTTP smoke on new relay branch
+- Branch: `codex-3-edge-relay`
+- Summary: Started relay-focused hardening branch and validated SA/Cashier relay core endpoints locally using both automated acceptance tests and a real local HTTP smoke server.
+- What changed:
+  - Updated `relay/tests/test_offline_workflow.py` to use an isolated temporary SQLite DB/config per test run and disable the background sync loop during tests.
+  - This avoids false failures from stale local `relay/data/relay.db` schemas (e.g. missing newer columns such as `relay_cashier_sessions.role`).
+- What was verified:
+  - Relay acceptance suite passes locally (`5/5`) on isolated temp DB.
+  - Local HTTP smoke using a real relay server process/thread succeeded for:
+    - `GET /health`
+    - `POST /relay/session/open`
+    - `POST /relay/token/create`
+    - `POST /relay/commit-invoice`
+  - `commit-invoice` returned `SALE_COMMITTED_LOCAL` with a valid `local_sale_ref`.
+- What remains:
+  - Deploy `codex-3-edge-relay` and test SA/Cashier flow against a real Edge Relay URL (LAN/tunnel) from the live dev site.
+  - Validate cashier submit outcomes end-to-end with relay configured (not just UI guards / relay-missing warnings).
+  - Expand relay-focused E2E coverage for pick/release transitions if needed.
+
 ## 2026-02-22 - Dev-site SA Cypress reruns progressed to token creation (app bug fixed, spec still flaky)
 - Branch: `kilo-codex-v3`
 - Summary: Continued live dev-site Cypress headed runs after role fixture deployment; SA workflow now reaches Sales Order token creation and monitor rail visibility. Identified and fixed a real backend issue (`delivery_warehouse` missing on SA-created Sales Order items).
