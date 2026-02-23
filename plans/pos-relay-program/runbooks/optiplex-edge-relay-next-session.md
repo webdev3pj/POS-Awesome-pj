@@ -92,11 +92,26 @@ On the dev site, verify/set:
 - `posa_sales_order_lookup_max_age_days = 1`
 - `custom_edge_relay_url = <reachable relay URL>`
 
+Where to set this in the site frontend (ERPNext/Frappe Desk):
+- Open `POS Profile` -> `PJ7 CASHIER`
+- Set the field labeled `Edge Relay URL` (backend fieldname: `custom_edge_relay_url`)
+- Save
+
+Fallback (not preferred for this workflow):
+- site config key `posa_edge_relay_url` in `site_config.json` (used only when POS Profile field is blank)
+
 ### Relay URL notes
-- If testing from POS browser on same LAN, a LAN URL may work for browser -> relay calls
-  - example: `http://192.168.x.x:8787`
-- If ERPNext cloud backend diagnostics/checks must reach relay, use a public/tunnel URL
-  - and set relay `public_base_url` in relay setup UI
+- Critical for Frappe Cloud:
+  - a raw LAN URL like `http://192.168.50.168:8787` is **not enough** for relay-enabled cashier submit in the current branch.
+  - Reason: backend relay connectivity checks run from Frappe Cloud and cannot reach `192.168.x.x`, so POS can show `RELAY DOWN` and block relay submit.
+- Browser note (HTTPS page -> HTTP relay):
+  - the POS page is served from `https://...frappe.cloud`
+  - direct browser `fetch()` to `http://192.168.50.168:8787` may also be blocked as mixed content in Chrome.
+- Recommended for tomorrow's live relay test:
+  - use a **public HTTPS tunnel URL** (Cloudflare Tunnel / ngrok / equivalent) that forwards to `http://192.168.50.168:8787`
+  - set `custom_edge_relay_url` on `PJ7 CASHIER` to that tunnel URL
+  - set relay `public_base_url` in the relay setup UI to the same public URL
+- LAN-only URL (`http://192.168.50.168:8787`) can still be used for local relay health checks on the OptiPlex itself.
 
 ## Tomorrow’s Test Sequence (Recommended)
 ### 1. Start relay locally and verify `/health`
@@ -148,6 +163,21 @@ Cause:
 Fix:
 - use tunnel/public URL
 - set `public_base_url` in relay setup
+
+### E. Relay URL set to local IP but relay-enabled submit still blocked on Frappe Cloud
+Symptoms:
+- `custom_edge_relay_url` is set (e.g. `http://192.168.50.168:8787`)
+- POS still shows relay down / submit blocked
+
+Cause:
+- current branch intentionally checks relay connectivity from Frappe Cloud backend
+- Frappe Cloud has no route to private LAN IPs (`192.168.x.x`)
+- HTTPS page may also block HTTP relay calls (mixed content)
+
+Fix:
+- use a public HTTPS tunnel URL for relay access
+- set the same URL in POS Profile `Edge Relay URL`
+- set relay `public_base_url` to match
 
 ### C. Cypress test fails but app likely works
 Symptoms:

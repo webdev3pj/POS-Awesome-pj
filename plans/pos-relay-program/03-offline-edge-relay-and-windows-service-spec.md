@@ -73,6 +73,23 @@ For a step-by-step relay-host startup/test sequence (especially when a new AI se
 - ERPNext cloud may also need to reach relay `/health` for backend diagnostics using a public/tunnel URL (`public_base_url`).
 - POS workflow monitor rail (Phase 1B) reads an ERPNext API and polls for near-real-time updates; it is not a relay-native screen yet.
 
+## Frappe Cloud + Private LAN Relay Constraint (Important)
+### Current branch behavior (practical reality)
+- Relay-enabled cashier submit logic depends on relay connectivity status that is checked by an ERPNext/Frappe backend API (`get_relay_connectivity_status`).
+- On Frappe Cloud, that backend check runs from the cloud network, not from the store LAN.
+- A private LAN relay URL such as `http://192.168.50.168:8787` is not routable from Frappe Cloud, so the backend will report relay unreachable and the POS may block relay-backed submit.
+
+### Browser transport note (HTTPS -> HTTP)
+- The Frappe Cloud POS page is served over HTTPS.
+- Direct browser `fetch()` from `https://<site>.frappe.cloud` to `http://192.168.x.x:8787` may be blocked by browser mixed-content policy.
+
+### Recommended deployment pattern for Frappe Cloud + OptiPlex relay
+- Use a public HTTPS URL (tunnel or reverse proxy) that forwards to the OptiPlex relay (`192.168.50.168:8787`).
+- Set that public HTTPS URL in:
+  - POS Profile `Edge Relay URL` (`custom_edge_relay_url`) on the cloud site
+  - relay `public_base_url` in relay setup/config
+- Keep the LAN URL for local health checks and local troubleshooting only.
+
 ## Relay Configuration Files and Paths
 Defined in `relay/relay/storage.py`:
 - `relay/data/relay.db`: SQLite database
@@ -89,6 +106,11 @@ Default config keys (current code):
 - `offline_mode`
 - `poll_seconds`
 - `allowed_subnet`
+
+### Config location reminders (cloud + relay)
+- Cloud site (frontend/admin): POS Profile field `Edge Relay URL` (`custom_edge_relay_url`)
+- Cloud site fallback (server config): `posa_edge_relay_url` in `site_config.json`
+- Relay host (OptiPlex): relay config key `public_base_url` in `relay/data/relay_config.json` (or relay setup UI)
 
 ## What Relay Stores Locally (Table-by-Table)
 Source of truth: `relay/relay/storage.py` `init_db()`.

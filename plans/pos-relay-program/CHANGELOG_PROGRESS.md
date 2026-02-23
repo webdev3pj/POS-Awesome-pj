@@ -231,6 +231,21 @@ Note:
   - `00-ai-agent-start-here.md`
   - `phases/phase-0-current-state-and-completed-work.md`
 
+## 2026-02-23 - Relay topology docs clarified for Frappe Cloud + local LAN relay
+- Branch: `codex-3-edge-relay`
+- Summary: Documented the current-branch limitation of using a raw private LAN relay URL (e.g. `192.168.50.x`) from a Frappe Cloud POS page and added the recommended tunnel/public-URL pattern.
+- What changed:
+  - Added explicit note that backend relay connectivity checks run from Frappe Cloud and cannot reach private LAN IPs.
+  - Added mixed-content warning for `https://...frappe.cloud` -> `http://192.168.x.x:8787` browser calls.
+  - Documented exact cloud config location: POS Profile `Edge Relay URL` (`custom_edge_relay_url`) and relay `public_base_url`.
+  - Updated OptiPlex runbook to require a public/tunnel URL for relay-enabled submit testing.
+- What remains:
+  - Live relay-enabled SA/Cashier testing against a real tunnel/public relay URL on the OptiPlex.
+- Links:
+  - `runbooks/optiplex-edge-relay-next-session.md`
+  - `03-offline-edge-relay-and-windows-service-spec.md`
+  - `00-ai-agent-start-here.md`
+
 ## 2026-02-22 - Dev-site SA Cypress reruns progressed to token creation (app bug fixed, spec still flaky)
 - Branch: `kilo-codex-v3`
 - Summary: Continued live dev-site Cypress headed runs after role fixture deployment; SA workflow now reaches Sales Order token creation and monitor rail visibility. Identified and fixed a real backend issue (`delivery_warehouse` missing on SA-created Sales Order items).

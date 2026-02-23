@@ -42,6 +42,7 @@ Key business rules currently agreed:
   - `codex-2-cashier`: cashier `Select S.O` filtering (naming series + age), cashier live E2E coverage, token-disabled regression coverage
 - Current state: SA and cashier flows are validated on the dev site in non-relay-configured conditions; local relay acceptance + HTTP smoke are passing; next step is live relay-enabled SA/Cashier testing from the OptiPlex/local relay host.
 - Priority implementation/verification target: relay-enabled end-to-end SA/Cashier flow and submit outcomes, then Picker/Dispatch UI/E2E coverage.
+- Frappe Cloud topology note: do not assume a raw LAN relay URL (`http://192.168.x.x:8787`) will work for relay-enabled submit; current branch backend connectivity checks run from cloud and require a routable/tunnel URL for relay-backed cashier submit.
 
 ## What Is Already Implemented (Branch-Accurate)
 ### Relay foundation (`Implemented`)
@@ -107,6 +108,7 @@ If a new session starts on the OptiPlex relay machine and does not have this con
 - Open `runbooks/optiplex-edge-relay-next-session.md` first
 - Checkout/use branch `codex-3-edge-relay`
 - Start the local relay and verify `/health`
+- Configure a public/tunnel relay URL on `PJ7 CASHIER` (`Edge Relay URL`) and set relay `public_base_url`
 - Then run the documented Cypress sequence from the main dev machine/browser against the live dev site
 
 ## Decision Register
