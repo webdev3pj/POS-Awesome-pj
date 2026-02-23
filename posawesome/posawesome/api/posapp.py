@@ -2494,6 +2494,25 @@ def search_invoices_for_return(invoice_name, company):
 def search_orders(company, currency, order_name=None, pos_profile=None, days_back=None):
     pos_profile = cstr(pos_profile or "").strip()
 
+    # Fallback for older/stale frontend assets that do not send `pos_profile` yet.
+    # This keeps cashier Select S.O filtering working by inferring the active opening shift profile.
+    if not pos_profile:
+        active_shift = frappe.db.get_all(
+            "POS Opening Shift",
+            filters={
+                "user": frappe.session.user,
+                "pos_closing_shift": ["in", ["", None]],
+                "docstatus": 1,
+                "status": "Open",
+                "company": company,
+            },
+            fields=["pos_profile"],
+            order_by="period_start_date desc",
+            limit_page_length=1,
+        )
+        if active_shift:
+            pos_profile = cstr(active_shift[0].get("pos_profile") or "").strip()
+
     profile_days_back = 1
     profile_so_naming_series = ""
     if pos_profile:

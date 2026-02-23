@@ -2261,6 +2261,7 @@ export default {
         args: {
           company: this.pos_profile.company,
           currency: this.pos_profile.currency,
+          pos_profile: this.pos_profile.name,
         },
         async: false,
         callback: function (r) {
