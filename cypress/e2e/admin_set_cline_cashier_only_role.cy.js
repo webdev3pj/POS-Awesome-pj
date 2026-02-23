@@ -22,6 +22,94 @@ function clickFirstAvailable(selectors) {
   });
 }
 
+function clickLoginSubmitNearPassword() {
+  return cy.get("body", { timeout: 30000 }).then(($body) => {
+    const pwdSelector = findFirstSelector($body, ["#login_password", "input[name='pwd']", "input[type='password']"]);
+    expect(pwdSelector, "password field selector").to.be.a("string");
+
+    cy.get(pwdSelector, { timeout: 30000 })
+      .first()
+      .should("be.visible")
+      .then(($pwd) => {
+        const $form = $pwd.closest("form");
+        if ($form.length) {
+          const loginBtn = $form.find("button, .btn").filter((_, el) => /^login$/i.test((el.innerText || "").trim()));
+          if (loginBtn.length) {
+            cy.wrap(loginBtn[0]).click({ force: true });
+            return;
+          }
+        }
+        clickFirstAvailable([
+          "button.btn-login",
+          ".btn-login",
+          "button[type='submit']",
+          ".page-card-actions .btn-primary",
+        ]);
+      });
+  });
+}
+
+function waitForSafeTotpWindow(minRemainingSeconds = 6) {
+  return cy.window({ timeout: 30000 }).then((win) => {
+    const nowSec = Math.floor(win.Date.now() / 1000);
+    const secIntoWindow = nowSec % 30;
+    const remaining = 30 - secIntoWindow;
+    if (remaining <= minRemainingSeconds) {
+      cy.wait((remaining + 1) * 1000);
+    }
+  });
+}
+
+function submitOtpCodeWithRetry(totpUri, maxRetries = 2) {
+  const otpSelectors = [
+    "#login_token",
+    "input[name='otp']",
+    "input[name='token']",
+    "input[name='login_token']",
+    "input[autocomplete='one-time-code']",
+  ];
+
+  const attempt = (retryIndex = 0) => {
+    return cy.get("body", { timeout: 30000 }).then(($body) => {
+      const otpSelector = findFirstSelector($body, otpSelectors);
+      if (!otpSelector) return;
+
+      return waitForSafeTotpWindow().then(() =>
+        cy.task("generateTotp", { otpauthUri: totpUri }).then((otpCode) => {
+          const code = String(otpCode || "").trim();
+          expect(code).to.match(/^\d{6}$/);
+          cy.get(otpSelector, { timeout: 30000 })
+            .first()
+            .should("be.visible")
+            .clear({ force: true })
+            .type(code, { log: false });
+          clickFirstAvailable([
+            "#verify_token",
+            "button[type='submit']",
+            ".page-card-actions .btn-primary",
+            "button.btn-primary",
+          ]);
+
+          cy.wait(1500);
+          cy.get("body").then(($after) => {
+            const stillOnOtp = !!findFirstSelector($after, otpSelectors);
+            const invalidLogin = /invalid login/i.test(($after.text() || "").trim());
+            if (stillOnOtp && invalidLogin) {
+              if (retryIndex >= maxRetries) {
+                throw new Error("OTP verification failed after retries. Check server time and OTP secret.");
+              }
+              cy.wait(31000);
+              return attempt(retryIndex + 1);
+            }
+          });
+        })
+      );
+    });
+  };
+
+  return attempt(0);
+}
+
 function loginWithOtp() {
   const username = Cypress.env("username");
   const password = Cypress.env("password");
@@ -43,38 +131,44 @@ function loginWithOtp() {
   typeIntoFirstAvailable(["#login_password", "input[name='pwd']", "input[type='password']"], password, {
     log: false,
   });
-  clickFirstAvailable([
-    "button.btn-login",
-    ".btn-login",
-    "button[type='submit']",
-    ".page-card-actions .btn-primary",
-  ]);
+  clickLoginSubmitNearPassword();
 
-  cy.wait(1500);
-  cy.get("body", { timeout: 30000 }).then(($body) => {
-    const otpSelector = findFirstSelector($body, [
-      "#login_token",
-      "input[name='otp']",
-      "input[name='token']",
-      "input[name='login_token']",
-      "input[autocomplete='one-time-code']",
-    ]);
-    if (!otpSelector) return;
-
-    cy.task("generateTotp", { otpauthUri: totpUri }).then((otpCode) => {
-      const code = String(otpCode || "").trim();
-      expect(code).to.match(/^\d{6}$/);
-      cy.get(otpSelector, { timeout: 30000 })
-        .first()
-        .should("be.visible")
-        .clear({ force: true })
-        .type(code, { log: false });
-      clickFirstAvailable([
-        "#verify_token",
-        "button[type='submit']",
-        ".page-card-actions .btn-primary",
-        "button.btn-primary",
+  const maybeCompleteOtp = () => {
+    cy.wait(1500);
+    return cy.get("body", { timeout: 30000 }).then(($body) => {
+      const otpSelector = findFirstSelector($body, [
+        "#login_token",
+        "input[name='otp']",
+        "input[name='token']",
+        "input[name='login_token']",
+        "input[autocomplete='one-time-code']",
       ]);
+      if (!otpSelector) return;
+      return submitOtpCodeWithRetry(totpUri, 2);
+    });
+  };
+
+  maybeCompleteOtp();
+
+  cy.location("pathname", { timeout: 5000 }).then((pathname) => {
+    if (/^\/app(\/|$)/.test(String(pathname || ""))) return;
+
+    cy.get("body").then(($body) => {
+      const stillOnLoginForm =
+        !!findFirstSelector($body, ["#login_email", "input[name='usr']", "input[name='login_email']", "input[type='email']"]) &&
+        !!findFirstSelector($body, ["#login_password", "input[name='pwd']", "input[type='password']"]);
+      if (!stillOnLoginForm) return;
+
+      cy.log("Login submit did not advance on first attempt; retrying once.");
+      typeIntoFirstAvailable(
+        ["#login_email", "input[name='usr']", "input[name='login_email']", "input[type='email']"],
+        username
+      );
+      typeIntoFirstAvailable(["#login_password", "input[name='pwd']", "input[type='password']"], password, {
+        log: false,
+      });
+      clickLoginSubmitNearPassword();
+      maybeCompleteOtp();
     });
   });
 

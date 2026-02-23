@@ -197,6 +197,7 @@ function getSalesOrderNamingSeriesOptions() {
 describe("Admin preflight: configure PJ7 CASHIER POS Profile for SA token testing", () => {
   it("ensures token flags, configures SO naming series, and sets Select S.O max age", () => {
     const profileName = "PJ7 CASHIER";
+    const requiredSoSeries = "SAL-ORD-PJ7-.YYYY.-";
     let chosenSalesOrderSeries = "";
 
     loginWithOtp();
@@ -243,14 +244,11 @@ describe("Admin preflight: configure PJ7 CASHIER POS Profile for SA token testin
 
         const cleanedOptions = soSeriesOptions.map((v) => String(v || "").trim()).filter(Boolean);
         const standardSeries = cleanedOptions[0] || "";
-        chosenSalesOrderSeries =
-          cleanedOptions.find((v) => v !== standardSeries) ||
-          cleanedOptions.find((v) => v !== String(doc.posa_sales_order_naming_series || "").trim()) ||
-          "";
+        chosenSalesOrderSeries = cleanedOptions.find((v) => v === requiredSoSeries) || "";
 
         if (!chosenSalesOrderSeries) {
           throw new Error(
-            `Need at least two valid Sales Order naming series options to test a non-default profile series. Available: ${cleanedOptions.join(", ")}`
+            `Required Sales Order naming series not found for test profile ${profileName}: ${requiredSoSeries}. Available: ${cleanedOptions.join(", ")}`
           );
         }
 
@@ -263,7 +261,7 @@ describe("Admin preflight: configure PJ7 CASHIER POS Profile for SA token testin
 
         cy.log(`SO series options: ${cleanedOptions.join(", ")}`);
         cy.log(`SO standard(default candidate): ${standardSeries || "(none)"}`);
-        cy.log(`SO test series selected: ${chosenSalesOrderSeries}`);
+        cy.log(`SO test series selected (required): ${chosenSalesOrderSeries}`);
         cy.log(`POS Profile company: ${doc.company || "(missing)"}`);
         cy.log(`POS Profile warehouse: ${doc.warehouse || "(missing)"}`);
         cy.log(`POS Profile price list: ${doc.selling_price_list || "(missing)"}`);

@@ -206,12 +206,20 @@ describe("Cashier regression: POS works when custom_have_token is disabled", () 
   let originalHaveToken = 1;
 
   after(() => {
-    loginWithOtp();
-    cy.visit("/app");
-    setField("POS Profile", profileName, "custom_have_token", originalHaveToken);
-    frappeCall("frappe.client.get", { doctype: "POS Profile", name: profileName }).then((resp) => {
-      const doc = resp?.message || {};
-      expect(Number(doc.custom_have_token || 0), "custom_have_token restored").to.eq(Number(originalHaveToken || 0));
+    cy.location("pathname", { timeout: 10000 }).then((pathname) => {
+      const onApp = /^\/app(\/|$)/.test(String(pathname || ""));
+      if (!onApp) {
+        loginWithOtp();
+        cy.visit("/app");
+      } else {
+        cy.visit("/app");
+      }
+
+      setField("POS Profile", profileName, "custom_have_token", originalHaveToken);
+      frappeCall("frappe.client.get", { doctype: "POS Profile", name: profileName }).then((resp) => {
+        const doc = resp?.message || {};
+        expect(Number(doc.custom_have_token || 0), "custom_have_token restored").to.eq(Number(originalHaveToken || 0));
+      });
     });
   });
 
