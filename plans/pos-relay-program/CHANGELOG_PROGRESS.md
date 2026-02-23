@@ -107,3 +107,36 @@ Entry format:
   - `uat/2026-02-22-dev-site-sa-watch-mode-cypress.md`
   - `phases/phase-1-sa-sales-order-token-online-first.md`
   - `01-role-based-workflow-spec.md`
+
+## 2026-02-22 - Dev-site SA Cypress reruns progressed to token creation (app bug fixed, spec still flaky)
+- Branch: `kilo-codex-v3`
+- Summary: Continued live dev-site Cypress headed runs after role fixture deployment; SA workflow now reaches Sales Order token creation and monitor rail visibility. Identified and fixed a real backend issue (`delivery_warehouse` missing on SA-created Sales Order items).
+- What changed:
+  - Added local Cypress preflight hardening in `cypress/e2e/admin_set_cline_sa_only_role.cy.js`:
+    - sets `cline` to SA-only among `cline-*`
+    - verifies/sets `PJ7 CASHIER` token/SO flags
+    - validates POS Profile basics and backend `get_items(...)` returns items
+  - Added local Cypress SA spec hardening in `cypress/e2e/sa_workflow_frontend_watch.cy.js`:
+    - SA no-cash session submit handling
+    - item-feed request wait + placeholder row filtering
+    - cart/non-empty verification before `Save/New`
+    - Frappe modal token dialog selector support
+    - OTP retry-once handling (still flaky intermittently)
+  - Fixed backend SA token bug in `posawesome/posawesome/api/posapp.py`:
+    - set `delivery_warehouse`/`warehouse` on Sales Order items using row or POS Profile warehouse fallback
+    - pushed as commit `ecfd053`
+  - Updated UAT report with latest observed results and blockers.
+- What was verified:
+  - `admin_set_cline_sa_only_role.cy.js` passes against live site after role fixture deployment.
+  - `PJ7 CASHIER` backend `get_items(...)` returns items.
+  - SA flow reaches POS, adds item, and `Save/New` opens `Sales Order Token` dialog.
+  - Monitor rail visible with pending rows/count behind token dialog.
+  - SA path no longer fails with `Delivery warehouse required for stock item ...` after deploy of `ecfd053`.
+- What remains:
+  - Stabilize SA spec login (intermittent OTP `Invalid Login. Try again.` flake).
+  - Finalize token modal close handling in spec and complete rail assertions (`Order Monitor`, `Mine`, row fields).
+  - Push local Cypress spec changes + docs to GitHub once stable.
+- Links:
+  - `uat/2026-02-22-dev-site-sa-watch-mode-cypress.md`
+  - `phases/phase-1-sa-sales-order-token-online-first.md`
+  - `01-role-based-workflow-spec.md`

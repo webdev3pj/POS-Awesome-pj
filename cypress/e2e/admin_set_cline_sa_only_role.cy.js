@@ -81,8 +81,9 @@ function loginWithOtp() {
   cy.location("pathname", { timeout: 90000 }).should("match", /^\/app(\/|$)/);
 }
 
-function frappeCall(method, args) {
-  return cy.window({ timeout: 30000 }).then((win) => {
+function frappeCall(method, args, options = {}) {
+  const timeout = Number(options.timeout || 60000);
+  return cy.window({ timeout: 30000 }).then({ timeout }, (win) => {
     return new Cypress.Promise((resolve, reject) => {
       win.frappe.call({
         method,
@@ -110,9 +111,19 @@ function parseLabelFromOtpUri(uri) {
   }
 }
 
+function setField(doctype, name, fieldname, value) {
+  return frappeCall("frappe.client.set_value", {
+    doctype,
+    name,
+    fieldname,
+    value,
+  });
+}
+
 describe("Admin preflight: set cline to SA-only operational role", () => {
   it("keeps non-cline roles but leaves only cline-Sales Associate among cline-* roles", () => {
     let targetOperationalRole = "cline-Sales Associate";
+    const profileName = "PJ7 CASHIER";
     const loginUser = String(Cypress.env("username") || "").trim();
     const explicitUserDocname = String(Cypress.env("userDocname") || "").trim();
     const otpLabelCandidate = parseLabelFromOtpUri(Cypress.env("totpUri"));
@@ -239,6 +250,74 @@ describe("Admin preflight: set cline to SA-only operational role", () => {
       // Reload the User form so the change is visible in the UI for watch mode.
       cy.reload();
       cy.get("body", { timeout: 60000 }).should("contain.text", targetOperationalRole);
+
+      // Preflight POS Profile config for SA token tests (minimize manual setup/deploy loops).
+      return frappeCall("frappe.client.get", {
+        doctype: "POS Profile",
+        name: profileName,
+      });
+    }).then((profileResp) => {
+      const profile = profileResp && profileResp.message ? profileResp.message : null;
+      expect(profile, `POS Profile ${profileName} exists`).to.be.an("object");
+
+      const requiredFlags = [
+        ["custom_have_token", 1],
+        ["posa_allow_sales_order", 1],
+        ["custom_allow_select_sales_order", 1],
+      ];
+
+      requiredFlags.forEach(([fieldname]) => {
+        expect(fieldname in profile, `POS Profile field exists: ${fieldname}`).to.eq(true);
+      });
+
+      expect(String(profile.company || "").trim(), "POS Profile company").to.not.equal("");
+      expect(String(profile.warehouse || "").trim(), "POS Profile warehouse").to.not.equal("");
+      expect(String(profile.selling_price_list || "").trim(), "POS Profile selling_price_list").to.not.equal("");
+
+      const paymentsCount =
+        (Array.isArray(profile.payments) && profile.payments.length) ||
+        (Array.isArray(profile.payment_methods) && profile.payment_methods.length) ||
+        0;
+      expect(paymentsCount, "POS Profile payment rows").to.be.greaterThan(0);
+
+      const updates = requiredFlags.filter(([fieldname, desired]) => Number(profile[fieldname] || 0) !== desired);
+      if (!updates.length) {
+        cy.log("PJ7 CASHIER profile token/SO flags already enabled.");
+        return null;
+      }
+
+      cy.log(`Updating PJ7 CASHIER flags: ${updates.map(([k, v]) => `${k}=${v}`).join(", ")}`);
+      return updates.reduce((chain, [fieldname, desired]) => {
+        return chain.then(() => setField("POS Profile", profileName, fieldname, desired));
+      }, Cypress.Promise.resolve());
+    }).then(() => {
+      return frappeCall("frappe.client.get", {
+        doctype: "POS Profile",
+        name: profileName,
+      });
+    }).then((verifyProfileResp) => {
+      const profile = verifyProfileResp && verifyProfileResp.message ? verifyProfileResp.message : null;
+      expect(profile, "reloaded POS Profile").to.be.an("object");
+      expect(Number(profile.custom_have_token || 0), "custom_have_token").to.eq(1);
+      expect(Number(profile.posa_allow_sales_order || 0), "posa_allow_sales_order").to.eq(1);
+      expect(Number(profile.custom_allow_select_sales_order || 0), "custom_allow_select_sales_order").to.eq(1);
+
+      // Preflight data sanity: ensure this POS Profile can actually load at least one item.
+      return frappeCall("posawesome.posawesome.api.posapp.get_items", {
+        pos_profile: JSON.stringify(profile),
+        item_group: "",
+        search_value: "",
+      }, { timeout: 120000 }).then((itemsResp) => {
+        const items = Array.isArray(itemsResp && itemsResp.message) ? itemsResp.message : [];
+        expect(
+          items.length,
+          [
+            `PJ7 CASHIER POS items loaded (${items.length}).`,
+            "If zero, check Item Price entries for the profile selling price list/currency, warehouse stock filters, and POS profile item visibility settings.",
+          ].join(" "),
+        ).to.be.greaterThan(0);
+        cy.log(`PJ7 CASHIER get_items returned ${items.length} item(s).`);
+      });
     });
   });
 });
