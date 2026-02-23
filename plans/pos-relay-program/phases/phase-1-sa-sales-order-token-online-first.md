@@ -5,7 +5,7 @@
 - It protects invoice numbering for audit purposes because only cashier creates the invoice.
 - It also includes the first version of the ticket sidebar monitor and timing fields.
 - SA should be able to start a POS session without opening cash; cashier still owns cash opening/closing.
-- Current testing will use the default Sales Order series; per-profile SO series is a follow-up feature.
+- POS Profile-specific Sales Order series and cashier `Select S.O` age filtering are now implemented and verified in cashier dev-site UAT.
 
 ## See also
 - `../README.md`
@@ -14,6 +14,14 @@
 - `../02-master-implementation-plan.md`
 - `../03-offline-edge-relay-and-windows-service-spec.md`
 - `../CHANGELOG_PROGRESS.md`
+
+## Document Currency
+- This phase doc is still active, but many checkbox notes were written during the initial implementation pass on `kilo-codex-v3`.
+- Treat the task breakdown as the phase design/checklist history.
+- Treat verification status as current only when confirmed in:
+  - `../CHANGELOG_PROGRESS.md`
+  - `../uat/2026-02-22-dev-site-sa-watch-mode-cypress.md`
+  - `../uat/2026-02-23-dev-site-cashier-watch-mode-cypress.md`
 
 ## Purpose
 Convert the Sales Associate token flow from draft `Sales Invoice`-based token generation to a submitted `Sales Order`-based token flow (online-first), preserving invoice-series audit integrity.
@@ -32,7 +40,6 @@ Convert the Sales Associate token flow from draft `Sales Invoice`-based token ge
 - Relay authentication and server-side role authorization (Phase 3)
 - Full role UI completion for all roles (Phase 2)
 - SA-stage `sales_partner` capture (deferred)
-- POS Profile-specific Sales Order naming series (document now, implement soon; default SO series for current tests)
 
 ## Completed So Far
 ### Relevant existing capabilities to reuse
@@ -40,10 +47,15 @@ Convert the Sales Associate token flow from draft `Sales Invoice`-based token ge
 - POS supports `Sales Order -> Sales Invoice` conversion for payment.
 - Relay token create endpoint exists.
 - Opening dialog role derivation exists.
-- SA payment blocking exists in local UI changes (verify/commit and preserve).
+- SA payment blocking exists and is live-tested in dev-site UAT.
 
 ### Current gap this phase closes
 - Current token popup/print is tied to `new_invoice()` / draft `Sales Invoice` and derives token from SI name suffix.
+
+## Historical Checklist Annotation Note
+- Many task lines below retain original implementation-time annotations such as `local working tree` and `pending UAT`.
+- Use `../CHANGELOG_PROGRESS.md` and the UAT docs for the latest verification status.
+- Treat the checklist below as phase build history + remaining tasks, not a real-time branch snapshot.
 
 ## Implementation Tasks
 ### Backend (`posawesome/posawesome/api/posapp.py`)
@@ -92,7 +104,7 @@ Convert the Sales Associate token flow from draft `Sales Invoice`-based token ge
 
 ### Documentation updates during implementation
 - [x] Add Phase 1B ticket sidebar workflow monitor requirement to core docs. *(local working tree)*
-- [x] Document SA no-cash session + profile/date monitor scope and SO series follow-up in plans docs. *(local working tree)*
+- [x] Document SA no-cash session + profile/date monitor scope and SO series config/filtering plan in plans docs. *(historical annotation; later branch work implemented the SO series feature)*
 - [ ] Update `../01-role-based-workflow-spec.md` statuses from `Partial` -> `Implemented` for Phase 1 items after UAT confirmation.
 - [ ] Log commit IDs and verification notes in `../CHANGELOG_PROGRESS.md` after commit.
 
@@ -126,7 +138,6 @@ Convert the Sales Associate token flow from draft `Sales Invoice`-based token ge
 - Add explicit visible Sales Order field for SA attribution (owner is accepted for now).
 - SA relay-first/offline token creation (Phase 4).
 - Ticket sidebar row actions (open/approve/transition) beyond read-only monitor.
-- POS Profile-specific Sales Order naming series (`posa_sales_order_naming_series`); default SO series is accepted for current testing.
 
 ## Exit Criteria
 - SA token is a submitted `Sales Order`.

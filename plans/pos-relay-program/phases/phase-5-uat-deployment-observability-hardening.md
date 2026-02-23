@@ -13,6 +13,10 @@
 - `../03-offline-edge-relay-and-windows-service-spec.md`
 - `../CHANGELOG_PROGRESS.md`
 
+## Document Currency
+- This phase doc is current, but it mixes future UAT goals with completed UAT evidence references.
+- Use the `../uat/*.md` files and `../CHANGELOG_PROGRESS.md` for what is already verified vs what remains.
+
 ## Purpose
 Turn the implemented role/relay workflow into a deployable, supportable operating system with evidence, test coverage, and runbooks.
 
@@ -28,7 +32,9 @@ Turn the implemented role/relay workflow into a deployable, supportable operatin
 
 ## Completed So Far
 - Relay dashboard/queue/outbox/transactions operational visibility foundation exists.
-- Cypress OTP login automation exists in local working tree.
+- Cypress OTP login automation and multiple live dev-site watch-mode specs (SA, cashier, token-disabled regression) are committed and in active use.
+- Dev-site UAT evidence exists for SA and cashier flows (`../uat/2026-02-22-dev-site-sa-watch-mode-cypress.md`, `../uat/2026-02-23-dev-site-cashier-watch-mode-cypress.md`).
+- Local edge relay smoke evidence exists (`../uat/2026-02-23-local-edge-relay-smoke.md`).
 - Relay setup and OptiPlex checklist docs exist in `relay/`.
 
 ## Implementation Tasks

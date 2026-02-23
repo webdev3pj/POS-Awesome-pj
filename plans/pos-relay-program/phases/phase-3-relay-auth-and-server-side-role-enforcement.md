@@ -13,6 +13,11 @@
 - `../03-offline-edge-relay-and-windows-service-spec.md`
 - `../CHANGELOG_PROGRESS.md`
 
+## Document Currency
+- This is a current planning doc (Phase 3 is not complete).
+- Most items here remain design/implementation tasks, not verified behavior.
+- For the latest relay runtime verification, use `../uat/2026-02-23-local-edge-relay-smoke.md`.
+
 ## Purpose
 Harden the trust boundary so relay and backend authorization do not rely on browser localStorage or client-provided role claims.
 

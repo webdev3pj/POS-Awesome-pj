@@ -18,6 +18,14 @@
 - `phases/phase-5-uat-deployment-observability-hardening.md`
 - `CHANGELOG_PROGRESS.md`
 
+## Document Currency
+- This is the current offline/relay reference for the active branch family and is aligned with relay-focused work on `codex-3-edge-relay`.
+- Some sections describe target-state service packaging/security that is still planned (especially Phase 3/Phase 4+ items).
+- For the latest verified relay behavior, use:
+  - `CHANGELOG_PROGRESS.md`
+  - `uat/2026-02-23-local-edge-relay-smoke.md`
+  - `runbooks/optiplex-edge-relay-next-session.md`
+
 ## Purpose
 Define the offline continuity design and operations model for the Edge Relay, including:
 - what is stored locally,

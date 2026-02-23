@@ -18,7 +18,7 @@
 - `CHANGELOG_PROGRESS.md`
 
 ## Purpose
-Define the intended role-based POS workflow in operational detail and map each rule to implementation status on `kilo-codex-v3`.
+Define the intended role-based POS workflow in operational detail and map each rule to implementation status across the active branch family (`kilo-codex-v3` baseline -> `codex-2-cashier` -> `codex-3-edge-relay`).
 
 This document is the authoritative reference for:
 - what each role can see,
@@ -32,6 +32,12 @@ This document is the authoritative reference for:
 - `Partial`: some pieces exist, but flow is incomplete or not fully enforced.
 - `Planned`: design agreed, not implemented yet.
 - `Deferred`: intentionally postponed and tracked.
+- `Local-only`: observed in an uncommitted working tree change, not part of the current branch state.
+
+## Document Currency
+- This spec is the role/permission source of truth, but some detailed row notes were originally written during `kilo-codex-v3` and `codex-2-cashier` implementation passes.
+- Treat inline notes that mention `dev-site UAT` or a branch name as evidence markers.
+- Treat `CHANGELOG_PROGRESS.md` and UAT docs as the authoritative timeline for what was verified and when.
 
 ## Role Derivation and Ambiguity Rules
 ### Source of truth
@@ -84,7 +90,7 @@ Primary job:
 - Approve exceptions, overrides, and sensitive actions.
 
 ## Component Visibility Matrix (Intended Behavior)
-Status tags in the last column reflect current branch state.
+Status tags in the last column reflect the current program branch family state; evidence detail lives in UAT docs and `CHANGELOG_PROGRESS.md`.
 
 ### `OpeningDialog.vue`
 | Capability | SA | Cashier | Picker | Dispatch | Supervisor | Status |
@@ -92,8 +98,8 @@ Status tags in the last column reflect current branch state.
 | Derived role display | Visible | Visible | Visible | Visible | Visible | `Implemented` |
 | Role self-selection | No | No | No | No | No | `Implemented` |
 | Block no/multi role when relay token workflow enabled | Yes | Yes | Yes | Yes | Yes | `Implemented` |
-| Start POS without cash opening table (non-cash roles) | Yes | No | Yes | Yes | Yes | `Implemented` (local working tree, pending UAT) |
-| Require cash opening amounts/table (cashier only) | No | Yes | No | No | No | `Implemented` (local working tree, pending UAT) |
+| Start POS without cash opening table (non-cash roles) | Yes | No | Yes | Yes | Yes | `Implemented` (dev-site UAT verified on `codex-2-cashier`; inherited) |
+| Require cash opening amounts/table (cashier only) | No | Yes | No | No | No | `Implemented` (dev-site UAT verified on `codex-2-cashier`; inherited) |
 
 ### `Navbar.vue`
 | Capability | SA | Cashier | Picker | Dispatch | Supervisor | Status |
@@ -105,10 +111,10 @@ Status tags in the last column reflect current branch state.
 ### `WorkflowTicketRail.vue` (left sidebar ticket monitor)
 | Capability | SA | Cashier | Picker | Dispatch | Supervisor | Status |
 |---|---|---|---|---|---|---|
-| See collapsed ticket icon + pending count | Visible | Visible | Visible | Visible | Visible | `Implemented` (local working tree, pending UAT) |
-| Expand monitor panel for profile/date scope (opening shift optional metadata) | Yes | Yes | Yes | Yes | Yes | `Implemented` (local working tree, pending UAT) |
-| View customer, SA name, order taken time, current status, time in status, grand total | Yes | Yes | Yes | Yes | Yes | `Implemented` (local working tree, pending UAT) |
-| Filter rows by `Mine` (SA owner) | Yes | Yes | Yes | Yes | Yes | `Implemented` (local working tree, pending UAT) |
+| See collapsed ticket icon + pending count | Visible | Visible | Visible | Visible | Visible | `Implemented` (dev-site UAT verified on `codex-2-cashier`; inherited) |
+| Expand monitor panel for profile/date scope (opening shift optional metadata) | Yes | Yes | Yes | Yes | Yes | `Implemented` (dev-site UAT verified on `codex-2-cashier`; inherited) |
+| View customer, SA name, order taken time, current status, time in status, grand total | Yes | Yes | Yes | Yes | Yes | `Implemented` (dev-site UAT verified on `codex-2-cashier`; inherited) |
+| Filter rows by `Mine` (SA owner) | Yes | Yes | Yes | Yes | Yes | `Implemented` (dev-site UAT verified on `codex-2-cashier`; inherited) |
 | See dispatched rows by default | No | No | No | No | No | `Implemented` (default hidden; API excludes released rows) |
 | Row actions (open/approve/transition) | No | No | No | No | No | `Deferred` (read-only v1, Phase 2+) |
 
@@ -117,7 +123,7 @@ Status tags in the last column reflect current branch state.
 |---|---|---|---|---|---|---|
 | Add/remove items | Yes | Yes | Limited/No | No | Optional | `Partial` |
 | Select/update customer | Yes | Yes | Read-only | Read-only | Yes | `Partial` |
-| `Save/New` token/order | Yes | Optional | No | No | Optional | `Partial` (SO path implemented locally; pending UAT/migration) |
+| `Save/New` token/order | Yes | Optional | No | No | Optional | `Implemented` (SA SO token path live-tested; cashier/non-SA behavior still `Partial`) |
 | `PAY` button visible | Visible but disabled | Visible enabled | Hidden/disabled | Hidden/disabled | Optional | `Partial` (SA disable exists locally; full role gating pending) |
 | `Select S.O` | No (preferred hidden) | Yes | No | No | Optional | `Partial` (Phase 2 role visibility) |
 | Held invoices | No (preferred hidden) | Yes | No | No | Optional | `Planned` (Phase 2) |
@@ -142,25 +148,25 @@ Status tags in the last column reflect current branch state.
 |---|---|---|---|---|---|---|
 | Search/select customer | Yes | Yes | Read-only/No | No | Yes | `Partial` |
 | Create/update customer online | Yes | Yes | No | No | Yes | `Partial` |
-| Create/update customer via relay fallback | Yes | Yes | No | No | Yes | `Partial` (local working tree additions need validation) |
+| Create/update customer via relay fallback | Yes | Yes | No | No | Yes | `Partial` (`Local-only` changes exist; not part of current branch state) |
 
 ### `ItemsSelector.vue`
 | Capability | SA | Cashier | Picker | Dispatch | Supervisor | Status |
 |---|---|---|---|---|---|---|
 | Search items online | Yes | Yes | Limited | No | Yes | `Implemented` |
-| Search items via relay cache fallback | Yes | Yes | Limited | No | Yes | `Partial` (local working tree additions need validation) |
+| Search items via relay cache fallback | Yes | Yes | Limited | No | Yes | `Partial` (`Local-only` changes exist; not part of current branch state) |
 
 ## Allowed / Blocked Action Matrix (UI + Backend + Relay)
 ### Action matrix
 | Action | SA | Cashier | Picker | Dispatch | Supervisor | UI Status | Server/Relay Status |
 |---|---|---|---|---|---|---|---|
-| Start POS session (non-cash roles allowed without opening cash) | Yes | Yes | Yes | Yes | Yes | `Implemented` (local working tree, pending UAT) | `Partial` |
-| Open cash shift / enter opening amounts | No | Yes | No | No | No | `Implemented` (local working tree, pending UAT) | `Partial` |
+| Start POS session (non-cash roles allowed without opening cash) | Yes | Yes | Yes | Yes | Yes | `Implemented` (dev-site UAT verified on `codex-2-cashier`; inherited) | `Partial` |
+| Open cash shift / enter opening amounts | No | Yes | No | No | No | `Implemented` (dev-site UAT verified on `codex-2-cashier`; inherited) | `Partial` |
 | Close cash shift | No | Yes | No | No | Conditional | `Partial` (SA hidden/blocked locally; broader role rules pending) | `Partial` |
-| View ticket monitor rail (read-only) | Yes | Yes | Yes | Yes | Yes | `Implemented` (local working tree) | `N/A` |
-| Create token/order | Yes | Optional | No | No | Optional | `Partial` | `Planned` (SO-first API) |
+| View ticket monitor rail (read-only) | Yes | Yes | Yes | Yes | Yes | `Implemented` (dev-site UAT verified on `codex-2-cashier`; inherited) | `N/A` |
+| Create token/order | Yes | Optional | No | No | Optional | `Implemented` (SA SO token path verified) | `Partial` (server/relay auth still pending) |
 | Print token slip | Yes | Optional | No | No | Optional | `Partial` (text token today) | `N/A` |
-| Render QR/barcode token slip | Yes | Optional | No | No | Optional | `Partial` (local working tree; pending browser/printer UAT) | `N/A` |
+| Render QR/barcode token slip | Yes | Optional | No | No | Optional | `Partial` (token dialog and print path verified; printer/QR visual UAT still environment-specific) | `N/A` |
 | Take payment | No | Yes | No | No | Conditional | `Partial` | `Planned` (Phase 3 auth) |
 | Submit SI | No | Yes | No | No | Conditional | `Partial` | `Partial` |
 | Void token | No | No | No | No | Yes | `Planned` | `Partial` (relay endpoint exists; auth missing) |
@@ -170,17 +176,17 @@ Status tags in the last column reflect current branch state.
 
 ## Current Implementation Notes by Role
 ### Sales Associate (`cline-Sales Associate`)
-Status: `Partial`
+Status: `Implemented` (SA boundary) / `Partial` (full multi-role integration)
 
 What exists:
 - Role derivation and storage in opening dialog (`Implemented`).
-- SA payment block in UI exists in local working tree changes (`Partial` until committed/UAT).
-- SA SO token API + frontend save path is being implemented locally (`Partial`, requires UAT and migration).
-- SA can see cross-role workflow monitor rail and track status/timing for profile/date-scoped pending orders (`Implemented` in local working tree, pending UAT).
+- SA payment block in UI is implemented and dev-site UAT verified.
+- SA SO token API + frontend save path are implemented and dev-site UAT verified.
+- SA can see cross-role workflow monitor rail and track status/timing for profile/date-scoped pending orders (`Implemented`, dev-site UAT verified).
 
 What is missing:
-- SA token must create submitted Sales Order (Phase 1).
-- Token slip QR/barcode printing (Phase 1, local implementation pending UAT).
+- Full cashier/picker/dispatch lifecycle integration and relay-enabled proof for the same order (next phases / relay testing).
+- Printer-specific QR/barcode output visual validation on target hardware/browser.
 - Full SA-specific visibility (Phase 2).
 - Server/relay authorization (Phase 3).
 
@@ -195,7 +201,7 @@ What exists:
 - Relay-enabled local-first payment commit path (`Implemented` foundation).
 - Direct cloud fallback disabled when relay-enabled commit fails (`Implemented`).
 - SO selection and SO -> SI conversion support exists (`Implemented`).
-- Workflow monitor rail can surface pending order status/timing (read-only) for profile/date scope (`Implemented` local working tree, pending UAT).
+- Workflow monitor rail can surface pending order status/timing (read-only) for profile/date scope (`Implemented`, dev-site UAT verified).
 
 What is missing:
 - Prefer/guide cashier flow toward SO-first in role-specific UI (Phase 2).

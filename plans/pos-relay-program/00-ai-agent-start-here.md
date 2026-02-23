@@ -2,10 +2,11 @@
 
 ## TL;DR (Business Owner)
 - This branch is building a role-based store workflow: SA creates orders/tokens, cashier takes payment, then picker and dispatch complete fulfillment.
-- The immediate work is finishing and testing the SA frontend flow end-to-end, including the left sidebar ticket counter/monitor.
+- SA and cashier frontend flows are already live-tested on the dev site (with relay-missing warnings in that environment).
+- The current focus is making the same SA/Cashier flow work cleanly with a real Edge Relay running on the OptiPlex/local server.
 - SA must not open/close cash shifts; cashier owns money-related opening/closing.
 - The ticket sidebar monitor is now planned to use `POS Profile + business date` (not only opening shift), so SA orders appear even before a cashier opens shift.
-- Sales Order series per POS Profile is a near-term follow-up feature; current tests use the default Sales Order series.
+- Sales Order series per POS Profile is implemented and used for cashier `Select S.O` filtering (for `PJ7 CASHIER`, tested with `SAL-ORD-PJ7-.YYYY.-`).
 
 ## See also
 - `README.md`
@@ -15,6 +16,14 @@
 - `03-offline-edge-relay-and-windows-service-spec.md`
 - `phases/phase-0-current-state-and-completed-work.md`
 - `CHANGELOG_PROGRESS.md`
+
+## Document Currency (Current vs Historical)
+- This is the primary handoff doc for the current branch family and is currently aligned to `codex-3-edge-relay`.
+- Branch progression matters:
+  - `kilo-codex-v3` = baseline planning + SA/monitor rollout
+  - `codex-2-cashier` = cashier filtering + cashier live UAT
+  - `codex-3-edge-relay` = relay-focused validation and OptiPlex runbook execution
+- Historical UAT docs remain branch/date-specific on purpose; do not rewrite them as generic current-state docs.
 
 ## Mission and Business Rules
 Build and harden a role-based POS workflow with an edge relay so the store can continue operating with local-first behavior while preserving auditability.
@@ -27,15 +36,12 @@ Key business rules currently agreed:
 - SA-stage `sales_partner` capture is deferred and tracked as backlog.
 
 ## Current Branch and Status Snapshot
-- Branch: `codex-2-cashier`
-- Current state: SA Sales Order token + monitor rail are implemented and live-tested; cashier `Select S.O` series/age filtering is implemented and verified on the dev site; role enforcement and full role UI visibility are still incomplete.
-- Priority implementation target: `Phase 2` cashier submit hardening (environment-specific relay/cloud outcomes), then Picker/Dispatch UI/E2E coverage.
-- Immediate follow-on target: push Cypress hardening/docs updates and expand live E2E coverage beyond SA/Cashier.
-
-### Relay branch note (current next branch)
-- Relay-focused follow-on branch exists: `codex-3-edge-relay`
-- Use it for OptiPlex/local relay startup and relay-enabled SA/Cashier end-to-end testing
-- See `runbooks/optiplex-edge-relay-next-session.md` for zero-context startup steps on the relay host
+- Current working branch: `codex-3-edge-relay`
+- Inherited validated work:
+  - `kilo-codex-v3`: SA Sales Order token flow, no-cash SA session, monitor rail foundation
+  - `codex-2-cashier`: cashier `Select S.O` filtering (naming series + age), cashier live E2E coverage, token-disabled regression coverage
+- Current state: SA and cashier flows are validated on the dev site in non-relay-configured conditions; local relay acceptance + HTTP smoke are passing; next step is live relay-enabled SA/Cashier testing from the OptiPlex/local relay host.
+- Priority implementation/verification target: relay-enabled end-to-end SA/Cashier flow and submit outcomes, then Picker/Dispatch UI/E2E coverage.
 
 ## What Is Already Implemented (Branch-Accurate)
 ### Relay foundation (`Implemented`)
@@ -51,21 +57,24 @@ Key business rules currently agreed:
 - Role stored in localStorage as `pos_current_role`.
 - Full role-based visibility across POS screens is not complete yet.
 
-### POS relay/cashier foundation (`Implemented`/`Partial`)
+### POS SA/Cashier workflow foundation (`Implemented`/`Partial`)
+- SA no-cash POS session bootstrap is implemented.
+- SA token creation as submitted `Sales Order` is implemented and live-tested (dev site).
+- Ticket sidebar workflow monitor rail is implemented and live-tested (read-only v1).
 - Relay-enabled payments use `/relay/commit-invoice`.
 - Relay-enabled failure path blocks direct cloud fallback.
 - Local sale reference display exists.
-- Token creation to relay exists as best-effort from invoice draft path (current behavior to be replaced for SA in Phase 1).
+- Cashier `Select S.O` filtering by POS Profile Sales Order naming series + age is implemented and live-tested.
 
-### Existing Sales Order support (`Implemented` but not the SA token path)
+### Existing and upgraded Sales Order support (`Implemented`)
 - POS can search and load submitted unbilled Sales Orders.
 - POS can convert Sales Order to Sales Invoice for payment.
-- Current SA token popup is still tied to draft Sales Invoice save flow.
+- SA token flow now creates submitted `Sales Order` records (instead of consuming a `Sales Invoice` number) in the implemented SA path.
 
-### Cypress and OTP login automation (`Local working tree - implemented, not guaranteed committed`)
+### Cypress and OTP login automation (`Implemented`, committed)
 - Cypress is configured with `npm run e2e:open` and `npm run e2e:run`.
 - OTP automation via `otpauth://` and local `.env` exists.
-- Cypress login test for Frappe Cloud OTP flow exists.
+- Cypress login test, SA flow, cashier flow, role preflight, POS Profile preflight, and token-disabled regression smoke specs exist (see `cypress/e2e/` and UAT docs).
 
 ## What Is Broken / Partial / Deferred
 ### Partial
@@ -77,7 +86,7 @@ Key business rules currently agreed:
 ### Missing (critical)
 - Relay authentication for mutating endpoints.
 - Server-side relay role authorization (do not trust browser localStorage role).
-- SA token as submitted Sales Order (currently invoice-based token generation).
+- Relay-enabled end-to-end cashier submit proof on the live dev site (with a configured reachable relay) is still pending.
 
 ### Deferred (explicit)
 - SA-stage `sales_partner` capture on Sales Order token creation.
@@ -85,13 +94,13 @@ Key business rules currently agreed:
 - SA relay-first/offline token creation until online-first path is stable.
 
 ## Immediate Next Recommended Task
-Complete and verify `Phase 1 + Phase 1B`: Sales Associate token creation as a submitted `Sales Order` (online-first), SA no-cash POS session bootstrap, and the cross-role ticket sidebar monitor rail for profile/date-scoped pending orders and timing.
+Run the `codex-3-edge-relay` OptiPlex relay validation flow: start a real local relay, point `PJ7 CASHIER` to it, and re-run SA + Cashier Cypress watch-mode tests to verify relay-enabled behavior (especially cashier submit/commit outcomes).
 
 Why this is next:
-- It resolves a core audit requirement.
-- It reduces invoice-series misuse.
-- It creates a clear role boundary before deeper relay/auth work.
-- It gives operations immediate visibility into bottlenecks (unpaid, paid, picking, picked) and time in status.
+- SA/Cashier cloud-side behavior is already proven well enough for the next milestone.
+- Relay-enabled cashier submit behavior is the highest-value remaining uncertainty.
+- It directly prepares tomorrow's OptiPlex/live-relay testing session.
+- It informs Phase 3 auth hardening with real deployment behavior.
 
 ## OptiPlex / Relay Host Startup (No Chat Context)
 If a new session starts on the OptiPlex relay machine and does not have this conversation context:
@@ -109,7 +118,7 @@ If a new session starts on the OptiPlex relay machine and does not have this con
 - Cypress post-deploy tests can use first available item for SA flow validation (initial automation strategy).
 - Add a cross-role ticket sidebar monitor rail (default scope: `POS Profile + business date`, `Mine` filter, hide after dispatch) using polling first; WebSocket deferred.
 - Sales Associate must not open/close cash shift; cashier owns cash accountability.
-- POS Profile-specific Sales Order naming series is a near-term follow-up (default SO series is acceptable for current testing).
+- POS Profile-specific Sales Order naming series and cashier lookup-age filtering are implemented; verify profile config before testing.
 
 ### Deferred
 - Capture `sales_partner` during SA stage.
@@ -141,7 +150,7 @@ If a new session starts on the OptiPlex relay machine and does not have this con
 ### ERPNext/Frappe Backend
 - `posawesome/posawesome/api/posapp.py`
   - POS APIs, relay workflow state helpers, invoice submit, SO search/create-SI-from-SO.
-  - Phase 1: add SA `create_sales_order_token(...)` API here.
+  - SA `create_sales_order_token(...)`, no-cash session bootstrap, and monitor-board APIs are implemented here.
 - `posawesome/posawesome/doctype/pos_relay_workflow_state/pos_relay_workflow_state.json`
   - Custom DocType linking token/workflow state (currently invoice-oriented).
   - Phase 1: extend for `sales_order` support.
@@ -159,14 +168,14 @@ If a new session starts on the OptiPlex relay machine and does not have this con
 - `relay/SETUP_CHECKLIST_OPTIPLEX.md`
 
 ### Planning / Documentation
-- `plans/kilo-codex-v3-branch-accurate-checklist.md`
+- `plans/kilo-codex-v3-branch-accurate-checklist.md` (historical baseline checklist)
 - `plans/pos-relay-program/README.md`
 - `plans/pos-relay-program/01-role-based-workflow-spec.md`
 - `plans/pos-relay-program/02-master-implementation-plan.md`
 - `plans/pos-relay-program/03-offline-edge-relay-and-windows-service-spec.md`
 - `plans/pos-relay-program/phases/*.md`
 
-## How Data Flows (Target Phase 1)
+## How Data Flows (Current SA/Cashier Baseline + Next Relay Focus)
 1. SA opens POS and role is derived from ERPNext (`cline-Sales Associate`).
 2. SA builds cart and customer selection.
 3. SA clicks `Save/New`.
@@ -198,7 +207,7 @@ If a new session starts on the OptiPlex relay machine and does not have this con
 - Outbox retries and next attempt scheduling behave as expected.
 
 ## Cypress and OTP Test Setup
-### Existing setup (local working tree)
+### Existing setup (committed)
 - Commands:
   - `npm run e2e:open`
   - `npm run e2e:run`
@@ -212,6 +221,7 @@ If a new session starts on the OptiPlex relay machine and does not have this con
 - Never commit `.env`.
 - Reuse OTP login helper/test flow.
 - Add SA E2E test after Phase 1 implementation and after deployment confirmation.
+  - Note: SA and cashier E2E specs are now committed and in use; extend them rather than replacing them.
 
 ## Deployment Flow (What Agent Can Do vs What User Must Do)
 ### Agent can do locally

@@ -13,12 +13,17 @@
 - `../03-offline-edge-relay-and-windows-service-spec.md`
 - `../CHANGELOG_PROGRESS.md`
 
+## Document Currency
+- This phase doc is the current baseline snapshot for the active branch family, not just `kilo-codex-v3`.
+- Historical branch snapshots remain in `CHANGELOG_PROGRESS.md` and UAT docs by date/branch.
+- This doc should answer: "What is committed now?" and "What is only local/unrelated?"
+
 ## Purpose
 Capture a branch-accurate baseline and completed work so future engineering work starts from facts, not rediscovery.
 
 ## In Scope
-- Current branch implementation status (`kilo-codex-v3`)
-- Local working tree notable work (if not yet committed)
+- Current branch-family implementation status (`codex-3-edge-relay`, with inherited `codex-2-cashier` / `kilo-codex-v3` work)
+- Local working tree notable work (only if clearly labeled as uncommitted and out-of-scope)
 - Known documentation drift
 - Immediate next priorities
 
@@ -35,32 +40,49 @@ Capture a branch-accurate baseline and completed work so future engineering work
 - POS relay profile gating via `custom_have_token` and `custom_edge_relay_url`.
 - POS relay/cloud connectivity status indicators in Navbar.
 - Role derivation in opening dialog from ERPNext `cline-*` roles.
+- SA no-cash POS session bootstrap and cashier-only cash opening behavior.
+- SA token flow now creates submitted `Sales Order` tokens (audit-safe SI series handling).
+- Ticket sidebar workflow monitor rail (profile/date scope, read-only, `Mine` filter) is implemented.
 - Cashier relay commit path via `/relay/commit-invoice`.
 - SO search and SO -> SI conversion support in POS.
+- Cashier `Select S.O` filtering by POS Profile Sales Order naming series + age window is implemented.
+- POS Profile custom fields for:
+  - `posa_sales_order_naming_series`
+  - `posa_sales_order_lookup_max_age_days`
+- Cypress OTP login + SA/Cashier watch-mode specs + token-disabled regression smoke are committed.
+- Relay acceptance tests use isolated temp DB/config and local relay HTTP smoke is documented/passing.
 
-### Local working tree work observed (`Partial`, confirm/commit intentionally)
-- Cypress + OTP login automation setup (`package.json`, `cypress.config.cjs`, `cypress/`, `scripts/run-cypress.cjs`, `.env.example`).
-- SA UI hardening and offline customer/item fallback changes in POS components (`Invoice.vue`, `Payments.vue`, `Customer.vue`, `ItemsSelector.vue`, `UpdateCustomer.vue`).
-- Additional role and relay-related edits in `posapp.py`, `OpeningDialog.vue`, `relay/relay/storage.py`.
+### Local uncommitted work currently present (`Out of scope unless intentionally staged`)
+- Unrelated POS UI edits:
+  - `posawesome/public/js/posapp/components/pos/Customer.vue`
+  - `posawesome/public/js/posapp/components/pos/ItemsSelector.vue`
+  - `posawesome/public/js/posapp/components/pos/UpdateCustomer.vue`
+- Unrelated relay storage edits:
+  - `relay/relay/storage.py`
+- Local artifacts / scratch files:
+  - `POS_Relay_End_to_End_Plan_with_Workflow_Exceptions_and_Edge_Cases.pdf`
+  - `attendance.db`
+  - `cypress/tmp/`
 
-Note:
-- These local changes are intentionally not assumed committed unless verified in git history.
-- Docs should explicitly distinguish branch state from local uncommitted work.
+Rule:
+- Do not assume any item in this section is part of the branch state.
 
 ### Documentation assets now present
 - `plans/kilo-codex-v3-branch-accurate-checklist.md`
 - `plans/pos-relay-program/*` (this docs program)
+- `plans/pos-relay-program/uat/*` (branch/date-specific UAT evidence)
+- `plans/pos-relay-program/runbooks/optiplex-edge-relay-next-session.md` (zero-context relay-host startup)
 - Historical/context docs under `LLM_DEVELOPMENTS/POS_TOKEN_and_EDGE_RELAY/`
 
 ## Implementation Tasks (Phase 0 Closeout)
-- [ ] Keep the baseline docs updated as branch state changes.
-- [ ] Mark local working tree items as committed once they are actually committed/pushed.
-- [ ] Link any future implementation PR/commit IDs in `../CHANGELOG_PROGRESS.md`.
+- [x] Keep the baseline docs updated as branch state changes. *(continuing maintenance task)*
+- [x] Mark local working tree items as committed once they are actually committed/pushed. *(ongoing; current uncommitted items listed explicitly above)*
+- [ ] Continue linking future implementation PR/commit IDs in `../CHANGELOG_PROGRESS.md`.
 
 ## Tests and Verification
 - Documentation verification:
   - [ ] All cross-links resolve.
-  - [ ] Phase docs use consistent status labels.
+  - [x] Phase/top-level docs explicitly label current vs historical/baseline context.
 - Code reality spot-checks used for this baseline:
   - `posawesome/posawesome/api/posapp.py`
   - `posawesome/public/js/posapp/components/pos/*.vue`
@@ -79,6 +101,7 @@ Note:
 - Branch-accurate baseline documented.
 - Local working tree work clearly labeled as uncommitted/partial where applicable.
 - New docs program pushed to branch and discoverable by other contributors.
+- Current vs historical/stale labeling is explicit enough for a zero-context handoff.
 
 ## Cross-References
 - `../00-ai-agent-start-here.md`

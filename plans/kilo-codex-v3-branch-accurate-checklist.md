@@ -1,6 +1,7 @@
 # kilo-codex-v3 Branch-Accurate Relay Implementation Checklist
 
 ## TL;DR (Business Owner)
+- `Current status note`: this is a historical baseline checklist for branch `kilo-codex-v3`, not the active branch today.
 - This is the branch-specific checklist for what is already built vs what is still missing.
 - The current business priority is finishing and testing the SA frontend workflow (Sales Order token + sidebar monitor).
 - SA should not open/close cash shifts; cashier owns cash accountability.
@@ -13,6 +14,11 @@
 - Use `plans/pos-relay-program/01-role-based-workflow-spec.md` for detailed per-role visibility/action rules.
 - Use `plans/pos-relay-program/02-master-implementation-plan.md` for the full multi-phase roadmap.
 - Use `plans/pos-relay-program/03-offline-edge-relay-and-windows-service-spec.md` for relay/offline/Windows operations.
+
+## Document Currency
+- `Current`: use `plans/pos-relay-program/00-ai-agent-start-here.md`, `CHANGELOG_PROGRESS.md`, and recent `uat/*.md` files.
+- `Historical baseline`: use this file to understand what was true for `kilo-codex-v3` when the program docs were first anchored.
+- This file should not be treated as the latest branch snapshot once work moved to `codex-2-cashier` / `codex-3-edge-relay`.
 
 ## Purpose
 - This checklist converts the generic deep research report into a repo-specific execution checklist for branch `kilo-codex-v3`.

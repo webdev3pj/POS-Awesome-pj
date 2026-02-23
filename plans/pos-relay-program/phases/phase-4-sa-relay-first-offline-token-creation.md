@@ -13,6 +13,10 @@
 - `../03-offline-edge-relay-and-windows-service-spec.md`
 - `../CHANGELOG_PROGRESS.md`
 
+## Document Currency
+- This is a current planning doc for a deferred phase (Phase 4).
+- SA online-first `Sales Order` token flow is already implemented; this phase covers the later relay-first/offline extension only.
+
 ## Purpose
 Enable Sales Associates to create tokens/orders when cloud ERPNext is unavailable, using relay-first local persistence and later sync to cloud `Sales Order`.
 
@@ -29,7 +33,7 @@ Enable Sales Associates to create tokens/orders when cloud ERPNext is unavailabl
 ## Completed So Far
 - Relay token storage exists (`relay_tokens`, `relay_token_lines`).
 - Relay outbox and sync worker foundation exists.
-- SA online token concept exists (currently invoice-based in committed branch; planned SO-first in Phase 1).
+- SA online token concept now exists as a submitted `Sales Order` flow (implemented in branch history and dev-site UAT verified); this phase extends that to relay-first/offline creation.
 
 ## Implementation Tasks
 - [ ] Define local relay representation for SA order payload (extend token model vs add dedicated local SO model/event payload).

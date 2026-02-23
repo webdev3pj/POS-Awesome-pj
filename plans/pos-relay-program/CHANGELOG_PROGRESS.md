@@ -17,6 +17,10 @@ Entry format:
 - What remains
 - Links
 
+Note:
+- Entries are intentionally historical and preserve the branch/date context they were recorded under.
+- Do not rewrite older entries to match the current branch name.
+
 ---
 
 ## 2026-02-22 - Docs program initialized (planning and handoff set)
@@ -173,6 +177,25 @@ Entry format:
     - `plans/pos-relay-program/README.md`
     - `plans/pos-relay-program/00-ai-agent-start-here.md`
     - `plans/pos-relay-program/03-offline-edge-relay-and-windows-service-spec.md`
+
+## 2026-02-23 - Documentation currency normalization (current vs historical labeling)
+- Branch: `codex-3-edge-relay`
+- Summary: Normalized top-level/phase docs to clearly label what is current, historical baseline, or historical UAT evidence, and updated branch snapshots to the current branch family.
+- What changed:
+  - Updated `README.md` with branch lineage and document currency label rules.
+  - Updated `00-ai-agent-start-here.md` current branch snapshot to `codex-3-edge-relay` and aligned status to SA/Cashier verified work + relay local smoke.
+  - Updated role spec / master plan / phase docs with explicit currency notes and corrected stale statements (SO naming-series status, SA SO token status, UAT references).
+  - Labeled `plans/kilo-codex-v3-branch-accurate-checklist.md` as a historical baseline checklist.
+- What was verified:
+  - Docs-only normalization pass completed on current branch.
+  - Current vs historical labeling now appears in top-level docs and phase docs.
+- What remains:
+  - Continue keeping phase checklists in sync as relay-enabled live validation progresses.
+  - Update UAT docs and phase statuses after OptiPlex relay-enabled SA/Cashier testing.
+- Links:
+  - `README.md`
+  - `00-ai-agent-start-here.md`
+  - `phases/phase-0-current-state-and-completed-work.md`
 
 ## 2026-02-22 - Dev-site SA Cypress reruns progressed to token creation (app bug fixed, spec still flaky)
 - Branch: `kilo-codex-v3`

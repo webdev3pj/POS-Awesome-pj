@@ -13,6 +13,11 @@
 - `../03-offline-edge-relay-and-windows-service-spec.md`
 - `../CHANGELOG_PROGRESS.md`
 
+## Document Currency
+- This is the active phase doc for remaining cashier/picker/dispatch/supervisor UX work.
+- Cashier filtering and basic cashier SO-load/payment-path coverage are already implemented and verified; the remaining tasks in this file focus on deeper role UI completion and broader role coverage.
+- Use `../CHANGELOG_PROGRESS.md` and the cashier UAT doc for the latest verified cashier status.
+
 ## Purpose
 Complete the operator-facing role UX so each role sees the right screens/actions and is blocked from the wrong ones at the UI level.
 
@@ -30,9 +35,9 @@ Complete the operator-facing role UX so each role sees the right screens/actions
 
 ## Completed So Far
 - Opening dialog role derivation and no/multi-role blocking (`Implemented`).
-- Partial SA payment UI blocking in local working tree (`Partial`).
+- SA payment UI blocking is implemented and live-tested (`Implemented` for SA boundary; broader role gating remains `Partial`).
 - Cashier relay commit UX foundation and status diagnostics (`Implemented`/`Partial`).
-- Phase 1B monitor rail foundation added locally (ticket icon/sidebar, polling, profile/date-scoped pending rows, timing display) pending UAT and refinement.
+- Phase 1B monitor rail foundation is implemented and dev-site UAT verified (read-only v1); refinement remains open.
 - Cashier `Select S.O` backend filtering by POS Profile Sales Order naming series + age window implemented (`Implemented`).
 - Live dev-site cashier E2E (headed Cypress) verified:
   - `Select S.O` request includes `pos_profile`

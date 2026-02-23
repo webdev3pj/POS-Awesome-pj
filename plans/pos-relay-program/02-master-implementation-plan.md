@@ -5,7 +5,7 @@
 - Phase 1/1B is the immediate business priority: SA creates `Sales Order` tokens, plus a live sidebar monitor for pending orders.
 - SA should be able to work without opening a cash shift; cashier still owns cash opening/closing.
 - The sidebar monitor should show orders by `POS Profile + business date` so SA orders appear even before a cashier opens shift.
-- Profile-specific Sales Order numbering is a near-term follow-up; current testing uses the default SO series.
+- Profile-specific Sales Order numbering and cashier `Select S.O` age filtering are now implemented and verified in live dev-site cashier testing.
 
 ## See also
 - `README.md`
@@ -21,7 +21,15 @@
 - `CHANGELOG_PROGRESS.md`
 
 ## Purpose
-Provide the decision-complete implementation roadmap from the current `kilo-codex-v3` branch state to a production-ready role-based POS workflow with edge relay offline continuity.
+Provide the decision-complete implementation roadmap from the original `kilo-codex-v3` baseline through the current `codex-3-edge-relay` branch toward a production-ready role-based POS workflow with edge relay offline continuity.
+
+## Document Currency
+- This is the long-lived roadmap and phase-ordering document. It intentionally preserves plan structure from earlier branches.
+- Current implementation evidence and branch-specific progress should always be checked in:
+  - `CHANGELOG_PROGRESS.md`
+  - `uat/*.md`
+  - `00-ai-agent-start-here.md`
+- Where this plan says "Phase X" but work is already complete, treat the phase section as design intent + scope history and use the changelog/UAT docs for verification status.
 
 ## Business Objective
 Deliver a reliable, auditable, role-based retail workflow where:
@@ -43,14 +51,16 @@ Deliver a reliable, auditable, role-based retail workflow where:
 - Relay local-first commit and idempotency foundation exists.
 - POS profile relay gating and relay status diagnostics exist.
 - Role derivation foundation exists (single `cline-*` at opening dialog).
+- SA no-cash session, SA Sales Order token flow, and read-only ticket monitor rail are implemented and dev-site UAT verified.
 - Cashier relay commit path is functional at foundation level.
-- SO search and SO -> SI conversion support exists.
-- Cypress OTP login test setup exists (local working tree).
+- SO search and SO -> SI conversion support exists, and cashier `Select S.O` series/age filtering is implemented and dev-site UAT verified.
+- Cypress OTP login, SA flow, cashier flow, and token-disabled regression specs are committed and actively used.
+- Local edge relay acceptance tests and local HTTP smoke are passing on `codex-3-edge-relay`.
 
 ### Gaps (`Planned` / `Deferred`)
-- SA token is still invoice-based, not SO-based.
 - Full role-specific UI visibility is incomplete.
 - Relay auth/server-side role authorization missing.
+- Relay-enabled live dev-site SA/Cashier proof (with a real reachable Edge Relay) is still pending.
 - SA relay-first/offline token creation deferred until online path stabilizes.
 
 ## Architecture Overview (Program Target)
@@ -294,7 +304,7 @@ Exit criteria:
 
 ### Configuration alignment
 - POS Profile `custom_have_token` and `custom_edge_relay_url` must match the intended relay mode and URL.
-- Near-term follow-up: add dedicated `POS Profile.posa_sales_order_naming_series` for per-profile SO numbering (default SO series used until implemented).
+- `POS Profile.posa_sales_order_naming_series` and `posa_sales_order_lookup_max_age_days` are implemented; verify profile values before cashier UAT (e.g. `PJ7 CASHIER`).
 
 ## UAT Plan (High Level)
 ### SA
@@ -319,10 +329,11 @@ Exit criteria:
 ## Cypress Automation Strategy
 ### Existing baseline
 - OTP login automation to live Frappe Cloud dev site.
+- SA and cashier headed/watch-mode specs are committed and were used for live dev-site verification.
 
 ### Planned additions
-- Phase 1: SA token/SO flow UI test (post-deploy).
-- Phase 2/5: role-visibility regression tests and selected cashier flow tests.
+- Phase 2/5: expand role-visibility regression tests and extend cashier flow to relay-enabled submit success.
+- Phase 5: add Picker/Dispatch/Supervisor E2E coverage as workflows/UI become stable.
 
 ### Practical constraint
 - Live-site tests require stable test data and environment readiness; use first available item initially, then evolve to dedicated test fixtures.
