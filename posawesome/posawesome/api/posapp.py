@@ -1540,8 +1540,11 @@ def create_sales_order_token(data):
         sales_order_doc.campaign = data.get("campaign")
 
     selling_price_list = frappe.get_cached_value("POS Profile", pos_profile, "selling_price_list")
+    profile_warehouse = frappe.get_cached_value("POS Profile", pos_profile, "warehouse")
     if selling_price_list and getattr(sales_order_doc, "selling_price_list", None) in (None, ""):
         sales_order_doc.selling_price_list = selling_price_list
+    if profile_warehouse and sales_order_doc.meta.has_field("set_warehouse"):
+        sales_order_doc.set_warehouse = profile_warehouse
 
     # POSAwesome custom fields on Sales Order (if migrated)
     if sales_order_doc.meta.has_field("posa_notes"):
@@ -1565,6 +1568,16 @@ def create_sales_order_token(data):
         row.item_code = item_code
         row.qty = flt((raw or {}).get("qty") or 0)
         row.uom = (raw or {}).get("uom")
+        row_warehouse = cstr(
+            (raw or {}).get("delivery_warehouse")
+            or (raw or {}).get("warehouse")
+            or profile_warehouse
+            or ""
+        ).strip()
+        if row_warehouse and so_item_meta.has_field("delivery_warehouse"):
+            row.delivery_warehouse = row_warehouse
+        if row_warehouse and so_item_meta.has_field("warehouse"):
+            row.warehouse = row_warehouse
         if (raw or {}).get("rate") is not None:
             row.rate = flt((raw or {}).get("rate"))
         if (raw or {}).get("conversion_factor") is not None:
