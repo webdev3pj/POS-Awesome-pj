@@ -26,10 +26,10 @@ Key business rules currently agreed:
 - SA-stage `sales_partner` capture is deferred and tracked as backlog.
 
 ## Current Branch and Status Snapshot
-- Branch: `kilo-codex-v3`
-- Current state: relay foundation is implemented; role derivation exists; cashier relay commit path exists; role enforcement and full role UI visibility are incomplete.
-- Priority implementation target: `Phase 1` SA token -> submitted Sales Order (online-first).
-- Immediate follow-on target: `Phase 1B` ticket-style workflow monitor rail (left sidebar) with timing metrics scoped by `POS Profile + business date` (opening shift remains optional metadata).
+- Branch: `codex-2-cashier`
+- Current state: SA Sales Order token + monitor rail are implemented and live-tested; cashier `Select S.O` series/age filtering is implemented and verified on the dev site; role enforcement and full role UI visibility are still incomplete.
+- Priority implementation target: `Phase 2` cashier submit hardening (environment-specific relay/cloud outcomes), then Picker/Dispatch UI/E2E coverage.
+- Immediate follow-on target: push Cypress hardening/docs updates and expand live E2E coverage beyond SA/Cashier.
 
 ## What Is Already Implemented (Branch-Accurate)
 ### Relay foundation (`Implemented`)

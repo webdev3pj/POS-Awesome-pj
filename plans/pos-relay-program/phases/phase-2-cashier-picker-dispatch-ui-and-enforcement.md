@@ -33,6 +33,12 @@ Complete the operator-facing role UX so each role sees the right screens/actions
 - Partial SA payment UI blocking in local working tree (`Partial`).
 - Cashier relay commit UX foundation and status diagnostics (`Implemented`/`Partial`).
 - Phase 1B monitor rail foundation added locally (ticket icon/sidebar, polling, profile/date-scoped pending rows, timing display) pending UAT and refinement.
+- Cashier `Select S.O` backend filtering by POS Profile Sales Order naming series + age window implemented (`Implemented`).
+- Live dev-site cashier E2E (headed Cypress) verified:
+  - `Select S.O` request includes `pos_profile`
+  - `PJ7 CASHIER` naming-series/age filtering works
+  - cashier can load SA-created SO into payment screen (`Partial`, submit success depends on environment/relay config)
+- Regression smoke test added for `custom_have_token = 0` on POS Profile to ensure cashier POS still opens and payment screen is reachable (`Implemented`, Cypress).
 
 ## Implementation Tasks
 - [ ] Add read-only current role display in `Navbar.vue`.
@@ -48,7 +54,9 @@ Complete the operator-facing role UX so each role sees the right screens/actions
 ## Tests and Verification
 - [ ] Role-by-role UI visibility walkthrough using test users.
 - [ ] Cypress assertions for hidden/disabled controls by role.
-- [ ] Regression checks for cashier payment flow and SO selection.
+- [x] Regression checks for cashier SO selection filtering (POS Profile series + age) on live dev site.
+- [x] Smoke regression: cashier POS/payment screen still works when `custom_have_token = 0`.
+- [ ] Full cashier payment submit success under relay-configured or token-disabled submit environment.
 
 ## Known Risks
 - UI-only blocks can create false sense of security until Phase 3 auth lands.

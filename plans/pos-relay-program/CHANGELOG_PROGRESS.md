@@ -115,6 +115,31 @@ Entry format:
 - What remains:
   - Redeploy and re-run cashier Cypress spec to confirm `search_orders` request includes `pos_profile` and naming-series filtering is active.
 
+## 2026-02-23 - Dev-site cashier Cypress run (series/age filtering verified; token-disabled regression added)
+- Branch: `codex-2-cashier`
+- Summary: Completed live headed Cypress verification of the cashier `Select S.O` filtering flow after fixing the real app issue (`Invoice.vue` initial lookup omitted `pos_profile`). Added a regression smoke test to prove POS still works when `custom_have_token` is disabled.
+- What changed:
+  - Deployed app fix commit `54ef47a`:
+    - `Invoice.vue` now passes `pos_profile` in cashier `search_orders` calls
+    - backend `search_orders(...)` infers `pos_profile` from active cashier opening shift if request omits it
+  - Added Cypress smoke spec `cypress/e2e/cashier_token_disabled_profile_smoke.cy.js` (local/pending push at time of run)
+  - Hardened cashier Cypress specs locally for login, row selection, payment button selectors, and submit outcome assertions.
+- What was verified:
+  - `PJ7 CASHIER` POS Profile configured to `SAL-ORD-PJ7-.YYYY.-` and `Select S.O Max Age (Days) = 1`
+  - SA flow creates a fresh Sales Order token for cashier pickup
+  - Cashier `Select S.O` request now includes `pos_profile`
+  - `Select S.O` results are filtered by naming series and age for `PJ7 CASHIER`
+  - Cashier can load the SA-created SO into payment flow and reach submit/validation stage
+  - Token-disabled regression smoke test passes and restores `custom_have_token`
+- What remains:
+  - Push local Cypress hardening + docs updates to GitHub
+  - Prove full cashier submit success under a relay-configured or token-disabled submit scenario (current environment shows relay warnings)
+  - Expand E2E coverage to Picker/Dispatch/Supervisor
+- Links:
+  - `uat/2026-02-23-dev-site-cashier-watch-mode-cypress.md`
+  - `phases/phase-2-cashier-picker-dispatch-ui-and-enforcement.md`
+  - `00-ai-agent-start-here.md`
+
 ## 2026-02-22 - Dev-site SA Cypress reruns progressed to token creation (app bug fixed, spec still flaky)
 - Branch: `kilo-codex-v3`
 - Summary: Continued live dev-site Cypress headed runs after role fixture deployment; SA workflow now reaches Sales Order token creation and monitor rail visibility. Identified and fixed a real backend issue (`delivery_warehouse` missing on SA-created Sales Order items).
