@@ -23,6 +23,40 @@ Note:
 
 ---
 
+## 2026-02-23 - OptiPlex relay startup + PJ7 CASHIER relay URL configured (local relay validated; headed Cypress pending)
+- Branch: `codex-3-edge-relay`
+- Summary: Executed the OptiPlex runbook startup steps on the relay host, verified local relay health/queue/outbox and local commit behavior, configured relay cloud connection settings, and updated `PJ7 CASHIER` to use the LAN relay URL on the dev site.
+- What changed:
+  - Started the local relay on the OptiPlex (`relay/.venv` created, dependencies installed, `relay.selftest` passed, `relay.app` running on `:8787`).
+  - Configured relay runtime settings (`frappe_base_url`, API token, `public_base_url`, subnet/port) via the relay setup flow.
+  - Updated dev-site POS Profile `PJ7 CASHIER` `custom_edge_relay_url` to the OptiPlex LAN relay URL (`http://192.168.50.168:8787`) using Frappe API token auth.
+  - Re-enabled `PJ7 CASHIER.custom_have_token = 1` (it was `0` at session start, which would block relay token-mode testing).
+- What was verified:
+  - Relay local endpoints:
+    - `GET /` -> `200`
+    - `GET /queue` -> `200`
+    - `GET /health` -> `ok: true`
+    - `GET /api/outbox` -> JSON returned
+  - Relay local commit smoke on the running server:
+    - `POST /relay/session/open`
+    - `POST /relay/token/create`
+    - `POST /relay/commit-invoice`
+    - idempotent replay returns same `local_sale_ref`
+  - Relay transaction persisted locally with:
+    - `sale_status = SALE_COMMITTED_LOCAL`
+    - `cloud_sync_status = SALE_SYNC_PENDING`
+    - generated `local_sale_ref`
+  - Dev-site API token auth works (used to update POS Profile settings).
+  - Relay best-effort access check endpoint reports the configured LAN URL reachable from the relay host (`/api/erpnext-access-check`).
+- What remains:
+  - Run the headed Chrome Cypress watch-mode SA + Cashier flow from the main machine against the live dev site while the OptiPlex relay is running.
+  - Verify real cashier POS submit hits relay commit path and capture the live `local_sale_ref` from a browser-driven run (not only local API smoke).
+  - Optionally provide a tunnel/public URL if backend/cloud-side relay reachability diagnostics are required (LAN URL is browser/LAN-only).
+- Links:
+  - `uat/2026-02-23-optiplex-relay-start-profile-config.md`
+  - `runbooks/optiplex-edge-relay-next-session.md`
+  - `03-offline-edge-relay-and-windows-service-spec.md`
+
 ## 2026-02-22 - Docs program initialized (planning and handoff set)
 - Branch: `kilo-codex-v3`
 - Summary: Created phased relay program docs and AI-agent handoff structure in `plans/pos-relay-program/`.
