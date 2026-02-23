@@ -108,6 +108,13 @@ Entry format:
   - `phases/phase-1-sa-sales-order-token-online-first.md`
   - `01-role-based-workflow-spec.md`
 
+## 2026-02-23 (Codex / Redeploy Trigger)
+- Branch: `codex-2-cashier`
+- What changed:
+  - Docs-only commit to force a fresh Frappe Cloud deploy/restart while investigating stale cashier frontend assets (`Select S.O` request missing `pos_profile`).
+- What remains:
+  - Redeploy and re-run cashier Cypress spec to confirm `search_orders` request includes `pos_profile` and naming-series filtering is active.
+
 ## 2026-02-22 - Dev-site SA Cypress reruns progressed to token creation (app bug fixed, spec still flaky)
 - Branch: `kilo-codex-v3`
 - Summary: Continued live dev-site Cypress headed runs after role fixture deployment; SA workflow now reaches Sales Order token creation and monitor rail visibility. Identified and fixed a real backend issue (`delivery_warehouse` missing on SA-created Sales Order items).
