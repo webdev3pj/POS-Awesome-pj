@@ -7,6 +7,7 @@
 - SA should not open/close cash shifts; cashier owns cash opening/closing.
 - Use `00-ai-agent-start-here.md` first if you want the fastest summary of what is done and what is next.
 - If working from the OptiPlex/relay machine with no chat context, use `runbooks/optiplex-edge-relay-next-session.md`.
+- If starting a completely fresh Codex session on the OptiPlex, also use `runbooks/optiplex-fresh-codex-zero-context-handoff.md`.
 
 ## Purpose
 This folder is the active planning and handoff set for the POS token/edge relay program.
@@ -45,6 +46,7 @@ It consolidates:
 5. Use `phases/` docs for current execution state and phase-specific tasks.
 6. Append progress to `CHANGELOG_PROGRESS.md` after each meaningful implementation or verification pass.
 7. On the OptiPlex relay host, use `runbooks/optiplex-edge-relay-next-session.md` as the local operator/AI handoff entry point.
+8. For shop PC one-time setup (non-technical), use `runbooks/shop-pc-lan-relay-setup-non-technical.md`.
 
 ## Document Map
 - `00-ai-agent-start-here.md`: AI coding agent handoff, status snapshot, file map, next steps.
@@ -59,6 +61,8 @@ It consolidates:
 - `phases/phase-5-uat-deployment-observability-hardening.md`: UAT, rollout, monitoring, hardening.
 - `CHANGELOG_PROGRESS.md`: progress ledger across dates/commits (historical record; latest entry is the operational truth).
 - `runbooks/optiplex-edge-relay-next-session.md`: zero-context startup guide for relay-host sessions (OptiPlex).
+- `runbooks/optiplex-fresh-codex-zero-context-handoff.md`: full zero-context Codex takeover guide with exact branch/commit/env-var requirements.
+- `runbooks/shop-pc-lan-relay-setup-non-technical.md`: one-time certificate trust steps for shop PCs (plain-English operator guide).
 
 ## Phase Map (High Level)
 - Phase 0: Baseline and completed work documentation (branch-family snapshot + explicit historical/current labeling)
@@ -104,3 +108,5 @@ It consolidates:
 - `03-offline-edge-relay-and-windows-service-spec.md`
 - `CHANGELOG_PROGRESS.md`
 - `runbooks/optiplex-edge-relay-next-session.md`
+- `runbooks/optiplex-fresh-codex-zero-context-handoff.md`
+- `runbooks/shop-pc-lan-relay-setup-non-technical.md`

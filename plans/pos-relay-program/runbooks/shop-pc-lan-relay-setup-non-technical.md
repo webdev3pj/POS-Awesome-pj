@@ -1,0 +1,70 @@
+# Shop PC LAN Relay Setup (Non-Technical, One-Time)
+
+## TL;DR (Business Owner / Shop Staff)
+- Do this **once** on each shop PC (SA, Cashier, Picker, Dispatch).
+- Run the relay certificate installer as **Administrator**.
+- Open `https://192.168.50.168/health` in Chrome.
+- If it opens without a browser warning, that PC is ready to use the local relay over LAN HTTPS.
+
+## Why this is needed (plain English)
+- Your POS page comes from Frappe Cloud (`https://...frappe.cloud`).
+- The local relay is in the shop on your LAN.
+- To let the browser talk safely to the local relay, we will use a local HTTPS address:
+  - `https://192.168.50.168`
+- Each shop PC needs to trust the local relay certificate one time.
+
+## What you need before starting
+- The OptiPlex relay machine is running and the relay HTTPS setup was completed by Codex/IT.
+- You have the file:
+  - `install_shop_pc_relay_cert.bat`
+- You are logged into Windows with rights to approve an Administrator prompt.
+
+## One-Time Setup Steps (per PC)
+1. Close Chrome and any open POS tabs.
+2. Double-click `install_shop_pc_relay_cert.bat`.
+3. If Windows shows a permission prompt, click **Yes**.
+4. Wait for the script to finish (it should show a success message).
+5. Open Chrome.
+6. Visit:
+   - `https://192.168.50.168/health`
+7. Confirm:
+   - no red security warning
+   - a small JSON page appears (relay health response)
+
+If this works, the PC is ready.
+
+## What the staff member does NOT need to do
+- No command line
+- No browser settings
+- No developer tools
+- No tunnel setup
+- No manual certificate import steps (the script handles it)
+
+## If you see a browser warning or error
+### Case 1: Security / certificate warning
+Do this:
+1. Close Chrome
+2. Re-run `install_shop_pc_relay_cert.bat` as Administrator
+3. Try `https://192.168.50.168/health` again
+
+If still failing:
+- Ask Codex/IT to check that the OptiPlex relay HTTPS setup completed and the correct certificate was exported.
+
+### Case 2: Page does not load / timeout
+Possible causes:
+- OptiPlex relay is not running
+- Shop PC not on the same LAN
+- Windows firewall/network issue
+
+What to tell Codex/IT:
+- “This PC cannot open `https://192.168.50.168/health`.”
+
+## Quick checklist for managers
+- [ ] SA PC ready
+- [ ] Cashier PC ready
+- [ ] Picker PC ready
+- [ ] Dispatch PC ready
+
+## Notes for Codex/IT (do not ask staff to do this)
+- The certificate installer is generated/maintained from `relay/windows_https/install_shop_pc_relay_cert.ps1` and `relay/windows_https/install_shop_pc_relay_cert.bat`.
+- If relay LAN HTTPS moves to a hostname (fallback plan), update this document and the health-check URL accordingly.

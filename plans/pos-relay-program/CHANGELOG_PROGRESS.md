@@ -23,6 +23,32 @@ Note:
 
 ---
 
+## 2026-02-23 - OptiPlex zero-context handoff package docs (LAN-only mode + cloud fallback implementation handoff)
+- Branch: `codex-3-edge-relay`
+- Summary: Added a zero-context relay-host handoff package so a fresh Codex session on the OptiPlex can start immediately, with exact branch/baseline commit, local-only secret file requirements, LAN-only relay mode implementation target, and non-technical shop-PC setup guidance.
+- What changed:
+  - Added `runbooks/optiplex-fresh-codex-zero-context-handoff.md` (fresh Codex takeover guide with exact baseline commit `424c79a`, copy-paste starter prompt, local-only secrets pack requirements, and implementation priorities).
+  - Added `runbooks/shop-pc-lan-relay-setup-non-technical.md` (plain-English one-time certificate trust steps for SA/Cashier/Picker/Dispatch PCs).
+  - Added `uat/2026-02-24-lan-only-relay-enabled-sa-cashier-template.md` (template for tomorrow's relay-enabled UAT evidence).
+  - Updated current docs/runbooks to include:
+    - exact GitHub baseline commit for OptiPlex handoff (`424c79a`)
+    - exact Cypress env var names (`CYPRESS_baseUrl`, `CYPRESS_username`, `CYPRESS_password`, `CYPRESS_totpUri`)
+    - explicit local-only secrets handling (`.env`, `relay/data/relay_config.json`)
+    - current-vs-planned distinction for tunnel-based current behavior vs LAN-only mode target
+- What was verified:
+  - Handoff docs reference the current branch (`codex-3-edge-relay`) and the correct baseline commit (`424c79a`).
+  - Cypress env var names in docs match `cypress.config.cjs`.
+  - Relay config keys documented match `relay/relay/storage.py` defaults.
+- What remains:
+  - Implement LAN-only relay mode (browser-LAN health submit gate).
+  - Implement cashier relay-down -> cloud fallback prompt (per POS Profile toggle).
+  - Add OptiPlex Caddy reverse-proxy automation and shop-PC cert install scripts.
+  - Run relay-enabled SA/Cashier Cypress UAT and fill the new UAT template.
+- Links:
+  - `runbooks/optiplex-fresh-codex-zero-context-handoff.md`
+  - `runbooks/shop-pc-lan-relay-setup-non-technical.md`
+  - `uat/2026-02-24-lan-only-relay-enabled-sa-cashier-template.md`
+
 ## 2026-02-23 - OptiPlex relay startup + PJ7 CASHIER relay URL configured (local relay validated; headed Cypress pending)
 - Branch: `codex-3-edge-relay`
 - Summary: Executed the OptiPlex runbook startup steps on the relay host, verified local relay health/queue/outbox and local commit behavior, configured relay cloud connection settings, and updated `PJ7 CASHIER` to use the LAN relay URL on the dev site.

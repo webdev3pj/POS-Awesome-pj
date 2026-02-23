@@ -72,12 +72,16 @@ Rule:
 - `plans/pos-relay-program/*` (this docs program)
 - `plans/pos-relay-program/uat/*` (branch/date-specific UAT evidence)
 - `plans/pos-relay-program/runbooks/optiplex-edge-relay-next-session.md` (zero-context relay-host startup)
+- `plans/pos-relay-program/runbooks/optiplex-fresh-codex-zero-context-handoff.md` (fresh Codex takeover package for OptiPlex)
+- `plans/pos-relay-program/runbooks/shop-pc-lan-relay-setup-non-technical.md` (plain-English PC setup guide for LAN HTTPS relay trust)
 - Historical/context docs under `LLM_DEVELOPMENTS/POS_TOKEN_and_EDGE_RELAY/`
 
 ## Implementation Tasks (Phase 0 Closeout)
 - [x] Keep the baseline docs updated as branch state changes. *(continuing maintenance task)*
 - [x] Mark local working tree items as committed once they are actually committed/pushed. *(ongoing; current uncommitted items listed explicitly above)*
+- [x] Add zero-context OptiPlex handoff package docs (runbook + non-technical shop-PC guide + UAT template). *(current branch docs task)*
 - [ ] Continue linking future implementation PR/commit IDs in `../CHANGELOG_PROGRESS.md`.
+- [ ] After LAN-only mode/fallback implementation lands, update this phase baseline to mark those features `Implemented` or `Partial` with commit refs.
 
 ## Tests and Verification
 - Documentation verification:

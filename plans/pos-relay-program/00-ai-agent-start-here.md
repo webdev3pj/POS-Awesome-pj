@@ -11,6 +11,8 @@
 ## See also
 - `README.md`
 - `runbooks/optiplex-edge-relay-next-session.md`
+- `runbooks/optiplex-fresh-codex-zero-context-handoff.md`
+- `runbooks/shop-pc-lan-relay-setup-non-technical.md`
 - `01-role-based-workflow-spec.md`
 - `02-master-implementation-plan.md`
 - `03-offline-edge-relay-and-windows-service-spec.md`
@@ -37,12 +39,13 @@ Key business rules currently agreed:
 
 ## Current Branch and Status Snapshot
 - Current working branch: `codex-3-edge-relay`
+- GitHub handoff baseline for the next OptiPlex session: `424c79a` (`docs(relay): clarify frappe cloud local-lan relay constraints`)
 - Inherited validated work:
   - `kilo-codex-v3`: SA Sales Order token flow, no-cash SA session, monitor rail foundation
   - `codex-2-cashier`: cashier `Select S.O` filtering (naming series + age), cashier live E2E coverage, token-disabled regression coverage
-- Current state: SA and cashier flows are validated on the dev site in non-relay-configured conditions; local relay acceptance + HTTP smoke are passing; next step is live relay-enabled SA/Cashier testing from the OptiPlex/local relay host.
+- Current state: SA and cashier flows are validated on the dev site in non-relay-configured conditions; local relay acceptance + HTTP smoke are passing; next step is LAN-only relay hardening (status gating + fallback) and then live relay-enabled SA/Cashier testing from the OptiPlex/local relay host.
 - Priority implementation/verification target: relay-enabled end-to-end SA/Cashier flow and submit outcomes, then Picker/Dispatch UI/E2E coverage.
-- Frappe Cloud topology note: do not assume a raw LAN relay URL (`http://192.168.x.x:8787`) will work for relay-enabled submit; current branch backend connectivity checks run from cloud and require a routable/tunnel URL for relay-backed cashier submit.
+- Frappe Cloud topology note: do not assume a raw LAN relay URL (`http://192.168.x.x:8787`) will work for relay-enabled submit in current behavior; current target is LAN-only mode (browser-LAN relay status as submit gate) with LAN HTTPS on the OptiPlex.
 
 ## What Is Already Implemented (Branch-Accurate)
 ### Relay foundation (`Implemented`)
@@ -95,21 +98,25 @@ Key business rules currently agreed:
 - SA relay-first/offline token creation until online-first path is stable.
 
 ## Immediate Next Recommended Task
-Run the `codex-3-edge-relay` OptiPlex relay validation flow: start a real local relay, point `PJ7 CASHIER` to it, and re-run SA + Cashier Cypress watch-mode tests to verify relay-enabled behavior (especially cashier submit/commit outcomes).
+Implement the `codex-3-edge-relay` LAN-only relay mode + cloud fallback package on the OptiPlex track, then validate relay-enabled SA + Cashier in headed Cypress.
 
 Why this is next:
 - SA/Cashier cloud-side behavior is already proven well enough for the next milestone.
 - Relay-enabled cashier submit behavior is the highest-value remaining uncertainty.
-- It directly prepares tomorrow's OptiPlex/live-relay testing session.
+- The current blocker is Frappe Cloud-to-LAN relay reachability assumptions in status gating.
+- LAN-only mode + prompted cloud fallback reduces cashier downtime when relay is unavailable.
+- It directly prepares the OptiPlex/live-relay testing session.
 - It informs Phase 3 auth hardening with real deployment behavior.
 
 ## OptiPlex / Relay Host Startup (No Chat Context)
 If a new session starts on the OptiPlex relay machine and does not have this conversation context:
 - Open `runbooks/optiplex-edge-relay-next-session.md` first
+- Then open `runbooks/optiplex-fresh-codex-zero-context-handoff.md`
 - Checkout/use branch `codex-3-edge-relay`
 - Start the local relay and verify `/health`
-- Configure a public/tunnel relay URL on `PJ7 CASHIER` (`Edge Relay URL`) and set relay `public_base_url`
-- Then run the documented Cypress sequence from the main dev machine/browser against the live dev site
+- Copy the local-only `.env` (Cypress secrets) to the repo root if Cypress will run on the OptiPlex
+- Implement LAN-only mode + cloud fallback + LAN HTTPS reverse-proxy automation (current target)
+- Configure `PJ7 CASHIER` relay URL/mode/fallback settings and run the documented Cypress sequence
 
 ## Decision Register
 ### Accepted
@@ -219,6 +226,15 @@ If a new session starts on the OptiPlex relay machine and does not have this con
   - `scripts/run-cypress.cjs`
 - Local secrets stored in `.env` and ignored by git.
 
+### Local-only secrets pack (required for a fresh OptiPlex Codex session)
+- Copy repo-root `.env` from the main machine to the OptiPlex repo root (do not commit).
+- Exact keys required by `cypress.config.cjs`:
+  - `CYPRESS_baseUrl`
+  - `CYPRESS_username`
+  - `CYPRESS_password`
+  - `CYPRESS_totpUri`
+- Relay runtime credentials/settings are local-only in `relay/data/relay_config.json` (written by relay setup UI; do not commit).
+
 ### Agent guidance
 - Never commit `.env`.
 - Reuse OTP login helper/test flow.
@@ -259,6 +275,9 @@ If a new session starts on the OptiPlex relay machine and does not have this con
 
 ## Links to All Other Docs
 - `README.md`
+- `runbooks/optiplex-edge-relay-next-session.md`
+- `runbooks/optiplex-fresh-codex-zero-context-handoff.md`
+- `runbooks/shop-pc-lan-relay-setup-non-technical.md`
 - `01-role-based-workflow-spec.md`
 - `02-master-implementation-plan.md`
 - `03-offline-edge-relay-and-windows-service-spec.md`

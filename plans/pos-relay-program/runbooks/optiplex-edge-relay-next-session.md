@@ -1,10 +1,11 @@
 # OptiPlex Edge Relay Next-Session Runbook (Fresh Agent / No Chat Context)
 
 ## TL;DR (Business Owner)
-- This is the first file to open tomorrow on the OptiPlex machine.
+- This is the first file to open on the OptiPlex machine.
 - It tells a new AI agent exactly what branch to use, how to start the Edge Relay locally, what to configure in `PJ7 CASHIER`, and what tests to run.
-- Goal for tomorrow: prove SA + Cashier flow works against a real local Edge Relay (not just cloud-only UI checks).
+- Goal for the next relay session: prove SA + Cashier flow works against a real local Edge Relay (not just cloud-only UI checks).
 - Local relay core endpoints are already smoke-tested on branch `codex-3-edge-relay`.
+- For a completely fresh Codex session, also open `optiplex-fresh-codex-zero-context-handoff.md`.
 
 ## Purpose
 Provide a zero-context startup guide for a new AI coding agent session on the OptiPlex (Windows relay host), including:
@@ -18,6 +19,7 @@ Provide a zero-context startup guide for a new AI coding agent session on the Op
 ## Branch and Starting Point
 - Repo: `POS-Awesome-pj`
 - Branch to use: `codex-3-edge-relay`
+- GitHub baseline commit for this handoff/runbook: `424c79a`
 - Current relay-focused branch status:
   - SA + Cashier browser flows are already validated in cloud/non-relay-missing scenarios on `codex-2-cashier`
   - `codex-3-edge-relay` starts relay-focused hardening and local relay smoke validation
@@ -28,7 +30,31 @@ Provide a zero-context startup guide for a new AI coding agent session on the Op
 2. `plans/pos-relay-program/03-offline-edge-relay-and-windows-service-spec.md`
 3. `plans/pos-relay-program/uat/2026-02-23-local-edge-relay-smoke.md`
 4. `plans/pos-relay-program/uat/2026-02-23-dev-site-cashier-watch-mode-cypress.md`
-5. `relay/README.md`
+5. `plans/pos-relay-program/runbooks/optiplex-fresh-codex-zero-context-handoff.md`
+6. `relay/README.md`
+
+## Local-Only Secrets Pack (Required Before Cypress)
+### Repo root `.env` (copy from main machine, do not commit)
+File:
+- `I:\vscode repos\POS-Awesome-pj\.env`
+
+Exact keys required by `cypress.config.cjs`:
+```dotenv
+CYPRESS_baseUrl=
+CYPRESS_username=
+CYPRESS_password=
+CYPRESS_totpUri=
+```
+
+Action:
+- Copy the current `.env` from the main machine to the OptiPlex repo root.
+- Do not commit it.
+
+### Relay local runtime config (created by relay setup UI)
+File:
+- `relay/data/relay_config.json`
+
+This stores local relay credentials/settings (`frappe_base_url`, `api_key`, `api_secret`, `public_base_url`, etc.) and must remain local-only.
 
 ## Current Known Good Facts (Do Not Re-Debug First)
 - SA flow works on live dev site (Sales Order token + monitor rail)
@@ -100,20 +126,28 @@ Where to set this in the site frontend (ERPNext/Frappe Desk):
 Fallback (not preferred for this workflow):
 - site config key `posa_edge_relay_url` in `site_config.json` (used only when POS Profile field is blank)
 
-### Relay URL notes
-- Critical for Frappe Cloud:
-  - a raw LAN URL like `http://192.168.50.168:8787` is **not enough** for relay-enabled cashier submit in the current branch.
-  - Reason: backend relay connectivity checks run from Frappe Cloud and cannot reach `192.168.x.x`, so POS can show `RELAY DOWN` and block relay submit.
+### Relay URL notes (current behavior vs planned LAN-only mode)
+- Critical for Frappe Cloud today:
+  - a raw LAN URL like `http://192.168.50.168:8787` is not enough for relay-enabled cashier submit in the current branch behavior.
+  - backend relay connectivity checks run from Frappe Cloud and cannot reach `192.168.x.x`, so POS can show relay down and block relay submit.
 - Browser note (HTTPS page -> HTTP relay):
   - the POS page is served from `https://...frappe.cloud`
   - direct browser `fetch()` to `http://192.168.50.168:8787` may also be blocked as mixed content in Chrome.
-- Recommended for tomorrow's live relay test:
-  - use a **public HTTPS tunnel URL** (Cloudflare Tunnel / ngrok / equivalent) that forwards to `http://192.168.50.168:8787`
-  - set `custom_edge_relay_url` on `PJ7 CASHIER` to that tunnel URL
-  - set relay `public_base_url` in the relay setup UI to the same public URL
+- If no code changes are made first:
+  - use a public HTTPS tunnel URL (Cloudflare Tunnel / ngrok / equivalent)
+  - set `custom_edge_relay_url` and relay `public_base_url` to that same URL
+- If implementing the LAN-only mode work first (current target):
+  - use a LAN HTTPS relay URL (`https://192.168.50.168`) after reverse-proxy + certificate trust setup
+  - set the same LAN HTTPS URL in POS Profile `Edge Relay URL` and relay `public_base_url`
 - LAN-only URL (`http://192.168.50.168:8787`) can still be used for local relay health checks on the OptiPlex itself.
 
-## Tomorrow’s Test Sequence (Recommended)
+### Planned Next Implementation Target (relay-focused)
+- LAN-only relay mode (`browser-LAN` relay health is submit gate)
+- Cashier prompted cloud fallback when relay is down but cloud is up
+- OptiPlex HTTPS reverse-proxy automation (Caddy) + shop-PC certificate trust scripts
+- Full spec and starter prompt: `optiplex-fresh-codex-zero-context-handoff.md`
+
+## Next Session Test Sequence (Recommended)
 ### 1. Start relay locally and verify `/health`
 Do this before opening POS.
 
@@ -135,7 +169,7 @@ Choose `Chrome`.
 
 ### 4. What to watch for (relay-specific)
 - SA token dialog still succeeds
-- Cashier `PAY` -> `Submit` path should now prefer relay commit path when relay is configured/reachable
+- Cashier `PAY` -> `Submit` path should prefer relay commit path when relay is configured/reachable
 - UI should no longer fail only because relay URL is missing
 - Look for relay success messages (local commit / `local_sale_ref`) instead of relay-missing blockers
 - Relay dashboard/outbox should show activity after cashier submit attempts
@@ -161,23 +195,8 @@ Cause:
 - cloud cannot reach LAN URL
 
 Fix:
-- use tunnel/public URL
+- use tunnel/public URL (current branch behavior), or implement LAN-only mode and retest
 - set `public_base_url` in relay setup
-
-### E. Relay URL set to local IP but relay-enabled submit still blocked on Frappe Cloud
-Symptoms:
-- `custom_edge_relay_url` is set (e.g. `http://192.168.50.168:8787`)
-- POS still shows relay down / submit blocked
-
-Cause:
-- current branch intentionally checks relay connectivity from Frappe Cloud backend
-- Frappe Cloud has no route to private LAN IPs (`192.168.x.x`)
-- HTTPS page may also block HTTP relay calls (mixed content)
-
-Fix:
-- use a public HTTPS tunnel URL for relay access
-- set the same URL in POS Profile `Edge Relay URL`
-- set relay `public_base_url` to match
 
 ### C. Cypress test fails but app likely works
 Symptoms:
@@ -215,14 +234,18 @@ This now uses an isolated temp DB per test and should not fail due to stale loca
   - `relay/relay/storage.py`
 - Do not assume relay failures are app bugs before checking local relay process + URL + firewall
 - Do not trust cached browser assets after deploy; hard-refresh before declaring deploy broken
+- Do not commit `.env`, OTP URI, relay API keys, or `relay/data/relay_config.json`
 
-## What to Update After Tomorrow’s Run
+## What to Update After the Next Run
 - `plans/pos-relay-program/CHANGELOG_PROGRESS.md`
 - `plans/pos-relay-program/uat/` (new dated relay-enabled UAT report)
 - `plans/pos-relay-program/00-ai-agent-start-here.md` (status snapshot)
+- `plans/pos-relay-program/runbooks/shop-pc-lan-relay-setup-non-technical.md` (if trust steps change)
 
 ## See Also
 - `../00-ai-agent-start-here.md`
 - `../03-offline-edge-relay-and-windows-service-spec.md`
+- `./optiplex-fresh-codex-zero-context-handoff.md`
+- `./shop-pc-lan-relay-setup-non-technical.md`
 - `../uat/2026-02-23-local-edge-relay-smoke.md`
 - `../../../relay/README.md`

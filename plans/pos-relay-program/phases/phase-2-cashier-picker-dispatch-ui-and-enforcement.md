@@ -44,11 +44,14 @@ Complete the operator-facing role UX so each role sees the right screens/actions
   - `PJ7 CASHIER` naming-series/age filtering works
   - cashier can load SA-created SO into payment screen (`Partial`, submit success depends on environment/relay config)
 - Regression smoke test added for `custom_have_token = 0` on POS Profile to ensure cashier POS still opens and payment screen is reachable (`Implemented`, Cypress).
+- OptiPlex handoff package docs added for next relay-focused cashier validation pass (`Implemented`, docs).
 
 ## Implementation Tasks
 - [ ] Add read-only current role display in `Navbar.vue`.
 - [ ] Implement per-role visibility matrix in `Invoice.vue` (Held, Select SO, Return, Save/New, PAY, draft print behavior).
 - [ ] Harden `Payments.vue` role gating beyond SA only (picker/dispatch/supervisor UX rules).
+- [ ] Implement LAN-only relay status semantics in cashier UX (`Navbar.vue`/`Payments.vue`) so browser-LAN relay health (not cloud-backend relay check) becomes the effective submit gate in LAN-only mode.
+- [ ] Implement cashier prompted cloud fallback when relay is down but cloud is reachable (per POS Profile toggle), with clear operator messaging.
 - [ ] Implement/complete picker workflow UI for pick queue and pick status actions.
 - [ ] Implement/complete dispatch workflow UI for release actions and hold/reason states.
 - [ ] Add supervisor UI affordances for exception review/override (without weakening default restrictions).
@@ -62,10 +65,12 @@ Complete the operator-facing role UX so each role sees the right screens/actions
 - [x] Regression checks for cashier SO selection filtering (POS Profile series + age) on live dev site.
 - [x] Smoke regression: cashier POS/payment screen still works when `custom_have_token = 0`.
 - [ ] Full cashier payment submit success under relay-configured or token-disabled submit environment.
+- [ ] LAN-only relay mode status/fallback Cypress coverage (relay down + cloud up / cloud down cases) once implemented.
 
 ## Known Risks
 - UI-only blocks can create false sense of security until Phase 3 auth lands.
 - Shared components may have side effects when hidden/disabled logic is added.
+- Relay/cloud status semantics can confuse operators if LAN-only mode diagnostics and submit gating are not clearly distinguished in the UI.
 
 ## Deferred Items
 - Relay/server-side authorization enforcement (Phase 3).

@@ -11,6 +11,8 @@
 - `README.md`
 - `00-ai-agent-start-here.md`
 - `runbooks/optiplex-edge-relay-next-session.md`
+- `runbooks/optiplex-fresh-codex-zero-context-handoff.md`
+- `runbooks/shop-pc-lan-relay-setup-non-technical.md`
 - `01-role-based-workflow-spec.md`
 - `02-master-implementation-plan.md`
 - `phases/phase-3-relay-auth-and-server-side-role-enforcement.md`
@@ -25,6 +27,10 @@
   - `CHANGELOG_PROGRESS.md`
   - `uat/2026-02-23-local-edge-relay-smoke.md`
   - `runbooks/optiplex-edge-relay-next-session.md`
+- The next planned implementation target (not yet implemented at branch `424c79a`) is:
+  - LAN-only relay mode (`browser-LAN` health as submit gate)
+  - prompted cloud fallback when relay is down but cloud is up
+  - OptiPlex LAN HTTPS reverse-proxy automation + shop-PC certificate trust scripts
 
 ## Purpose
 Define the offline continuity design and operations model for the Edge Relay, including:
@@ -37,6 +43,7 @@ This is the offline-only reference and should be kept synchronized with `relay/r
 
 For a step-by-step relay-host startup/test sequence (especially when a new AI session starts on the OptiPlex with no prior chat context), use:
 - `runbooks/optiplex-edge-relay-next-session.md`
+- `runbooks/optiplex-fresh-codex-zero-context-handoff.md`
 
 ## Offline Scope and Goals
 ### Goals
@@ -83,12 +90,19 @@ For a step-by-step relay-host startup/test sequence (especially when a new AI se
 - The Frappe Cloud POS page is served over HTTPS.
 - Direct browser `fetch()` from `https://<site>.frappe.cloud` to `http://192.168.x.x:8787` may be blocked by browser mixed-content policy.
 
-### Recommended deployment pattern for Frappe Cloud + OptiPlex relay
+### Recommended deployment pattern for Frappe Cloud + OptiPlex relay (current branch behavior)
 - Use a public HTTPS URL (tunnel or reverse proxy) that forwards to the OptiPlex relay (`192.168.50.168:8787`).
 - Set that public HTTPS URL in:
   - POS Profile `Edge Relay URL` (`custom_edge_relay_url`) on the cloud site
   - relay `public_base_url` in relay setup/config
 - Keep the LAN URL for local health checks and local troubleshooting only.
+
+### Planned next mode (LAN-only, no public tunnel)
+This is a planned improvement target for `codex-3-edge-relay`, not yet implemented in the current baseline:
+- Use LAN HTTPS (`https://192.168.50.168`) via local reverse proxy on the OptiPlex
+- Use browser-LAN relay health (not cloud-backend relay health) as the submit gate
+- Treat cloud relay reachability as diagnostic only in LAN-only mode
+- Add cashier prompted cloud fallback when relay is down but cloud is up
 
 ## Relay Configuration Files and Paths
 Defined in `relay/relay/storage.py`:
@@ -111,6 +125,7 @@ Default config keys (current code):
 - Cloud site (frontend/admin): POS Profile field `Edge Relay URL` (`custom_edge_relay_url`)
 - Cloud site fallback (server config): `posa_edge_relay_url` in `site_config.json`
 - Relay host (OptiPlex): relay config key `public_base_url` in `relay/data/relay_config.json` (or relay setup UI)
+- Local-only Cypress secrets (for relay-host testing if Cypress runs there): repo root `.env` with `CYPRESS_baseUrl`, `CYPRESS_username`, `CYPRESS_password`, `CYPRESS_totpUri` (ignored by git)
 
 ## What Relay Stores Locally (Table-by-Table)
 Source of truth: `relay/relay/storage.py` `init_db()`.
