@@ -8,7 +8,7 @@ import frappe
 import copy
 import requests
 from urllib.parse import urlparse
-from frappe.utils import nowdate, flt, cstr, getdate, cint, now_datetime
+from frappe.utils import nowdate, flt, cstr, getdate, cint, now_datetime, add_days
 from frappe import _
 from erpnext.accounts.doctype.sales_invoice.sales_invoice import get_bank_cash_account
 from erpnext.stock.get_item_details import get_item_details
@@ -1541,10 +1541,16 @@ def create_sales_order_token(data):
 
     selling_price_list = frappe.get_cached_value("POS Profile", pos_profile, "selling_price_list")
     profile_warehouse = frappe.get_cached_value("POS Profile", pos_profile, "warehouse")
+    profile_so_naming_series = cstr(
+        frappe.get_cached_value("POS Profile", pos_profile, "posa_sales_order_naming_series")
+        or ""
+    ).strip()
     if selling_price_list and getattr(sales_order_doc, "selling_price_list", None) in (None, ""):
         sales_order_doc.selling_price_list = selling_price_list
     if profile_warehouse and sales_order_doc.meta.has_field("set_warehouse"):
         sales_order_doc.set_warehouse = profile_warehouse
+    if profile_so_naming_series and sales_order_doc.meta.has_field("naming_series"):
+        sales_order_doc.naming_series = profile_so_naming_series
 
     # POSAwesome custom fields on Sales Order (if migrated)
     if sales_order_doc.meta.has_field("posa_notes"):
@@ -2485,13 +2491,39 @@ def search_invoices_for_return(invoice_name, company):
 
 
 @frappe.whitelist()
-def search_orders(company, currency, order_name=None):
+def search_orders(company, currency, order_name=None, pos_profile=None, days_back=None):
+    pos_profile = cstr(pos_profile or "").strip()
+
+    profile_days_back = 1
+    profile_so_naming_series = ""
+    if pos_profile:
+        profile_days_back = cint(
+            frappe.get_cached_value(
+                "POS Profile", pos_profile, "posa_sales_order_lookup_max_age_days"
+            )
+            or 1
+        )
+        profile_so_naming_series = cstr(
+            frappe.get_cached_value("POS Profile", pos_profile, "posa_sales_order_naming_series")
+            or ""
+        ).strip()
+
+    try:
+        if days_back in (None, ""):
+            days_back = profile_days_back
+        days_back = max(0, cint(days_back or 1))
+    except Exception:
+        days_back = 1
+
     filters = {
         "billing_status": ["in", ["Not Billed", "Partly Billed"]],
         "docstatus": 1,
         "company": company,
         "currency": currency,
+        "transaction_date": [">=", add_days(nowdate(), -days_back)],
     }
+    if profile_so_naming_series:
+        filters["naming_series"] = profile_so_naming_series
     if order_name:
         filters["name"] = ["like", f"%{order_name}%"]
     orders_list = frappe.get_list(
@@ -2499,7 +2531,7 @@ def search_orders(company, currency, order_name=None):
         filters=filters,
         fields=["name"],
         limit_page_length=0,
-        order_by="customer",
+        order_by="transaction_date desc, creation desc",
     )
     data = []
     for order in orders_list:

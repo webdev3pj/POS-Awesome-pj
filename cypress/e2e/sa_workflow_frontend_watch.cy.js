@@ -241,15 +241,41 @@ function loginWithOtp() {
   cy.location('pathname', { timeout: 90000 }).should('match', /^\/app(\/|$)/);
 }
 
+function frappeCall(method, args, options = {}) {
+  const timeout = Number(options.timeout || 60000);
+  return cy.window({ timeout: 30000 }).then({ timeout }, (win) => {
+    return new Cypress.Promise((resolve, reject) => {
+      win.frappe.call({
+        method,
+        args: args || {},
+        callback: (r) => resolve(r),
+        error: (err) => reject(err),
+      });
+    });
+  });
+}
+
 describe('SA frontend workflow (watch mode)', () => {
   it('validates SA flow, token dialog, and workflow ticket rail', () => {
     const profileName = 'PJ7 CASHIER';
+    let expectedSoNamingSeries = '';
     cy.intercept('POST', '**/api/method/posawesome.posawesome.api.posapp.get_items').as('getItems');
     cy.intercept('POST', '**/api/method/posawesome.posawesome.api.posapp.get_relay_workflow_monitor_board').as(
       'monitorBoard'
     );
+    cy.intercept('POST', '**/api/method/posawesome.posawesome.api.posapp.create_sales_order_token').as(
+      'createSalesOrderToken'
+    );
 
     loginWithOtp();
+    cy.visit('/app');
+
+    frappeCall('frappe.client.get', { doctype: 'POS Profile', name: profileName }).then((resp) => {
+      const profile = resp && resp.message ? resp.message : null;
+      expect(profile, `POS Profile ${profileName}`).to.be.an('object');
+      expectedSoNamingSeries = String(profile.posa_sales_order_naming_series || '').trim();
+      cy.log(`Expected SO naming series for SA token: ${expectedSoNamingSeries || '(default ERPNext)'}`);
+    });
 
     cy.visit('/app/posapp');
 
@@ -385,6 +411,25 @@ describe('SA frontend workflow (watch mode)', () => {
     });
 
     cy.contains('.v-btn', 'Save/New', { timeout: 30000 }).click({ force: true });
+
+    cy.wait('@createSalesOrderToken', { timeout: 120000 }).then((interception) => {
+      expect(interception?.response?.statusCode, 'create_sales_order_token status').to.eq(200);
+      const message = interception?.response?.body?.message || {};
+      const soName = String(message.sales_order_name || '').trim();
+      const soDoc = message.sales_order || {};
+      expect(soName, 'sales_order_name').to.not.equal('');
+      if (expectedSoNamingSeries) {
+        expect(String(soDoc.naming_series || '').trim(), 'SO naming series from token API').to.eq(expectedSoNamingSeries);
+      }
+      cy.writeFile('cypress/tmp/latest_sa_order.json', {
+        salesOrder: soName,
+        tokenId: String(message.token_id || ''),
+        tokenLast4: String(message.token_last4 || ''),
+        soNamingSeries: String(soDoc.naming_series || '').trim(),
+        profile: profileName,
+        createdAt: new Date().toISOString(),
+      });
+    });
 
     cy.contains('body', 'Sales Order Token', { timeout: 60000 }).should('be.visible');
     getSalesOrderTokenDialog().as('tokenDialog');
