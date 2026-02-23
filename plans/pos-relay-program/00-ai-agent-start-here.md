@@ -9,6 +9,7 @@
 
 ## See also
 - `README.md`
+- `runbooks/optiplex-edge-relay-next-session.md`
 - `01-role-based-workflow-spec.md`
 - `02-master-implementation-plan.md`
 - `03-offline-edge-relay-and-windows-service-spec.md`
@@ -30,6 +31,11 @@ Key business rules currently agreed:
 - Current state: SA Sales Order token + monitor rail are implemented and live-tested; cashier `Select S.O` series/age filtering is implemented and verified on the dev site; role enforcement and full role UI visibility are still incomplete.
 - Priority implementation target: `Phase 2` cashier submit hardening (environment-specific relay/cloud outcomes), then Picker/Dispatch UI/E2E coverage.
 - Immediate follow-on target: push Cypress hardening/docs updates and expand live E2E coverage beyond SA/Cashier.
+
+### Relay branch note (current next branch)
+- Relay-focused follow-on branch exists: `codex-3-edge-relay`
+- Use it for OptiPlex/local relay startup and relay-enabled SA/Cashier end-to-end testing
+- See `runbooks/optiplex-edge-relay-next-session.md` for zero-context startup steps on the relay host
 
 ## What Is Already Implemented (Branch-Accurate)
 ### Relay foundation (`Implemented`)
@@ -86,6 +92,13 @@ Why this is next:
 - It reduces invoice-series misuse.
 - It creates a clear role boundary before deeper relay/auth work.
 - It gives operations immediate visibility into bottlenecks (unpaid, paid, picking, picked) and time in status.
+
+## OptiPlex / Relay Host Startup (No Chat Context)
+If a new session starts on the OptiPlex relay machine and does not have this conversation context:
+- Open `runbooks/optiplex-edge-relay-next-session.md` first
+- Checkout/use branch `codex-3-edge-relay`
+- Start the local relay and verify `/health`
+- Then run the documented Cypress sequence from the main dev machine/browser against the live dev site
 
 ## Decision Register
 ### Accepted

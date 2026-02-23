@@ -159,6 +159,21 @@ Entry format:
   - Validate cashier submit outcomes end-to-end with relay configured (not just UI guards / relay-missing warnings).
   - Expand relay-focused E2E coverage for pick/release transitions if needed.
 
+## 2026-02-23 - OptiPlex zero-context startup runbook added
+- Branch: `codex-3-edge-relay`
+- What changed:
+  - Added `plans/pos-relay-program/runbooks/optiplex-edge-relay-next-session.md` with:
+    - exact relay startup commands (Windows)
+    - health checks
+    - `PJ7 CASHIER` relay/profile settings
+    - Cypress run order
+    - troubleshooting classification
+    - no-chat-context handoff guidance for a fresh AI session on the relay host
+  - Linked the runbook from:
+    - `plans/pos-relay-program/README.md`
+    - `plans/pos-relay-program/00-ai-agent-start-here.md`
+    - `plans/pos-relay-program/03-offline-edge-relay-and-windows-service-spec.md`
+
 ## 2026-02-22 - Dev-site SA Cypress reruns progressed to token creation (app bug fixed, spec still flaky)
 - Branch: `kilo-codex-v3`
 - Summary: Continued live dev-site Cypress headed runs after role fixture deployment; SA workflow now reaches Sales Order token creation and monitor rail visibility. Identified and fixed a real backend issue (`delivery_warehouse` missing on SA-created Sales Order items).

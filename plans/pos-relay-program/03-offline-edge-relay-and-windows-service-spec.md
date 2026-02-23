@@ -10,6 +10,7 @@
 ## See also
 - `README.md`
 - `00-ai-agent-start-here.md`
+- `runbooks/optiplex-edge-relay-next-session.md`
 - `01-role-based-workflow-spec.md`
 - `02-master-implementation-plan.md`
 - `phases/phase-3-relay-auth-and-server-side-role-enforcement.md`
@@ -25,6 +26,9 @@ Define the offline continuity design and operations model for the Edge Relay, in
 - and how the relay is operated on Windows (OptiPlex deployment model).
 
 This is the offline-only reference and should be kept synchronized with `relay/relay/storage.py`, `relay/relay/app.py`, `relay/README.md`, and `relay/SETUP_CHECKLIST_OPTIPLEX.md`.
+
+For a step-by-step relay-host startup/test sequence (especially when a new AI session starts on the OptiPlex with no prior chat context), use:
+- `runbooks/optiplex-edge-relay-next-session.md`
 
 ## Offline Scope and Goals
 ### Goals

@@ -6,6 +6,7 @@
 - A live ticket-style sidebar monitor is being added so staff can track order status and delays.
 - SA should not open/close cash shifts; cashier owns cash opening/closing.
 - Use `00-ai-agent-start-here.md` first if you want the fastest summary of what is done and what is next.
+- If working from the OptiPlex/relay machine with no chat context, use `runbooks/optiplex-edge-relay-next-session.md`.
 
 ## Purpose
 This folder is the active, branch-accurate planning and handoff set for the POS token/edge relay program on `kilo-codex-v3`.
@@ -30,6 +31,7 @@ It consolidates:
 4. Read `03-offline-edge-relay-and-windows-service-spec.md` for relay/offline storage and Windows service operations.
 5. Use `phases/` docs for current execution state and phase-specific tasks.
 6. Append progress to `CHANGELOG_PROGRESS.md` after each meaningful implementation or verification pass.
+7. On the OptiPlex relay host, use `runbooks/optiplex-edge-relay-next-session.md` as the local operator/AI handoff entry point.
 
 ## Document Map
 - `00-ai-agent-start-here.md`: AI coding agent handoff, status snapshot, file map, next steps.
@@ -43,6 +45,7 @@ It consolidates:
 - `phases/phase-4-sa-relay-first-offline-token-creation.md`: SA offline-first creation via relay.
 - `phases/phase-5-uat-deployment-observability-hardening.md`: UAT, rollout, monitoring, hardening.
 - `CHANGELOG_PROGRESS.md`: progress ledger across dates/commits.
+- `runbooks/optiplex-edge-relay-next-session.md`: zero-context startup guide for relay-host sessions (OptiPlex).
 
 ## Phase Map (High Level)
 - Phase 0: Baseline and completed work documentation (current branch + local working tree snapshot)
@@ -88,3 +91,4 @@ It consolidates:
 - `02-master-implementation-plan.md`
 - `03-offline-edge-relay-and-windows-service-spec.md`
 - `CHANGELOG_PROGRESS.md`
+- `runbooks/optiplex-edge-relay-next-session.md`
