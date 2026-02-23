@@ -198,6 +198,9 @@ describe("Admin preflight: configure PJ7 CASHIER POS Profile for SA token testin
   it("ensures token flags, configures SO naming series, and sets Select S.O max age", () => {
     const profileName = "PJ7 CASHIER";
     const requiredSoSeries = "SAL-ORD-PJ7-.YYYY.-";
+    const requiredRelayUrl = "https://192.168.50.168";
+    const requiredRelayConnectivityMode = "lan_only_browser_checked";
+    const requiredCloudFallbackWhenRelayDown = 1;
     let chosenSalesOrderSeries = "";
 
     loginWithOtp();
@@ -234,10 +237,16 @@ describe("Admin preflight: configure PJ7 CASHIER POS Profile for SA token testin
           }
         });
 
-        ["posa_sales_order_naming_series", "posa_sales_order_lookup_max_age_days"].forEach((fieldname) => {
+        [
+          "posa_sales_order_naming_series",
+          "posa_sales_order_lookup_max_age_days",
+          "custom_edge_relay_url",
+          "posa_edge_relay_connectivity_mode",
+          "posa_allow_cloud_fallback_when_relay_down",
+        ].forEach((fieldname) => {
           if (!(fieldname in doc)) {
             throw new Error(
-              `POS Profile field missing: ${fieldname}. Deploy/migrate the naming-series feature first, then rerun this spec.`
+              `POS Profile field missing: ${fieldname}. Deploy/migrate the relay+POS Profile feature fields first, then rerun this spec.`
             );
           }
         });
@@ -257,6 +266,18 @@ describe("Admin preflight: configure PJ7 CASHIER POS Profile for SA token testin
         }
         if (Number(doc.posa_sales_order_lookup_max_age_days || 1) !== 1) {
           updates.push(["posa_sales_order_lookup_max_age_days", 1]);
+        }
+        if (String(doc.custom_edge_relay_url || "").trim() !== requiredRelayUrl) {
+          updates.push(["custom_edge_relay_url", requiredRelayUrl]);
+        }
+        if (String(doc.posa_edge_relay_connectivity_mode || "").trim() !== requiredRelayConnectivityMode) {
+          updates.push(["posa_edge_relay_connectivity_mode", requiredRelayConnectivityMode]);
+        }
+        if (
+          Number(doc.posa_allow_cloud_fallback_when_relay_down || 0) !==
+          Number(requiredCloudFallbackWhenRelayDown)
+        ) {
+          updates.push(["posa_allow_cloud_fallback_when_relay_down", requiredCloudFallbackWhenRelayDown]);
         }
 
         cy.log(`SO series options: ${cleanedOptions.join(", ")}`);
@@ -306,6 +327,15 @@ describe("Admin preflight: configure PJ7 CASHIER POS Profile for SA token testin
         expect(Number(doc.posa_allow_sales_order || 0), "posa_allow_sales_order").to.eq(1);
         expect(Number(doc.custom_allow_select_sales_order || 0), "custom_allow_select_sales_order").to.eq(1);
         expect(Number(doc.posa_sales_order_lookup_max_age_days || 0), "posa_sales_order_lookup_max_age_days").to.eq(1);
+        expect(String(doc.custom_edge_relay_url || "").trim(), "custom_edge_relay_url").to.eq(requiredRelayUrl);
+        expect(
+          String(doc.posa_edge_relay_connectivity_mode || "").trim(),
+          "posa_edge_relay_connectivity_mode"
+        ).to.eq(requiredRelayConnectivityMode);
+        expect(
+          Number(doc.posa_allow_cloud_fallback_when_relay_down || 0),
+          "posa_allow_cloud_fallback_when_relay_down"
+        ).to.eq(Number(requiredCloudFallbackWhenRelayDown));
         expect(String(doc.posa_sales_order_naming_series || "").trim(), "posa_sales_order_naming_series").to.not.equal("");
         if (chosenSalesOrderSeries) {
           expect(String(doc.posa_sales_order_naming_series || "").trim()).to.eq(chosenSalesOrderSeries);
@@ -313,6 +343,9 @@ describe("Admin preflight: configure PJ7 CASHIER POS Profile for SA token testin
 
         cy.writeFile("cypress/tmp/pj7_cashier_profile_runtime.json", {
           profile: profileName,
+          relayUrl: String(doc.custom_edge_relay_url || "").trim(),
+          relayConnectivityMode: String(doc.posa_edge_relay_connectivity_mode || "").trim(),
+          allowCloudFallbackWhenRelayDown: Number(doc.posa_allow_cloud_fallback_when_relay_down || 0),
           soNamingSeries: String(doc.posa_sales_order_naming_series || "").trim(),
           soLookupMaxAgeDays: Number(doc.posa_sales_order_lookup_max_age_days || 1),
         });
@@ -322,6 +355,9 @@ describe("Admin preflight: configure PJ7 CASHIER POS Profile for SA token testin
         cy.get("body", { timeout: 60000 }).should("contain.text", profileName);
         cy.get("body").should("contain.text", "Sales Order Naming Series");
         cy.get("body").should("contain.text", "Select S.O Max Age (Days)");
+        cy.get("body").should("contain.text", "Edge Relay URL");
+        cy.get("body").should("contain.text", "Relay Connectivity Mode");
+        cy.get("body").should("contain.text", "Allow Cloud Fallback When Relay Down");
       });
   });
 });

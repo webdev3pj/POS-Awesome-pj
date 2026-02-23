@@ -42,7 +42,16 @@
           <v-divider></v-divider>
           <v-card-text class="pt-3">
             <div class="mb-2"><b>{{ __('Status') }}:</b> {{ relay_status.status || '-' }}</div>
+            <div class="mb-2"><b>{{ __('Effective Submit Gate') }}:</b> {{ relay_status.submit_gate_source || '-' }}</div>
+            <div class="mb-2"><b>{{ __('Connectivity Mode') }}:</b> {{ relay_status.connectivity_mode || 'cloud_checked' }}</div>
             <div class="mb-2"><b>{{ __('Message') }}:</b> {{ relay_status.message || '-' }}</div>
+            <div class="mb-2"><b>{{ __('Cloud Diagnostic Status') }}:</b> {{ relay_status.cloud_status || relay_status.status || '-' }}</div>
+            <div class="mb-2"><b>{{ __('Cloud Diagnostic Message') }}:</b> {{ relay_status.cloud_message || relay_status.message || '-' }}</div>
+            <div class="mb-2"><b>{{ __('Cloud Relay Reachable') }}:</b> {{ relay_status.cloud_connected ? __('Yes') : __('No') }}</div>
+            <div class="mb-2"><b>{{ __('Browser-LAN Relay Reachable') }}:</b> {{ relay_status.browser_checked ? (relay_status.browser_connected ? __('Yes') : __('No')) : __('Not checked') }}</div>
+            <div class="mb-2" v-if="relay_status.browser_checked"><b>{{ __('Browser-LAN Status') }}:</b> {{ relay_status.browser_status || '-' }}</div>
+            <div class="mb-2" v-if="relay_status.browser_checked"><b>{{ __('Browser-LAN Message') }}:</b> {{ relay_status.browser_message || '-' }}</div>
+            <div class="mb-2" v-if="relay_status.browser_checked"><b>{{ __('Browser-LAN Checked At') }}:</b> {{ relay_status.browser_checked_at || '-' }}</div>
             <div class="mb-2"><b>{{ __('POS Profile Relay URL') }}:</b> {{ relay_status.profile_relay_url || __('Not set') }}</div>
             <div class="mb-2"><b>{{ __('Site Relay URL') }}:</b> {{ relay_status.site_relay_url || __('Not set') }}</div>
             <div class="mb-2"><b>{{ __('Using') }}:</b> {{ relay_status.relay_source || '-' }}</div>
@@ -55,10 +64,13 @@
             </div>
             <div class="mb-2"><b>{{ __('Health URL') }}:</b> {{ relay_status.debug && relay_status.debug.relay_health_url ? relay_status.debug.relay_health_url : '-' }}</div>
             <div class="mb-2" v-if="relay_status.http_status"><b>{{ __('HTTP Status') }}:</b> {{ relay_status.http_status }}</div>
+            <div class="mb-2" v-if="relay_status.cloud_http_status"><b>{{ __('Cloud Relay HTTP Status') }}:</b> {{ relay_status.cloud_http_status }}</div>
+            <div class="mb-2" v-if="relay_status.browser_http_status"><b>{{ __('Browser-LAN HTTP Status') }}:</b> {{ relay_status.browser_http_status }}</div>
             <div class="mb-2"><b>{{ __('Checked At') }}:</b> {{ relay_status.checked_at || '-' }}</div>
             <div class="mb-2" v-if="relay_status.debug && relay_status.debug.hint"><b>{{ __('Hint') }}:</b> {{ relay_status.debug.hint }}</div>
+            <div class="mb-2" v-if="relay_status.debug && relay_status.debug.mode_note"><b>{{ __('Mode Note') }}:</b> {{ relay_status.debug.mode_note }}</div>
             <div class="mb-2" v-if="relay_status.debug && relay_status.debug.cloud_reachability_note"><b>{{ __('Cloud Reachability Note') }}:</b> {{ relay_status.debug.cloud_reachability_note }}</div>
-            <div class="mb-2" v-if="relay_status.queue && relay_status.connected">
+            <div class="mb-2" v-if="relay_status.queue && relay_status.cloud_connected">
               <b>{{ __('Queue') }}:</b>
               {{ __('Queued') }} {{ relay_status.queue.queued || 0 }},
               {{ __('Processing') }} {{ relay_status.queue.processing || 0 }},
@@ -80,7 +92,7 @@
         color="error"
         text-color="white"
       >
-        {{ __('RELAY DOWN (Offline continuity unavailable)') }}
+        {{ relay_status.connectivity_mode === 'lan_only_browser_checked' ? __('RELAY DOWN (LAN relay unavailable)') : __('RELAY DOWN (Offline continuity unavailable)') }}
       </v-chip>
       <v-chip
         v-if="relay_status.enabled && relay_status.connected && !cloud_status.server_online"
@@ -270,11 +282,30 @@ export default {
       last_invoice: '',
       relay_status: {
         enabled: false,
+        configured: false,
         connected: false,
+        effective_connected: false,
         status: '',
+        effective_status: '',
         message: '',
+        effective_message: '',
+        connectivity_mode: 'cloud_checked',
+        submit_gate_source: 'cloud_backend',
+        allow_cloud_fallback_when_relay_down: false,
+        cloud_connected: false,
+        cloud_status: '',
+        cloud_message: '',
+        cloud_http_status: null,
+        cloud_checked_at: '',
+        browser_checked: false,
+        browser_connected: false,
+        browser_status: '',
+        browser_message: '',
+        browser_http_status: null,
+        browser_checked_at: '',
         relay_source: '',
         relay_config_identified: false,
+        relay_url: '',
         relay_host: '',
         relay_host_type: '',
         profile_relay_url: '',
@@ -307,8 +338,14 @@ export default {
       return !this.is_sales_associate_role;
     },
     relay_status_chip_text() {
+      const relayDownText =
+        this.relay_status.connectivity_mode === 'lan_only_browser_checked'
+          ? __('Relay Offline (LAN)')
+          : __('Relay Offline');
       if (this.relay_status.connected) {
-        return __('Relay Online');
+        return this.relay_status.connectivity_mode === 'lan_only_browser_checked'
+          ? __('Relay Online (LAN)')
+          : __('Relay Online');
       }
       if (this.relay_status.status === 'not_configured') {
         return __('Relay Not Configured');
@@ -325,7 +362,7 @@ export default {
       if (this.relay_status.status === 'connection_error' && this.relay_status.relay_config_identified) {
         return __('Relay Identified / Not Reachable');
       }
-      return __('Relay Offline');
+      return relayDownText;
     },
     relay_status_chip_color() {
       if (this.relay_status.connected) return 'success';
@@ -388,6 +425,158 @@ export default {
       this.snackColor = data.color;
       this.snackText = data.text;
     },
+    emit_cloud_status_changed() {
+      evntBus.$emit('cloud_status_changed', { ...(this.cloud_status || {}) });
+    },
+    build_empty_relay_status() {
+      return {
+        enabled: false,
+        configured: false,
+        connected: false,
+        effective_connected: false,
+        status: '',
+        effective_status: '',
+        message: '',
+        effective_message: '',
+        connectivity_mode: 'cloud_checked',
+        submit_gate_source: 'cloud_backend',
+        allow_cloud_fallback_when_relay_down: false,
+        cloud_connected: false,
+        cloud_status: '',
+        cloud_message: '',
+        cloud_http_status: null,
+        cloud_checked_at: '',
+        browser_checked: false,
+        browser_connected: false,
+        browser_status: '',
+        browser_message: '',
+        browser_http_status: null,
+        browser_checked_at: '',
+        relay_source: '',
+        relay_config_identified: false,
+        relay_url: '',
+        relay_host: '',
+        relay_host_type: '',
+        profile_relay_url: '',
+        site_relay_url: '',
+        http_status: null,
+        checked_at: '',
+        queue: {},
+        debug: {},
+      };
+    },
+    async check_browser_relay_connectivity(relayBaseUrl) {
+      const relayUrl = String(relayBaseUrl || '').trim().replace(/\/$/, '');
+      const checkedAt = frappe.datetime.now_datetime();
+      if (!relayUrl) {
+        return {
+          checked: false,
+          connected: false,
+          status: 'not_configured',
+          message: __('Relay URL is not configured for browser health check.'),
+          http_status: null,
+          checked_at: checkedAt,
+        };
+      }
+
+      const healthUrl = `${relayUrl}/health`;
+      const timeoutMs = 3000;
+      const controller = typeof AbortController !== 'undefined' ? new AbortController() : null;
+      let timeoutHandle = null;
+      try {
+        if (controller) {
+          timeoutHandle = setTimeout(() => controller.abort(), timeoutMs);
+        }
+        const resp = await fetch(`${healthUrl}?_=${Date.now()}`, {
+          method: 'GET',
+          cache: 'no-store',
+          mode: 'cors',
+          signal: controller ? controller.signal : undefined,
+        });
+
+        let payload = {};
+        try {
+          payload = await resp.json();
+        } catch (e) {
+          payload = {};
+        }
+
+        if (!resp.ok) {
+          return {
+            checked: true,
+            connected: false,
+            status: 'http_error',
+            message: __('Browser reached relay URL, but relay /health returned an HTTP error.'),
+            http_status: resp.status,
+            checked_at: checkedAt,
+          };
+        }
+
+        const relayOk = !!(payload && payload.ok);
+        return {
+          checked: true,
+          connected: relayOk,
+          status: relayOk ? 'online' : 'offline',
+          message: relayOk
+            ? __('Browser-LAN relay health check passed.')
+            : __('Relay responded to browser health check but reported unhealthy status.'),
+          http_status: resp.status,
+          checked_at: checkedAt,
+        };
+      } catch (error) {
+        const isAbort = !!(error && (error.name === 'AbortError' || /abort/i.test(String(error.message || ''))));
+        return {
+          checked: true,
+          connected: false,
+          status: isAbort ? 'timeout' : 'connection_error',
+          message: isAbort
+            ? __('Browser-LAN relay health check timed out.')
+            : __('Browser could not reach relay URL over LAN. Check LAN HTTPS/cert trust/firewall.'),
+          http_status: null,
+          checked_at: checkedAt,
+        };
+      } finally {
+        if (timeoutHandle) {
+          clearTimeout(timeoutHandle);
+        }
+      }
+    },
+    async resolve_effective_relay_status(baseStatus) {
+      const relayStatus = { ...this.build_empty_relay_status(), ...(baseStatus || {}) };
+      const mode =
+        relayStatus.connectivity_mode === 'lan_only_browser_checked'
+          ? 'lan_only_browser_checked'
+          : 'cloud_checked';
+      relayStatus.connectivity_mode = mode;
+      relayStatus.submit_gate_source = mode === 'lan_only_browser_checked' ? 'browser_lan' : 'cloud_backend';
+      relayStatus.effective_connected = !!relayStatus.cloud_connected;
+      relayStatus.effective_status = relayStatus.cloud_status || relayStatus.status || '';
+      relayStatus.effective_message = relayStatus.cloud_message || relayStatus.message || '';
+
+      const relayUrl = String(
+        relayStatus.profile_relay_url || relayStatus.site_relay_url || relayStatus.relay_url || ''
+      )
+        .trim()
+        .replace(/\/$/, '');
+
+      if (relayStatus.enabled && relayStatus.configured && mode === 'lan_only_browser_checked' && relayUrl) {
+        const browserStatus = await this.check_browser_relay_connectivity(relayUrl);
+        relayStatus.browser_checked = !!browserStatus.checked;
+        relayStatus.browser_connected = !!browserStatus.connected;
+        relayStatus.browser_status = browserStatus.status || '';
+        relayStatus.browser_message = browserStatus.message || '';
+        relayStatus.browser_http_status = browserStatus.http_status || null;
+        relayStatus.browser_checked_at = browserStatus.checked_at || '';
+        relayStatus.effective_connected = !!browserStatus.connected;
+        relayStatus.effective_status = browserStatus.status || relayStatus.effective_status || '';
+        relayStatus.effective_message = browserStatus.message || relayStatus.effective_message || '';
+      }
+
+      relayStatus.connected = !!relayStatus.effective_connected;
+      relayStatus.status = relayStatus.effective_status || relayStatus.status || '';
+      relayStatus.message = relayStatus.effective_message || relayStatus.message || '';
+      return relayStatus;
+    },
     logOut() {
       var me = this;
       me.logged_out = true;
@@ -428,22 +617,8 @@ export default {
     },
     fetch_relay_status(profileName, silent = true) {
       if (!profileName) {
-        this.relay_status = {
-          enabled: false,
-          connected: false,
-          status: '',
-          message: '',
-          relay_source: '',
-          relay_config_identified: false,
-          relay_host: '',
-          relay_host_type: '',
-          profile_relay_url: '',
-          site_relay_url: '',
-          http_status: null,
-          checked_at: '',
-          queue: {},
-          debug: {},
-        };
+        this.relay_status = this.build_empty_relay_status();
+        evntBus.$emit('relay_status_changed', this.relay_status);
         return;
       }
 
@@ -455,35 +630,59 @@ export default {
         async: true,
         callback: (r) => {
           const relay = r.message || {};
-          this.relay_status = {
+          const backendRelayStatus = {
             enabled: !!relay.enabled,
+            configured: typeof relay.configured === 'boolean' ? !!relay.configured : true,
             connected: !!relay.connected,
+            effective_connected: !!relay.connected,
+            cloud_connected: typeof relay.cloud_connected === 'boolean' ? !!relay.cloud_connected : !!relay.connected,
             status: relay.status || '',
+            effective_status: relay.status || '',
+            cloud_status: relay.cloud_status || relay.status || '',
             message: relay.message || '',
+            effective_message: relay.message || '',
+            cloud_message: relay.cloud_message || relay.message || '',
+            connectivity_mode: relay.connectivity_mode || 'cloud_checked',
+            submit_gate_source: relay.submit_gate_source || 'cloud_backend',
+            allow_cloud_fallback_when_relay_down: !!relay.allow_cloud_fallback_when_relay_down,
             relay_source: relay.relay_source || '',
             relay_config_identified: !!relay.relay_config_identified,
+            relay_url: relay.relay_url || '',
             relay_host: relay.relay_host || '',
             relay_host_type: relay.relay_host_type || '',
             profile_relay_url: relay.profile_relay_url || '',
             site_relay_url: relay.site_relay_url || '',
             http_status: relay.http_status || null,
+            cloud_http_status:
+              relay.cloud_http_status !== undefined && relay.cloud_http_status !== null
+                ? relay.cloud_http_status
+                : relay.http_status || null,
+            cloud_checked_at: relay.cloud_checked_at || relay.checked_at || '',
             checked_at: relay.checked_at || '',
             queue: relay.queue || {},
             debug: relay.debug || {},
+            browser_checked: false,
+            browser_connected: false,
+            browser_status: '',
+            browser_message: '',
+            browser_http_status: null,
+            browser_checked_at: '',
           };
+          this.resolve_effective_relay_status(backendRelayStatus).then((resolvedStatus) => {
+            this.relay_status = resolvedStatus;
+            evntBus.$emit('relay_status_changed', this.relay_status);
 
-          evntBus.$emit('relay_status_changed', this.relay_status);
-
-          if (!silent && relay.enabled) {
-            evntBus.$emit('show_mesage', {
-              text:
-                relay.message ||
-                (relay.connected
-                  ? __('Relay connection established')
-                  : __('Relay connection unavailable')),
-              color: relay.connected ? 'success' : 'warning',
-            });
-          }
+            if (!silent && relay.enabled) {
+              evntBus.$emit('show_mesage', {
+                text:
+                  this.relay_status.message ||
+                  (this.relay_status.connected
+                    ? __('Relay connection established')
+                    : __('Relay connection unavailable')),
+                color: this.relay_status.connected ? 'success' : 'warning',
+              });
+            }
+          });
         },
       });
     },
@@ -526,6 +725,7 @@ export default {
             color: 'warning',
           });
         }
+        this.emit_cloud_status_changed();
         return;
       }
 
@@ -554,6 +754,7 @@ export default {
             color: reachable ? 'success' : 'warning',
           });
         }
+        this.emit_cloud_status_changed();
       } catch (error) {
         this.cloud_status = {
           navigator_online: true,
@@ -570,6 +771,7 @@ export default {
             color: 'warning',
           });
         }
+        this.emit_cloud_status_changed();
       }
     },
     start_cloud_poll() {

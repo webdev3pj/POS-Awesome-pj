@@ -1,0 +1,22 @@
+# OptiPlex LAN HTTPS relay reverse proxy
+# Target URL used by POS browsers on the store LAN:
+#   https://192.168.50.168
+#
+# Caddy provisions a local CA cert with `tls internal`.
+# Shop PCs must trust the exported Caddy local root CA certificate once.
+
+https://192.168.50.168 {
+    tls internal
+
+    # Keep CORS permissive for cloud-hosted POS browser -> LAN relay calls.
+    header {
+        Access-Control-Allow-Origin *
+        Access-Control-Allow-Methods "GET, POST, OPTIONS"
+        Access-Control-Allow-Headers "Content-Type, Authorization"
+    }
+
+    @options method OPTIONS
+    respond @options 204
+
+    reverse_proxy 127.0.0.1:8787
+}

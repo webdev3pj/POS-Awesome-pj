@@ -783,6 +783,17 @@ export default {
       enabled: false,
       connected: false,
       status: "",
+      effective_connected: false,
+      connectivity_mode: "cloud_checked",
+      allow_cloud_fallback_when_relay_down: false,
+      cloud_connected: false,
+    },
+    cloud_status: {
+      navigator_online: true,
+      server_online: false,
+      http_status: null,
+      checked_at: "",
+      message: "",
     },
     local_sale_ref: "",
     current_role: "",
@@ -811,6 +822,72 @@ export default {
     back_to_invoice() {
       evntBus.$emit("show_payment", "false");
       evntBus.$emit("set_customer_readonly", false);
+    },
+    get_effective_relay_connected() {
+      if (typeof this.relay_status.effective_connected === "boolean") {
+        return this.relay_status.effective_connected;
+      }
+      return !!this.relay_status.connected;
+    },
+    relay_allows_cloud_fallback_when_down() {
+      if (typeof this.relay_status.allow_cloud_fallback_when_relay_down === "boolean") {
+        return this.relay_status.allow_cloud_fallback_when_relay_down;
+      }
+      return parseInt((this.pos_profile && this.pos_profile.posa_allow_cloud_fallback_when_relay_down) || 0, 10) === 1;
+    },
+    is_cloud_reachable_for_fallback() {
+      return !!(this.cloud_status && this.cloud_status.server_online);
+    },
+    submit_invoice_via_cloud(data, print) {
+      const vm = this;
+      frappe.call({
+        method: "posawesome.posawesome.api.posapp.submit_invoice",
+        args: {
+          data: data,
+          invoice: this.invoice_doc,
+        },
+        async: true,
+        callback: function (r) {
+          if (r.message) {
+            if (parseInt(vm.pos_profile.custom_have_token || 0, 10) === 1) {
+              frappe.call({
+                method: "posawesome.posawesome.api.posapp.get_relay_workflow_state",
+                args: {
+                  sales_invoice: vm.invoice_doc.name,
+                },
+                async: true,
+                callback: function (relayResponse) {
+                  const relay = relayResponse.message || {};
+                  if (relay.token_status) {
+                    evntBus.$emit("show_mesage", {
+                      text: __(
+                        "Relay Queue: Token {0} is {1}, Picking {2}",
+                        [
+                          relay.token_id || vm.invoice_doc.name.slice(-5),
+                          relay.token_status,
+                          relay.picking_status || "Not Started",
+                        ]
+                      ),
+                      color: "info",
+                    });
+                  }
+                },
+              });
+            }
+            if (print) {
+              vm.load_print_page();
+            }
+            evntBus.$emit("workflow_monitor_refresh_requested");
+            evntBus.$emit("set_last_invoice", vm.invoice_doc.name);
+            evntBus.$emit("show_mesage", {
+              text: `Invoice ${r.message.name} is Submited`,
+              color: "success",
+            });
+            frappe.utils.play_sound("submit");
+            vm.addresses = [];
+          }
+        },
+      });
     },
     submit(event, payment_received = false, print = false) {
       if (this.block_sales_associate_payment()) {
@@ -967,6 +1044,9 @@ export default {
 
       const relayEnabled = parseInt(vm.pos_profile.custom_have_token || 0, 10) === 1;
       const relayBaseUrl = (vm.pos_profile.custom_edge_relay_url || "").trim();
+      const relayConnectedForSubmit = this.get_effective_relay_connected();
+      const allowCloudFallbackWhenRelayDown = relayEnabled && this.relay_allows_cloud_fallback_when_down();
+      const cloudReachable = this.is_cloud_reachable_for_fallback();
 
       if (relayEnabled && !relayBaseUrl) {
         evntBus.$emit("show_mesage", {
@@ -977,9 +1057,40 @@ export default {
         return;
       }
 
-      if (relayEnabled && !this.relay_status.connected) {
+      if (relayEnabled && !relayConnectedForSubmit) {
+        if (allowCloudFallbackWhenRelayDown && cloudReachable) {
+          const confirmMsg = __(
+            "Edge Relay is down/unreachable, but cloud is reachable. Submit directly to cloud for this sale?"
+          );
+          const accepted = window.confirm(confirmMsg);
+          if (accepted) {
+            evntBus.$emit("show_mesage", {
+              text: __("Submitting to cloud (relay fallback confirmed by cashier)."),
+              color: "warning",
+            });
+            vm.submit_invoice_via_cloud(data, print);
+            return;
+          }
+          evntBus.$emit("show_mesage", {
+            text: __("Cashier cancelled cloud fallback. Submit remains blocked until relay is reachable."),
+            color: "warning",
+          });
+          frappe.utils.play_sound("error");
+          return;
+        }
+
+        const relayDownBlockMessage =
+          allowCloudFallbackWhenRelayDown && !cloudReachable
+            ? __(
+                "RELAY DOWN and cloud is unreachable. Submit is blocked until relay or cloud connectivity is restored."
+              )
+            : allowCloudFallbackWhenRelayDown
+            ? __(
+                "RELAY DOWN: Offline continuity unavailable, and cloud fallback cannot be used because cloud is not reachable."
+              )
+            : __("RELAY DOWN: Offline continuity unavailable. Submit is blocked until relay is reachable.");
         evntBus.$emit("show_mesage", {
-          text: __("RELAY DOWN: Offline continuity unavailable. Submit is blocked until relay is reachable."),
+          text: relayDownBlockMessage,
           color: "error",
         });
         frappe.utils.play_sound("error");
@@ -999,54 +1110,7 @@ export default {
         return;
       }
 
-      frappe.call({
-        method: "posawesome.posawesome.api.posapp.submit_invoice",
-        args: {
-          data: data,
-          invoice: this.invoice_doc,
-        },
-        async: true,
-        callback: function (r) {
-          if (r.message) {
-            if (parseInt(vm.pos_profile.custom_have_token || 0, 10) === 1) {
-              frappe.call({
-                method: "posawesome.posawesome.api.posapp.get_relay_workflow_state",
-                args: {
-                  sales_invoice: vm.invoice_doc.name,
-                },
-                async: true,
-                callback: function (relayResponse) {
-                  const relay = relayResponse.message || {};
-                  if (relay.token_status) {
-                    evntBus.$emit("show_mesage", {
-                      text: __(
-                        "Relay Queue: Token {0} is {1}, Picking {2}",
-                        [
-                          relay.token_id || vm.invoice_doc.name.slice(-5),
-                          relay.token_status,
-                          relay.picking_status || "Not Started",
-                        ]
-                      ),
-                      color: "info",
-                    });
-                  }
-                },
-              });
-            }
-            if (print) {
-              vm.load_print_page();
-            }
-            evntBus.$emit("workflow_monitor_refresh_requested");
-            evntBus.$emit("set_last_invoice", vm.invoice_doc.name);
-            evntBus.$emit("show_mesage", {
-              text: `Invoice ${r.message.name} is Submited`,
-              color: "success",
-            });
-            frappe.utils.play_sound("submit");
-            this.addresses = [];
-          }
-        },
-      });
+      vm.submit_invoice_via_cloud(data, print);
     },
     submit_invoice_via_relay(relayBaseUrl, data, print) {
       const vm = this;
@@ -1668,6 +1732,27 @@ export default {
           enabled: !!statusPayload.enabled,
           connected: !!statusPayload.connected,
           status: statusPayload.status || "",
+          effective_connected:
+            typeof statusPayload.effective_connected === "boolean"
+              ? !!statusPayload.effective_connected
+              : !!statusPayload.connected,
+          connectivity_mode: statusPayload.connectivity_mode || "cloud_checked",
+          allow_cloud_fallback_when_relay_down: !!statusPayload.allow_cloud_fallback_when_relay_down,
+          cloud_connected:
+            typeof statusPayload.cloud_connected === "boolean"
+              ? !!statusPayload.cloud_connected
+              : !!statusPayload.connected,
+        };
+      });
+      evntBus.$on("cloud_status_changed", (payload) => {
+        const cloudPayload = payload && typeof payload === "object" ? payload : {};
+        this.cloud_status = {
+          navigator_online:
+            typeof cloudPayload.navigator_online === "boolean" ? !!cloudPayload.navigator_online : true,
+          server_online: !!cloudPayload.server_online,
+          http_status: cloudPayload.http_status || null,
+          checked_at: cloudPayload.checked_at || "",
+          message: cloudPayload.message || "",
         };
       });
       evntBus.$on("add_the_new_address", (data) => {
@@ -1714,6 +1799,7 @@ export default {
     evntBus.$off("update_invoice_coupons");
     evntBus.$off("set_mpesa_payment");
     evntBus.$off("relay_status_changed");
+    evntBus.$off("cloud_status_changed");
   },
 
   destroyed() {
