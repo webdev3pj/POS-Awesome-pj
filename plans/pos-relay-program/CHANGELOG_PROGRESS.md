@@ -23,6 +23,54 @@ Note:
 
 ---
 
+## 2026-02-24 - Picker/Dispatch shared-shell fulfillment workspace deployed and live-validated (relay local-first path proven; cloud sync endpoints pending)
+- Branch: `codex-4-picker-dispatch`
+- Summary: Deployed `codex-4-picker-dispatch` (`224e842`) to the dev site and live-tested the new shared-shell Picker/Dispatch fulfillment workspace in headed Cypress on the OptiPlex. Picker line-wise `picked_qty` edits (including decimals) now persist in local relay line payloads with UOM/conversion metadata, and Dispatch release updates relay sale status locally; cloud sync of picker/dispatch events is still failing on missing/unstable cloud endpoints (`500`).
+- What changed:
+  - Deployed the `codex-4-picker-dispatch` fulfillment workspace package (Picker/Dispatch/Supervisor shared-shell UI + relay storage line-payload persistence).
+  - Live-tested Picker workflow against the local OptiPlex relay and verified:
+    - queue load (`/relay/pick-queue`)
+    - sale detail load (`/api/transactions/<local_sale_ref>`)
+    - line-wise `picked_qty` edit and relay persistence in `relay_local_sale_lines.payload.picker`
+    - pick status transitions (`PICK_IN_PROGRESS` -> `PICKED_READY_FOR_RELEASE`)
+  - Live-tested Dispatch workflow against the same local sale and verified:
+    - release-ready queue behavior in shared shell
+    - `Release Goods` updates relay sale `dispatch_status` to `RELEASED`
+    - `RELEASED` dispatch event appended in relay local state
+    - released row drops out of `/relay/pick-queue`
+  - Restarted the local relay process on the OptiPlex after deploying branch code changes so the new `relay/relay/storage.py` picker-line persistence code was actually loaded by the running Python process.
+  - Added local-only Cypress helper specs for picker/dispatch validation and patched them for reliability (not committed in this docs-only update).
+- What was verified:
+  - Headed Cypress (watch-mode wrapper / Chrome) passes on the dev site for:
+    - `admin_set_cline_dispatch_only_role.cy.js` (local helper spec)
+    - `picker_workflow_frontend_watch.cy.js` (local helper spec)
+    - `dispatch_workflow_frontend_watch.cy.js` (local helper spec)
+  - Picker line payload persistence evidence (relay transaction detail for `LSR-PJ7 -20260224200538-34917A`):
+    - `payload.picker.picked_qty = 0.5` persisted during `PICK_IN_PROGRESS`
+    - `ordered_uom = "Nos"`, `conversion_factor = 1`, derived `picked_stock_qty = 0.5`
+    - final line `pick_status = PICKED` after `Mark All Picked` / `Mark Picked Ready`
+  - Relay sale/status evidence on the same local sale:
+    - `pick_status = PICKED_READY_FOR_RELEASE` (after picker)
+    - `dispatch_status = RELEASED` and `released_by = cline@pjjamaica.com` (after dispatch)
+  - Relay dispatch event created:
+    - `event_type = RELEASED`
+  - Relay pick queue behavior:
+    - target row no longer appears in `/relay/pick-queue` after dispatch release (queue count decreased)
+  - Relay health remains good after tests:
+    - `/health` -> `ok: true`
+- What remains:
+  - Cloud-side picker/dispatch sync APIs are not working yet in the dev backend:
+    - `posawesome.posawesome.api.posapp.update_relay_picking_status` -> `500`
+    - `posawesome.posawesome.api.posapp.release_relay_dispatch` -> `500`
+    - relay outbox stores/retries `PICK_EVENT` and `RELEASE_EVENT` locally (expected local-first behavior), but cloud sync completion is pending backend fixes.
+  - Commit/push the local Cypress picker/dispatch specs and reliability patches if they should become part of branch history.
+  - Phase 3 relay auth + server-side role enforcement remains the main security gap before broader rollout.
+- Links:
+  - `uat/2026-02-24-optiplex-picker-dispatch-shared-shell-relay-local-first.md`
+  - `01-role-based-workflow-spec.md`
+  - `phases/phase-2-cashier-picker-dispatch-ui-and-enforcement.md`
+  - `phases/phase-3-relay-auth-and-server-side-role-enforcement.md`
+
 ## 2026-02-24 - Picker/Dispatch shared-shell fulfillment workspace (relay-backed line-aware workflow, local implementation)
 - Branch: `codex-4-picker-dispatch`
 - Summary: Implemented a first shared-shell Picker/Dispatch/Supervisor fulfillment workspace in POS Awesome, wired to relay pick/release endpoints, and persisted line-wise pick quantities/status in relay local sale line payloads (UOM/conversion-aware) for offline continuity.

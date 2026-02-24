@@ -19,7 +19,7 @@
 - `CHANGELOG_PROGRESS.md`
 
 ## Purpose
-Define the intended role-based POS workflow in operational detail and map each rule to implementation status across the active branch family (`kilo-codex-v3` baseline -> `codex-2-cashier` -> `codex-3-edge-relay`).
+Define the intended role-based POS workflow in operational detail and map each rule to implementation status across the active branch family (`kilo-codex-v3` baseline -> `codex-2-cashier` -> `codex-3-edge-relay` -> `codex-4-picker-dispatch`).
 
 This document is the authoritative reference for:
 - what each role can see,
@@ -195,8 +195,8 @@ Status tags in the last column reflect the current program branch family state; 
 | Take payment | No | Yes | No | No | Conditional | `Partial` | `Planned` (Phase 3 auth) |
 | Submit SI | No | Yes | No | No | Conditional | `Partial` | `Partial` |
 | Void token | No | No | No | No | Yes | `Planned` | `Partial` (relay endpoint exists; auth missing) |
-| Pick update | No | No | Yes | No | Yes | `Partial` | `Partial` |
-| Dispatch release | No | No | No | Yes | Yes | `Partial` | `Partial` |
+| Pick update | No | No | Yes | No | Yes | `Implemented` (shared-shell relay-local path live-validated on `codex-4-picker-dispatch`) | `Partial` (auth/trust pending; cloud sync endpoint parity pending) |
+| Dispatch release | No | No | No | Yes | Yes | `Implemented` (shared-shell relay-local path live-validated on `codex-4-picker-dispatch`) | `Partial` (auth/trust pending; cloud sync endpoint parity pending) |
 | Override exceptions | No | No | No | Limited | Yes | `Planned` | `Planned` |
 
 ## Current Implementation Notes by Role
@@ -233,20 +233,25 @@ What is missing:
 - Server-side role enforcement for payment/submit actions (Phase 3).
 
 ### Picker (`cline-Picker`)
-Status: `Partial`
+Status: `Partial` (core local-first workflow proven on `codex-4-picker-dispatch`)
 
 What exists:
 - Relay pick queue and pick update APIs (`Implemented` backend foundation).
-- Shared-shell fulfillment workspace UI is implemented locally on `codex-4-picker-dispatch` (`Partial`, pending deploy/UAT):
+- Shared-shell fulfillment workspace UI is implemented on `codex-4-picker-dispatch` and live-validated on dev site + OptiPlex relay (`Partial`, core local-first path proven):
   - relay queue + sale detail panel in POS Awesome
   - line list with editable picked quantities
   - ordered UOM + conversion factor + derived stock qty shown
   - picker status actions routed through relay `/relay/pick/update`
-- Relay now persists line-level picker results in local sale line payloads (`payload.picker`) during pick updates (`Local implementation`, pending live UAT).
+- Relay now persists line-level picker results in local sale line payloads (`payload.picker`) during pick updates (`Implemented`, live UAT verified after local relay restart).
+- Live UAT proof (2026-02-24, headed Cypress on OptiPlex):
+  - line-wise decimal `picked_qty` edit persisted (`0.5`)
+  - UOM/conversion metadata persisted in `payload.picker`
+  - sale advanced to `PICKED_READY_FOR_RELEASE`
 
 What is missing:
-- Deploy/UAT/Cypress verification of the picker workspace on the dev site (Phase 2 validation).
 - Picker-focused UX polish/guardrails in shared shell (pick-ticket print/reprint, reason presets, clearer exception prompts).
+- Committed/repeatable Cypress picker spec coverage in branch history (helper spec used in UAT was local-only).
+- Cloud-side picker sync endpoint parity (`update_relay_picking_status`) so relay `PICK_EVENT` outbox rows sync to ERPNext/Frappe.
 - Relay auth/role authorization (Phase 3).
 
 Recommended picker flow (same POS shell, relay-backed):
@@ -258,18 +263,24 @@ Recommended picker flow (same POS shell, relay-backed):
 - Ticket monitor rail remains visible for cross-role context; picker actions may later deep-link from rail row -> pick detail panel.
 
 ### Dispatch (`cline-Dispatch`)
-Status: `Partial`
+Status: `Partial` (core local-first workflow proven on `codex-4-picker-dispatch`)
 
 What exists:
 - Relay dispatch release API and state transitions (`Implemented` backend foundation).
-- Shared-shell fulfillment workspace UI is implemented locally on `codex-4-picker-dispatch` (`Partial`, pending deploy/UAT):
+- Shared-shell fulfillment workspace UI is implemented on `codex-4-picker-dispatch` and live-validated on dev site + OptiPlex relay (`Partial`, core local-first path proven):
   - release-ready queue filtering in POS Awesome
   - relay sale detail/status visibility
   - relay `/relay/dispatch/release` action with partial/exception override toggle
+- Live UAT proof (2026-02-24, headed Cypress on OptiPlex):
+  - dispatch released a picker-ready local sale
+  - relay sale `dispatch_status = RELEASED`
+  - local `RELEASED` dispatch event created
+  - sale disappeared from relay pick queue
 
 What is missing:
-- Deploy/UAT/Cypress verification of dispatch release workflow in the shared shell (Phase 2 validation).
 - Dispatch hold/reason/override UX refinement and explicit supervisor pathways.
+- Committed/repeatable Cypress dispatch spec coverage in branch history (helper spec used in UAT was local-only).
+- Cloud-side dispatch sync endpoint parity (`release_relay_dispatch`) so relay `RELEASE_EVENT` outbox rows sync to ERPNext/Frappe.
 - Server/relay authorization (Phase 3).
 
 Recommended dispatch flow (same POS shell, relay-backed):
@@ -307,6 +318,13 @@ Recommended supervisor behavior in shared shell:
 - Preserve offline-first behavior for authorized role actions by writing local state/events first, then syncing via outbox.
 
 Status: `Planned` (Phase 3)
+
+Current live UAT note (2026-02-24, `codex-4-picker-dispatch`):
+- Relay-local picker and dispatch transitions are now proven in the shared shell.
+- Cloud parity for fulfillment events is still pending because relay outbox sync for:
+  - `PICK_EVENT` -> `update_relay_picking_status`
+  - `RELEASE_EVENT` -> `release_relay_dispatch`
+  currently returns `500` from the dev backend.
 
 ## Phase Mapping for Missing Items
 - Phase 1:

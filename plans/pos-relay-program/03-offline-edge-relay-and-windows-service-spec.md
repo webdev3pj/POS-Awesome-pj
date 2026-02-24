@@ -22,12 +22,13 @@
 - `CHANGELOG_PROGRESS.md`
 
 ## Document Currency
-- This is the current offline/relay reference for the active branch family and is aligned with relay-focused work on `codex-3-edge-relay`.
+- This is the current offline/relay reference for the active branch family and is aligned with relay-focused work through `codex-4-picker-dispatch` (inherits `codex-3-edge-relay` LAN-only/fallback work and adds picker/dispatch relay-local workflow validation).
 - Some sections describe target-state service packaging/security that is still planned (especially Phase 3/Phase 4+ items).
 - For the latest verified relay behavior, use:
   - `CHANGELOG_PROGRESS.md`
   - `uat/2026-02-23-local-edge-relay-smoke.md`
   - `uat/2026-02-24-optiplex-lan-https-relay-sa-cashier-e2e-demo.md`
+  - `uat/2026-02-24-optiplex-picker-dispatch-shared-shell-relay-local-first.md`
   - `runbooks/optiplex-edge-relay-next-session.md`
 - Historical baseline note:
   - branch baseline `424c79a` documented the LAN/private-cloud constraint before the LAN-only mode implementation.
@@ -35,6 +36,11 @@
   - LAN-only relay mode (`browser-LAN` health as submit gate)
   - prompted cloud fallback when relay is down but cloud is up
   - OptiPlex LAN HTTPS reverse-proxy (Caddy) + shop-PC certificate trust setup guidance
+- Current implemented state on `codex-4-picker-dispatch` (verified 2026-02-24 on OptiPlex/dev site):
+  - shared-shell picker/dispatch actions persist locally through relay (`/relay/pick/update`, `/relay/dispatch/release`)
+  - line-wise picker quantities persist into `relay_local_sale_lines.payload.picker` with UOM/conversion metadata
+  - dispatch release updates local relay sale status and appends local dispatch event
+  - relay outbox correctly queues `PICK_EVENT` / `RELEASE_EVENT`, but cloud sync for these events is currently failing with `500` in the dev backend
 
 ## Purpose
 Define the offline continuity design and operations model for the Edge Relay, including:
@@ -266,6 +272,7 @@ Key fields:
 
 Semantics:
 - Supports pick queue and line-level operational views.
+- `codex-4-picker-dispatch` extends line payload usage by persisting picker results inside `payload.picker` (for example `picked_qty`, `picked_uom`, `ordered_uom`, `conversion_factor`, `picked_stock_qty`, `pick_status`) so fulfillment edits survive refresh/offline sessions.
 
 ### `relay_idempotency`
 Purpose:
@@ -391,12 +398,13 @@ These support common dashboard/query paths and worker polling filters.
 ### Eventual consistency
 - Local operation success and cloud sync success are separate states.
 - Operators must use outbox/transaction views to monitor backlog and failures.
+- This separation is now directly observed in live Picker/Dispatch UAT: local relay pick/release updates succeeded while outbox sync to cloud retried due backend `500` errors.
 
 ## Sync Event Types and Cloud Mapping (Current Known Behavior)
 Examples present in branch:
-- `SALE_COMMITTED` -> cloud sync path exists (`Implemented` foundation)
-- `PICK_EVENT` -> sync worker handling exists (`Partial`/foundation)
-- `RELEASE_EVENT` -> sync worker handling exists (`Partial`/foundation)
+- `SALE_COMMITTED` -> cloud sync path exists (`Implemented` foundation; live dev-site relay-first cashier UAT verified)
+- `PICK_EVENT` -> local enqueue/outbox path verified (`Implemented` local-first foundation); dev backend sync endpoint currently returns `500` (`Partial` cloud parity)
+- `RELEASE_EVENT` -> local enqueue/outbox path verified (`Implemented` local-first foundation); dev backend sync endpoint currently returns `500` (`Partial` cloud parity)
 - `TOKEN_CREATED`, `SESSION_OPEN`, `SESSION_CLOSE` -> currently intentional no-op cloud ack in worker (`Partial parity`)
 
 ## What Is NOT Stored on Relay (Current Model)

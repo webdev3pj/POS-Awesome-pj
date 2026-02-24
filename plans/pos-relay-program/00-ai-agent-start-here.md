@@ -20,11 +20,12 @@
 - `CHANGELOG_PROGRESS.md`
 
 ## Document Currency (Current vs Historical)
-- This is the primary handoff doc for the current branch family and is currently aligned to `codex-3-edge-relay`.
+- This is the primary handoff doc for the current branch family and is currently aligned to `codex-4-picker-dispatch` (with inherited relay work from `codex-3-edge-relay`).
 - Branch progression matters:
   - `kilo-codex-v3` = baseline planning + SA/monitor rollout
   - `codex-2-cashier` = cashier filtering + cashier live UAT
   - `codex-3-edge-relay` = relay-focused validation and OptiPlex runbook execution
+  - `codex-4-picker-dispatch` = shared-shell Picker/Dispatch fulfillment workspace + relay line-level pick persistence + local relay UAT
 - Historical UAT docs remain branch/date-specific on purpose; do not rewrite them as generic current-state docs.
 
 ## Mission and Business Rules
@@ -38,13 +39,22 @@ Key business rules currently agreed:
 - SA-stage `sales_partner` capture is deferred and tracked as backlog.
 
 ## Current Branch and Status Snapshot
-- Current working branch: `codex-3-edge-relay`
+- Current working branch: `codex-4-picker-dispatch`
 - GitHub handoff baseline for the next OptiPlex session: `424c79a` (`docs(relay): clarify frappe cloud local-lan relay constraints`)
+- Current picker/dispatch implementation commit deployed/tested on dev site: `224e842` (`feat(relay): add shared picker dispatch fulfillment workspace`)
 - Inherited validated work:
   - `kilo-codex-v3`: SA Sales Order token flow, no-cash SA session, monitor rail foundation
   - `codex-2-cashier`: cashier `Select S.O` filtering (naming series + age), cashier live E2E coverage, token-disabled regression coverage
-- Current state: LAN-only relay mode + prompted cloud fallback are implemented, OptiPlex LAN HTTPS relay (`https://192.168.50.168`) is configured, and relay-enabled SA/Cashier end-to-end flow has been live-validated in headed Cypress on the dev site (SA token -> relay local sale -> cloud sync invoice).
-- Priority implementation/verification target: Phase 3 relay auth/server-side role enforcement and Picker/Dispatch relay-backed UI/E2E coverage, then rollout hardening and shop-PC trust rollout.
+- Current state:
+  - LAN-only relay mode + prompted cloud fallback are implemented and live-validated (`codex-3-edge-relay` inherited)
+  - OptiPlex LAN HTTPS relay (`https://192.168.50.168`) is configured and working
+  - relay-enabled SA/Cashier end-to-end flow is live-validated (SA token -> relay local sale -> cloud sync invoice)
+  - shared-shell Picker/Dispatch fulfillment workspace is now deployed and live-validated for **local relay persistence** on `codex-4-picker-dispatch`:
+    - picker line-wise `picked_qty` edits persist to relay line payloads (`payload.picker`) with UOM/conversion metadata
+    - picker status transitions to `PICKED_READY_FOR_RELEASE`
+    - dispatch release updates relay `dispatch_status = RELEASED`
+  - current gap: cloud sync for `PICK_EVENT` / `RELEASE_EVENT` returns `500` from dev backend endpoints, so these events remain queued in relay outbox
+- Priority implementation/verification target: fix cloud-side picker/dispatch sync endpoints, then Phase 3 relay auth/server-side role enforcement, then rollout hardening and shop-PC trust rollout.
 - Frappe Cloud topology note: raw private LAN relay URLs are still not cloud-backend reachable; in LAN-only mode this is expected and treated as diagnostic-only while browser-LAN HTTPS health is the submit gate.
 
 ## What Is Already Implemented (Branch-Accurate)
@@ -73,6 +83,19 @@ Key business rules currently agreed:
 - Cashier `Select S.O` filtering by POS Profile Sales Order naming series + age is implemented and live-tested.
 - Relay-first cashier submit is live-validated end-to-end on the dev site with local relay transaction/outbox evidence and cloud sync completion.
 
+### POS Picker/Dispatch fulfillment workspace (`Implemented`/`Partial`)
+- Shared-shell fulfillment panel in POS Awesome for `cline-Picker`, `cline-Dispatch`, `cline-Supervisor` is implemented in `codex-4-picker-dispatch`.
+- Relay-backed picker queue/detail/load/update/release UI is deployed and live-tested on the dev site (OptiPlex relay).
+- Picker line-wise `picked_qty` editing defaults to ordered qty and persists to relay local line payloads (`relay_local_sale_lines.payload.picker`) with:
+  - `ordered_uom`
+  - `picked_uom`
+  - `conversion_factor`
+  - derived `picked_stock_qty`
+- Dispatch release updates relay local sale and dispatch event state locally (`RELEASED`).
+- Cloud sync for picker/dispatch events is currently `Partial`:
+  - `PICK_EVENT` / `RELEASE_EVENT` are correctly queued in relay outbox
+  - dev backend endpoints currently return `500`, so cloud parity is pending backend fixes
+
 ### Existing and upgraded Sales Order support (`Implemented`)
 - POS can search and load submitted unbilled Sales Orders.
 - POS can convert Sales Order to Sales Invoice for payment.
@@ -86,14 +109,16 @@ Key business rules currently agreed:
 ## What Is Broken / Partial / Deferred
 ### Partial
 - Role-based UI visibility by role across all components.
-- Picker and Dispatch front-end operator workflows.
+- Picker and Dispatch front-end operator workflows (`Implemented` core local-first path on `codex-4-picker-dispatch`; UX polish and committed test coverage still partial).
 - Customer/item offline UI wiring (partially added locally; needs verification and branch alignment).
-- Relay sync parity for some non-sale events.
+- Relay sync parity for non-sale fulfillment events (`PICK_EVENT`, `RELEASE_EVENT`) is not complete on the dev backend (currently `500` from cloud endpoints in live UAT).
 
 ### Missing (critical)
 - Relay authentication for mutating endpoints.
 - Server-side relay role authorization (do not trust browser localStorage role).
-- Picker/Dispatch relay-backed live E2E proof (local sale progression after cashier commit) is still pending.
+- Cloud-side picker/dispatch sync endpoints/handlers for relay outbox event replay are still not functioning in the dev environment:
+  - `update_relay_picking_status`
+  - `release_relay_dispatch`
 
 ### Deferred (explicit)
 - SA-stage `sales_partner` capture on Sales Order token creation.
@@ -101,12 +126,12 @@ Key business rules currently agreed:
 - SA relay-first/offline token creation until online-first path is stable.
 
 ## Immediate Next Recommended Task
-Move to the next milestone: Phase 3 relay auth + server-side role enforcement hardening, then extend live relay validation to Picker/Dispatch flows and rollout operations (shop-PC trust + support runbooks).
+Fix the cloud-side picker/dispatch relay sync endpoints first, then move to Phase 3 relay auth + server-side role enforcement hardening.
 
 Why this is next:
 - SA/Cashier relay-first flow is now proven on the dev site and local OptiPlex relay.
-- The biggest remaining risk is security/trust hardening on relay mutating endpoints and role enforcement.
-- Picker/Dispatch is the next operational workflow that depends on the relay local sale state already being correct.
+- Picker/Dispatch local-first relay flow is now also proven on the OptiPlex/dev site, but cloud sync parity for fulfillment events is still failing (`500`) and will mask end-to-end status propagation until fixed.
+- The biggest remaining security risk is still trust hardening on relay mutating endpoints and role enforcement (Phase 3).
 - Shop-PC certificate trust rollout and support instructions are now the main deployment-readiness tasks for store adoption.
 - It reduces the gap between successful demo validation and repeatable production-style operation.
 
@@ -114,8 +139,9 @@ Why this is next:
 If a new session starts on the OptiPlex relay machine and does not have this conversation context:
 - Open `runbooks/optiplex-edge-relay-next-session.md` first
 - Then open `runbooks/optiplex-fresh-codex-zero-context-handoff.md`
-- Checkout/use branch `codex-3-edge-relay`
+- Checkout/use branch `codex-4-picker-dispatch` (unless explicitly asked to hotfix an earlier branch)
 - Start the local relay and verify `/health`
+- Restart the local relay process if relay Python code changed (for example `relay/relay/storage.py`)
 - Copy the local-only `.env` (Cypress secrets) to the repo root if Cypress will run on the OptiPlex
 - Relay-enabled SA/Cashier demo is already proven; rerun only if revalidating after new changes
 - Next target: Phase 3 auth hardening + Picker/Dispatch relay flow coverage + rollout docs/checklists
@@ -147,6 +173,8 @@ If a new session starts on the OptiPlex relay machine and does not have this con
   - POS shell layout; host for cross-role workflow monitor rail.
 - `posawesome/public/js/posapp/components/pos/WorkflowTicketRail.vue`
   - Phase 1B read-only ticket sidebar monitor (pending orders for profile/date scope, live polling, timing display).
+- `posawesome/public/js/posapp/components/pos/FulfillmentWorkspace.vue`
+  - Shared-shell Picker/Dispatch/Supervisor fulfillment panel (relay queue/detail, line-wise pick edits, dispatch release).
 - `posawesome/public/js/posapp/components/pos/Payments.vue`
   - Payment submit, relay commit, role-based SA payment block, sales person/partner fields.
 - `posawesome/public/js/posapp/components/pos/SalesOrders.vue`
@@ -186,7 +214,7 @@ If a new session starts on the OptiPlex relay machine and does not have this con
 - `plans/pos-relay-program/03-offline-edge-relay-and-windows-service-spec.md`
 - `plans/pos-relay-program/phases/*.md`
 
-## How Data Flows (Current SA/Cashier Baseline + Next Relay Focus)
+## How Data Flows (Current SA/Cashier + Picker/Dispatch Relay Baseline)
 1. SA opens POS and role is derived from ERPNext (`cline-Sales Associate`).
 2. SA builds cart and customer selection.
 3. SA clicks `Save/New`.
@@ -195,8 +223,10 @@ If a new session starts on the OptiPlex relay machine and does not have this con
 6. POS optionally performs best-effort relay token sync (`/relay/token/create`) using SO token id.
 7. Cashier later loads SO (prefer `Select S.O`) and converts SO -> SI for payment.
 8. Cashier submits payment (cloud or relay-enabled path depending profile and availability).
-9. Relay/cashier workflow state continues through pick and dispatch.
-10. Ticket sidebar monitor rail shows live status/timing updates for pending orders (profile/date scope, all roles, optional `Mine` filter).
+9. Picker opens the same POS shell in fulfillment mode and updates pick progress line-wise (relay stores local line payload + pick events first).
+10. Dispatch opens the same POS shell in fulfillment mode and releases goods (relay stores local dispatch event + release status first).
+11. Relay sync worker attempts cloud parity for `PICK_EVENT` / `RELEASE_EVENT` (currently failing with `500` in dev backend, events remain queued).
+12. Ticket sidebar monitor rail shows live status/timing updates for pending orders (profile/date scope, all roles, optional `Mine` filter) as backend parity improves.
 
 ## How To Validate
 ### Code/Docs validation (no deployment needed)
@@ -215,7 +245,10 @@ If a new session starts on the OptiPlex relay machine and does not have this con
 ### Relay/offline validation
 - Relay `/health`, `/api/outbox`, `/queue` reachable.
 - Relay commit idempotency repeat returns same local sale ref.
+- Picker line-wise updates persist in relay line payloads (`payload.picker`) and remain visible after refresh/reload.
+- Dispatch release updates local relay sale status immediately and removes the row from relay pick queue.
 - Outbox retries and next attempt scheduling behave as expected.
+- In current dev backend state, `PICK_EVENT` and `RELEASE_EVENT` cloud sync attempts may queue/retry with `500` errors while local relay state remains correct.
 
 ## Cypress and OTP Test Setup
 ### Existing setup (committed)
