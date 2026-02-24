@@ -1,7 +1,10 @@
 {
   "scripts": {
     "e2e:open": "node scripts/run-cypress.cjs open --e2e",
-    "e2e:run": "node scripts/run-cypress.cjs run --e2e"
+    "e2e:run": "node scripts/run-cypress.cjs run --e2e",
+    "e2e:gui": "node scripts/run-cypress.cjs run --e2e --browser chrome --headed --runner-ui",
+    "e2e:watch:gui": "node scripts/cypress-gui-watch.cjs",
+    "e2e:watch:gui:chrome": "node scripts/cypress-gui-watch.cjs --browser chrome"
   },
   "dependencies": {
     "lodash": "^4.17.21",

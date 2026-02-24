@@ -216,6 +216,157 @@ function ensureCartHasItem() {
   });
 }
 
+function verifyRelayCommitRecordedOnLocalRelay(localSaleRef) {
+  const encodedRef = encodeURIComponent(String(localSaleRef || '').trim());
+  expect(encodedRef, 'encoded local_sale_ref').to.not.equal('');
+
+  cy.request({
+    method: 'GET',
+    url: `http://127.0.0.1:8787/api/transactions/${encodedRef}`,
+    timeout: 60000,
+  }).then((resp) => {
+    expect(resp.status, 'relay /api/transactions/<local_sale_ref> status').to.eq(200);
+    const body = resp.body || {};
+    expect(body.ok, 'relay transaction detail ok').to.eq(true);
+    expect(String(body?.sale?.local_sale_ref || '').trim(), 'relay sale.local_sale_ref').to.eq(String(localSaleRef).trim());
+    expect(String(body?.sale?.sale_status || '').trim(), 'relay sale_status').to.eq('SALE_COMMITTED_LOCAL');
+    expect(['SALE_SYNC_PENDING', 'SALE_SYNCED_SI_SUBMITTED']).to.include(
+      String(body?.sale?.cloud_sync_status || '').trim(),
+      'relay cloud_sync_status'
+    );
+
+    const outboxEvents = Array.isArray(body.outbox_events) ? body.outbox_events : [];
+    const saleCommittedOutbox = outboxEvents.find(
+      (row) =>
+        String(row?.event_type || '').trim() === 'SALE_COMMITTED' &&
+        String(row?.local_ref || '').trim() === String(localSaleRef).trim()
+    );
+    expect(!!saleCommittedOutbox, 'SALE_COMMITTED outbox event exists for local_sale_ref').to.eq(true);
+  });
+
+  cy.request({
+    method: 'GET',
+    url: 'http://127.0.0.1:8787/api/outbox',
+    timeout: 60000,
+  }).then((resp) => {
+    expect(resp.status, 'relay /api/outbox status').to.eq(200);
+    const rows = Array.isArray(resp.body?.rows) ? resp.body.rows : [];
+    const matched = rows.find((row) => String(row?.local_ref || '').trim() === String(localSaleRef).trim());
+    expect(!!matched, 'relay outbox row exists for local_sale_ref').to.eq(true);
+    expect(['queued', 'processing', 'done']).to.include(String(matched?.status || '').trim(), 'relay outbox status');
+  });
+
+  cy.request({
+    method: 'GET',
+    url: 'http://127.0.0.1:8787/api/queue',
+    timeout: 60000,
+  }).then((resp) => {
+    expect(resp.status, 'relay /api/queue status').to.eq(200);
+    expect(resp.body, 'relay /api/queue payload').to.have.property('counts');
+  });
+}
+
+function clickVisiblePaymentSubmitButton() {
+  cy.get('body', { timeout: 30000 }).then(($body) => {
+    const submitBtn = [...$body.find('.v-btn')].find((el) => {
+      const text = ((el.innerText || '').trim() || '').toUpperCase();
+      if (text !== 'SUBMIT') return false;
+      if (!Cypress.$(el).is(':visible')) return false;
+      const cardText = String((el.closest('.v-card') && el.closest('.v-card').innerText) || '');
+      return /SUBMIT\s*&\s*PRINT/i.test(cardText) && /CANCEL PAYMENT/i.test(cardText);
+    });
+    expect(submitBtn, 'visible payment Submit button').to.not.equal(undefined);
+    cy.wrap(submitBtn).click({ force: true });
+  });
+}
+
+function closeOrderMonitorPanelIfOpen() {
+  cy.get('body').then(($body) => {
+    const panel = $body.find('.workflow-ticket-rail-panel:visible').get(0);
+    if (!panel) return;
+    const closeBtn =
+      panel.querySelector('.workflow-ticket-rail-header .v-btn') ||
+      panel.querySelector('.mdi-close')?.closest('button');
+    if (closeBtn) {
+      cy.wrap(closeBtn).click({ force: true });
+      cy.get('.workflow-ticket-rail-panel:visible', { timeout: 10000 }).should('not.exist');
+    }
+  });
+}
+
+function waitForNewRelaySaleAfterBaseline({
+  beforeCount,
+  posProfile = 'PJ7 CASHIER',
+  minTotal = 0,
+  maxRetries = 12,
+  delayMs = 1500,
+}) {
+  const attempt = (retryIndex = 0) => {
+    return cy
+      .request({
+        method: 'GET',
+        url: `http://127.0.0.1:8787/api/transactions?pos_profile_id=${encodeURIComponent(posProfile)}&limit=20`,
+        timeout: 60000,
+      })
+      .then((resp) => {
+        expect(resp.status, 'relay /api/transactions status').to.eq(200);
+        const body = resp.body || {};
+        const rows = Array.isArray(body.rows) ? body.rows : [];
+        const count = Number(body.count || rows.length || 0);
+
+        const candidate = rows.find((row) => {
+          const total = Number(row?.total || 0);
+          return total >= Number(minTotal || 0) && String(row?.pos_profile_id || '').trim() === posProfile;
+        });
+
+        if (count > Number(beforeCount || 0) && candidate) {
+          return {
+            count,
+            row: candidate,
+          };
+        }
+
+        if (retryIndex >= maxRetries) {
+          throw new Error(
+            `No new relay local sale appeared after cashier submit (beforeCount=${beforeCount}, currentCount=${count}).`
+          );
+        }
+
+        cy.log(
+          `Waiting for new relay local sale row (retry ${retryIndex + 1}/${maxRetries}); count=${count}, before=${beforeCount}`
+        );
+        cy.wait(delayMs);
+        return attempt(retryIndex + 1);
+      });
+  };
+
+  return attempt(0);
+}
+
+function waitForCartHasItem(maxRetries = 6, delayMs = 1000) {
+  const attempt = (retryIndex = 0) => {
+    return cy.get('body', { timeout: 30000 }).then(($body) => {
+      const totalQty = getDisplayedTotalQty($body);
+      if (totalQty !== null && totalQty > 0) {
+        cy.log(`Cart populated from selected Sales Order (total qty ${totalQty}).`);
+        return;
+      }
+
+      if (retryIndex >= maxRetries) {
+        throw new Error(
+          'Cart stayed empty after create_sales_invoice_from_order. Expected Sales Order items to load into invoice.'
+        );
+      }
+
+      cy.log(`Waiting for invoice lines from selected Sales Order (retry ${retryIndex + 1}/${maxRetries}).`);
+      cy.wait(delayMs);
+      return attempt(retryIndex + 1);
+    });
+  };
+
+  return attempt(0);
+}
+
 function pickFirstUsableRow(selector) {
   return cy.get(selector, { timeout: 60000 }).then(($rows) => {
     const usable = [...$rows].find((el) => {
@@ -261,6 +412,8 @@ describe('Cashier frontend workflow (watch mode)', () => {
       posa_sales_order_lookup_max_age_days: 1,
     };
     let expectedLatestSaOrder = '';
+    let relayCommitLocalSaleRef = '';
+    let relayTxCountBeforeSubmit = 0;
 
     cy.intercept('POST', '**/api/method/posawesome.posawesome.api.posapp.get_items').as('getItems');
     cy.intercept('POST', '**/api/method/posawesome.posawesome.api.posapp.search_orders').as('searchOrders');
@@ -404,7 +557,9 @@ describe('Cashier frontend workflow (watch mode)', () => {
 
     cy.contains('.v-dialog--active .v-btn', /^Select$/i, { timeout: 30000 }).click({ force: true });
     cy.wait('@createInvoiceFromOrder', { timeout: 120000 }).its('response.statusCode').should('eq', 200);
+    cy.contains('.v-dialog--active .headline', 'Select Sales Orders', { timeout: 30000 }).should('not.exist');
 
+    waitForCartHasItem();
     ensureCartHasItem();
 
     cy.contains('.v-btn', 'PAY', { timeout: 30000 }).click({ force: true });
@@ -441,7 +596,19 @@ describe('Cashier frontend workflow (watch mode)', () => {
         cy.log('No visible payment mode buttons found; proceeding with current default payment selection.');
       }
     });
-    cy.contains('.v-btn', /^Submit$/i, { timeout: 30000 }).click({ force: true });
+
+    cy.request({
+      method: 'GET',
+      url: `http://127.0.0.1:8787/api/transactions?pos_profile_id=${encodeURIComponent(profileName)}&limit=200`,
+      timeout: 60000,
+    }).then((resp) => {
+      expect(resp.status, 'relay baseline /api/transactions status').to.eq(200);
+      relayTxCountBeforeSubmit = Number(resp.body?.count || (Array.isArray(resp.body?.rows) ? resp.body.rows.length : 0) || 0);
+      cy.log(`Relay baseline transaction count for ${profileName}: ${relayTxCountBeforeSubmit}`);
+    });
+
+    closeOrderMonitorPanelIfOpen();
+    clickVisiblePaymentSubmitButton();
 
     cy.get('body', { timeout: 60000 }).then(($body) => {
       const text = ($body.text() || '').replace(/\s+/g, ' ');
@@ -479,6 +646,32 @@ describe('Cashier frontend workflow (watch mode)', () => {
         cy.get('.workflow-ticket-rail .v-btn').first().click({ force: true });
         cy.contains('.workflow-ticket-row', 'Paid', { timeout: 30000 }).should('exist');
       }
+    });
+
+    cy.then(() => {
+      return waitForNewRelaySaleAfterBaseline({
+        beforeCount: relayTxCountBeforeSubmit,
+        posProfile: profileName,
+        minTotal: 1,
+      }).then(({ row }) => {
+        relayCommitLocalSaleRef = String(row?.local_sale_ref || '').trim();
+        expect(relayCommitLocalSaleRef, 'local_sale_ref from relay /api/transactions').to.not.equal('');
+        expect(String(row?.sale_status || '').trim(), 'relay local sale status').to.eq('SALE_COMMITTED_LOCAL');
+        expect(['SALE_SYNC_PENDING', 'SALE_SYNCED_SI_SUBMITTED']).to.include(
+          String(row?.cloud_sync_status || '').trim(),
+          'relay local sale cloud_sync_status'
+        );
+        cy.writeFile('cypress/tmp/latest_cashier_relay_commit.json', {
+          localSaleRef: relayCommitLocalSaleRef,
+          relaySaleRow: row,
+          createdAt: new Date().toISOString(),
+        });
+      });
+    });
+
+    cy.then(() => {
+      expect(relayCommitLocalSaleRef, 'local_sale_ref captured from local relay transaction API').to.not.equal('');
+      verifyRelayCommitRecordedOnLocalRelay(relayCommitLocalSaleRef);
     });
   });
 });

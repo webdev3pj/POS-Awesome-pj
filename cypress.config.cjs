@@ -112,6 +112,15 @@ module.exports = defineConfig({
     defaultCommandTimeout: 15000,
     pageLoadTimeout: 60000,
     setupNodeEvents(on, config) {
+      on("before:browser:launch", (browser = {}, launchOptions) => {
+        if (browser.family === "chromium") {
+          // OptiPlex LAN relay uses a local Caddy CA; Cypress-launched Chrome can reject it intermittently.
+          launchOptions.args.push("--ignore-certificate-errors");
+          launchOptions.args.push("--allow-insecure-localhost");
+        }
+        return launchOptions;
+      });
+
       on("task", {
         generateTotp({ otpauthUri }) {
           const uri = firstNonEmpty([

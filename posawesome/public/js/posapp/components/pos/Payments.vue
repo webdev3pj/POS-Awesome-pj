@@ -1098,7 +1098,8 @@ export default {
       }
 
       if (relayEnabled && relayBaseUrl) {
-        if (!this.invoice_doc.customer || this.invoice_doc.customer === this.pos_profile.customer) {
+        // Walk-in/default POS customers are valid for relay-backed commits; only block when customer is truly missing.
+        if (!this.invoice_doc.customer) {
           evntBus.$emit("show_mesage", {
             text: __("Customer is required before relay-backed commit."),
             color: "error",
