@@ -863,7 +863,13 @@ export default {
                       text: __(
                         "Relay Queue: Token {0} is {1}, Picking {2}",
                         [
-                          relay.token_id || vm.invoice_doc.name.slice(-5),
+                          relay.token_id ||
+                            vm.invoice_doc.token_id ||
+                            vm.invoice_doc.sales_order ||
+                            vm.invoice_doc.sales_order_name ||
+                            (/^SAL-ORD-/i.test(String(vm.invoice_doc.name || ""))
+                              ? vm.invoice_doc.name
+                              : String(vm.invoice_doc.name || "").slice(-5)),
                           relay.token_status,
                           relay.picking_status || "Not Started",
                         ]
@@ -1118,8 +1124,17 @@ export default {
       const base = relayBaseUrl.replace(/\/$/, "");
       const endpoint = `${base}/relay/commit-invoice`;
 
-      const fallbackTokenId = (vm.invoice_doc.name || "").slice(-5);
-      const tokenId = vm.invoice_doc.token_id || fallbackTokenId;
+      const docName = String((vm.invoice_doc && vm.invoice_doc.name) || "").trim();
+      const salesOrderTokenRef = String(
+        (vm.invoice_doc &&
+          (vm.invoice_doc.sales_order || vm.invoice_doc.sales_order_name)) ||
+          ""
+      ).trim();
+      const fallbackTokenId =
+        salesOrderTokenRef || (/^SAL-ORD-/i.test(docName) ? docName : docName.slice(-5));
+      const tokenId = String(
+        (vm.invoice_doc && vm.invoice_doc.token_id) || fallbackTokenId || ""
+      ).trim();
       const idempotencyKey = `${
         vm.invoice_doc.name || "DRAFT"
       }|${Date.now()}|${Math.random().toString(36).slice(2, 10)}`;
