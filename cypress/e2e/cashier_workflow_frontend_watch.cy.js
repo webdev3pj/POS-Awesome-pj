@@ -264,6 +264,24 @@ function verifyRelayCommitRecordedOnLocalRelay(localSaleRef) {
     expect(resp.status, 'relay /api/queue status').to.eq(200);
     expect(resp.body, 'relay /api/queue payload').to.have.property('counts');
   });
+
+  cy.request({
+    method: 'GET',
+    url: `http://127.0.0.1:8787/?tx_pos_profile=${encodeURIComponent('PJ7 CASHIER')}&tx_search=${encodedRef}&tx_limit=20`,
+    timeout: 60000,
+  }).then((resp) => {
+    expect(resp.status, 'relay dashboard UI status').to.eq(200);
+    const html = String(resp.body || '');
+    expect(html, 'relay dashboard title').to.include('POS Relay Dashboard');
+    expect(html, 'relay dashboard transaction timeline section').to.include('Transaction Timeline (Local Sales)');
+    expect(html, 'relay dashboard local_sale_ref visible').to.include(String(localSaleRef).trim());
+    expect(html, 'relay dashboard POS profile visible').to.include('PJ7 CASHIER');
+    expect(
+      html.includes('SALE_SYNC_PENDING') || html.includes('SALE_SYNCED_SI_SUBMITTED'),
+      'relay dashboard cloud sync status visible'
+    ).to.eq(true);
+    expect(html, 'relay dashboard pick status visible').to.include('PAID_PENDING_PICK');
+  });
 }
 
 function clickVisiblePaymentSubmitButton() {
@@ -410,6 +428,8 @@ describe('Cashier frontend workflow (watch mode)', () => {
       custom_edge_relay_url: '',
       posa_sales_order_naming_series: '',
       posa_sales_order_lookup_max_age_days: 1,
+      paymentModeNames: [],
+      defaultPaymentModeName: '',
     };
     let expectedLatestSaOrder = '';
     let relayCommitLocalSaleRef = '';
@@ -442,9 +462,16 @@ describe('Cashier frontend workflow (watch mode)', () => {
         custom_edge_relay_url: String(profile.custom_edge_relay_url || '').trim(),
         posa_sales_order_naming_series: String(profile.posa_sales_order_naming_series || '').trim(),
         posa_sales_order_lookup_max_age_days: Number(profile.posa_sales_order_lookup_max_age_days || 1) || 1,
+        paymentModeNames: Array.isArray(profile.payments)
+          ? profile.payments.map((row) => String(row?.mode_of_payment || '').trim()).filter(Boolean)
+          : [],
+        defaultPaymentModeName:
+          (
+            (Array.isArray(profile.payments) ? profile.payments : []).find((row) => Number(row?.default || 0) === 1) || {}
+          ).mode_of_payment || '',
       };
       cy.log(
-        `Cashier test env: token=${profileMeta.custom_have_token}, relayUrl=${profileMeta.custom_edge_relay_url ? 'set' : 'missing'}, soSeries=${profileMeta.posa_sales_order_naming_series || '(default)'}, soMaxAgeDays=${profileMeta.posa_sales_order_lookup_max_age_days}`
+        `Cashier test env: token=${profileMeta.custom_have_token}, relayUrl=${profileMeta.custom_edge_relay_url ? 'set' : 'missing'}, soSeries=${profileMeta.posa_sales_order_naming_series || '(default)'}, soMaxAgeDays=${profileMeta.posa_sales_order_lookup_max_age_days}, paymentModes=${profileMeta.paymentModeNames.length}`
       );
     });
 
@@ -587,14 +614,30 @@ describe('Cashier frontend workflow (watch mode)', () => {
     });
 
     cy.get('body').then(($body) => {
-      const paymentButtons = $body
-        .find('.v-btn.pyments:visible, .pyments.v-btn:visible, .pyments .v-btn:visible')
+      const visiblePaymentButtons = $body
+        .find('.pyments .v-btn:visible, .v-btn.pyments:visible, .pyments.v-btn:visible')
         .toArray();
-      if (paymentButtons.length) {
-        cy.wrap(paymentButtons[0]).click({ force: true });
-      } else {
-        cy.log('No visible payment mode buttons found; proceeding with current default payment selection.');
+      const visiblePaymentLabels = visiblePaymentButtons
+        .map((el) => String(el.innerText || '').trim())
+        .filter(Boolean);
+
+      expect(visiblePaymentButtons.length, 'visible payment mode buttons on payment screen').to.be.greaterThan(0);
+
+      if (Array.isArray(profileMeta.paymentModeNames) && profileMeta.paymentModeNames.length) {
+        profileMeta.paymentModeNames.forEach((modeName) => {
+          expect(
+            visiblePaymentLabels.includes(modeName),
+            `payment mode button visible: ${modeName}`
+          ).to.eq(true);
+        });
       }
+
+      const preferredModeName = String(profileMeta.defaultPaymentModeName || '').trim();
+      const preferredBtn =
+        (preferredModeName && visiblePaymentButtons.find((el) => String(el.innerText || '').trim() === preferredModeName)) ||
+        visiblePaymentButtons[0];
+      expect(preferredBtn, 'clickable payment mode button').to.not.equal(undefined);
+      cy.wrap(preferredBtn).click({ force: true });
     });
 
     cy.request({

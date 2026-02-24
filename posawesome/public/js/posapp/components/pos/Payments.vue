@@ -1710,14 +1710,46 @@ export default {
   },
 
   mounted: function () {
-    this.$nextTick(function () {
-      this.current_role = this.get_current_role();
-      evntBus.$on("send_invoice_doc_payment", (invoice_doc) => {
-        this.invoice_doc = invoice_doc;
+      this.$nextTick(function () {
         this.current_role = this.get_current_role();
-        const default_payment = this.invoice_doc.payments.find(
-          (payment) => payment.default == 1
-        );
+        evntBus.$on("send_invoice_doc_payment", (invoice_doc) => {
+          this.invoice_doc = invoice_doc;
+          this.current_role = this.get_current_role();
+          if (!Array.isArray(this.invoice_doc.payments)) {
+            this.invoice_doc.payments = [];
+          }
+          if (
+            this.invoice_doc.payments.length === 0 &&
+            this.pos_profile &&
+            Array.isArray(this.pos_profile.payments)
+          ) {
+            this.invoice_doc.payments = this.pos_profile.payments.map((row, index) => ({
+              idx: index + 1,
+              name:
+                row.name ||
+                `POSA-PAYMENT-${index + 1}-${(row.mode_of_payment || "").replace(/\s+/g, "-")}`,
+              mode_of_payment: row.mode_of_payment,
+              type: row.type || "",
+              default: row.default,
+              amount: 0,
+              base_amount: 0,
+              account: row.account || "",
+            }));
+          }
+          this.invoice_doc.payments.forEach((payment, index) => {
+            if (!payment.idx) {
+              payment.idx = index + 1;
+            }
+            if (payment.amount === undefined || payment.amount === null || payment.amount === "") {
+              payment.amount = 0;
+            }
+            if (payment.base_amount === undefined || payment.base_amount === null || payment.base_amount === "") {
+              payment.base_amount = 0;
+            }
+          });
+          const default_payment = this.invoice_doc.payments.find(
+            (payment) => payment.default == 1
+          );
         this.is_credit_sale = 0;
         this.is_write_off_change = 0;
         if (default_payment && !invoice_doc.is_return) {
