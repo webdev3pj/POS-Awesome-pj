@@ -237,15 +237,23 @@ Status: `Partial`
 
 What exists:
 - Relay pick queue and pick update APIs (`Implemented` backend foundation).
+- Shared-shell fulfillment workspace UI is implemented locally on `codex-4-picker-dispatch` (`Partial`, pending deploy/UAT):
+  - relay queue + sale detail panel in POS Awesome
+  - line list with editable picked quantities
+  - ordered UOM + conversion factor + derived stock qty shown
+  - picker status actions routed through relay `/relay/pick/update`
+- Relay now persists line-level picker results in local sale line payloads (`payload.picker`) during pick updates (`Local implementation`, pending live UAT).
 
 What is missing:
-- Picker-focused UI screen/visibility and guardrails in the shared POS shell (Phase 2).
+- Deploy/UAT/Cypress verification of the picker workspace on the dev site (Phase 2 validation).
+- Picker-focused UX polish/guardrails in shared shell (pick-ticket print/reprint, reason presets, clearer exception prompts).
 - Relay auth/role authorization (Phase 3).
 
 Recommended picker flow (same POS shell, relay-backed):
 - Default picker landing panel shows a relay-backed pick queue (paid, not yet released, pick-pending/in-progress/exception).
 - Picker opens an order detail panel (read-only customer/order/payment summary, editable pick actions only).
-- Picker updates line/item pick status and records exceptions/notes through relay endpoints.
+- Picker updates line-wise picked quantities/status (defaulting to ordered qty) and records exceptions through relay endpoints without mutating the billed invoice.
+- Picker UI respects order UOM and conversion factor (shows picked qty in order UOM plus computed stock qty equivalent; important for wire/length items).
 - Relay updates local sale / line state immediately for offline continuity and queues sync events.
 - Ticket monitor rail remains visible for cross-role context; picker actions may later deep-link from rail row -> pick detail panel.
 
@@ -254,9 +262,14 @@ Status: `Partial`
 
 What exists:
 - Relay dispatch release API and state transitions (`Implemented` backend foundation).
+- Shared-shell fulfillment workspace UI is implemented locally on `codex-4-picker-dispatch` (`Partial`, pending deploy/UAT):
+  - release-ready queue filtering in POS Awesome
+  - relay sale detail/status visibility
+  - relay `/relay/dispatch/release` action with partial/exception override toggle
 
 What is missing:
-- Dispatch operator UI and visibility in the shared POS shell (Phase 2).
+- Deploy/UAT/Cypress verification of dispatch release workflow in the shared shell (Phase 2 validation).
+- Dispatch hold/reason/override UX refinement and explicit supervisor pathways.
 - Server/relay authorization (Phase 3).
 
 Recommended dispatch flow (same POS shell, relay-backed):

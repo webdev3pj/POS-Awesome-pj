@@ -41,6 +41,8 @@ This phase is especially important because the recommended UX direction is a **s
 - Relay stores session role field and action payload metadata (`Partial` foundation).
 - Browser/pos role derivation exists (`UI only`, not trusted authorization).
 - Live relay-enabled SA/Cashier behavior is validated, which provides concrete action paths to lock down in this phase (`TOKEN_CREATED`, `SESSION_OPEN`, `SALE_COMMITTED`).
+- Shared-shell Picker/Dispatch/Supervisor fulfillment workspace is now implemented locally (`codex-4-picker-dispatch`) and calls relay pick/release endpoints from the same POS shell (`/relay/pick/update`, `/relay/dispatch/release`), increasing the urgency of relay auth/authorization before wider rollout.
+- Picker line-wise fulfillment payloads are now persisted in relay local line payloads (`payload.picker`) and included in relay outbox `PICK_EVENT` payloads (`Local implementation`), but role trust remains client-provided until this phase is completed.
 
 ## Target Trust Model (Recommended)
 - Keep one POS Awesome UI shell for all roles.
@@ -89,6 +91,7 @@ This phase is especially important because the recommended UX direction is a **s
 - [ ] Positive tests for each allowed role/action pair.
 - [ ] Manual verification that bypassing UI controls cannot invoke forbidden actions.
 - [ ] Negative tests from shared-shell UI contexts (e.g. Picker browser attempts cashier submit, Dispatch browser attempts pick update with forged role payload).
+- [ ] Add negative tests covering the new shared-shell fulfillment workspace (e.g. forged picker/dispatch payloads from `FulfillmentWorkspace.vue` context).
 
 ## Known Risks
 - Breaking active store devices if auth rollout is not coordinated.

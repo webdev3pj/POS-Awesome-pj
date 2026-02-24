@@ -23,6 +23,39 @@ Note:
 
 ---
 
+## 2026-02-24 - Picker/Dispatch shared-shell fulfillment workspace (relay-backed line-aware workflow, local implementation)
+- Branch: `codex-4-picker-dispatch`
+- Summary: Implemented a first shared-shell Picker/Dispatch/Supervisor fulfillment workspace in POS Awesome, wired to relay pick/release endpoints, and persisted line-wise pick quantities/status in relay local sale line payloads (UOM/conversion-aware) for offline continuity.
+- What changed:
+  - Added role-aware fulfillment workspace UI in `Pos.vue` for `cline-Picker`, `cline-Dispatch`, and `cline-Supervisor` while keeping the same POS Awesome shell and monitor rail.
+  - Added new `FulfillmentWorkspace.vue` (queue + detail + line list + pick/dispatch actions):
+    - relay-backed pick queue (`/relay/pick-queue`)
+    - relay sale detail (`/api/transactions/<local_sale_ref>`)
+    - line-wise picked quantity editing with default `picked_qty = ordered_qty`
+    - UOM + conversion factor + derived picked stock qty display (wire-friendly decimal support)
+    - picker status actions (`PICK_IN_PROGRESS`, `PICK_EXCEPTION`, `PICKED_READY_FOR_RELEASE`)
+    - dispatch release action (`/relay/dispatch/release`) with partial/exception override toggle
+    - local relay pick/dispatch/outbox event history panes
+  - Enhanced relay storage `update_pick_status(...)` to persist line-level pick results in `relay_local_sale_lines.payload.picker` and update line pick status fields, so picker edits survive refresh/offline sessions and are included in relay outbox `PICK_EVENT` payloads.
+  - Updated role/phase docs to reflect the new shared-shell picker/dispatch implementation status and remaining Phase 3 security work.
+- What was verified:
+  - `relay/relay/storage.py` syntax compiles (`python -m py_compile relay/relay/storage.py`).
+  - Code-level wiring review completed for:
+    - `Pos.vue` role-based shell switch
+    - relay pick queue/detail/load/update/release API usage
+    - line UOM/conversion factor handling and picked stock qty derivation
+  - Live deploy/UAT/Cypress validation for Picker/Dispatch on the dev site is still pending.
+- What remains:
+  - Deploy `codex-4-picker-dispatch` and run headed Cypress/manual UAT for Picker and Dispatch flows.
+  - Add dedicated Cypress coverage for picker queue/pick updates and dispatch release workflows.
+  - Confirm cloud-side sync handling for `PICK_EVENT` / `RELEASE_EVENT` payloads matches desired backend contract (local relay/outbox path is implemented).
+  - Implement Phase 3 relay auth + server-side role authorization so shared-shell picker/dispatch actions cannot be spoofed.
+- Links:
+  - `01-role-based-workflow-spec.md`
+  - `phases/phase-2-cashier-picker-dispatch-ui-and-enforcement.md`
+  - `phases/phase-3-relay-auth-and-server-side-role-enforcement.md`
+  - `runbooks/optiplex-edge-relay-next-session.md`
+
 ## 2026-02-24 - LAN-only relay + cloud fallback implemented and live-validated on OptiPlex (SA -> Cashier -> Relay -> Cloud)
 - Branch: `codex-3-edge-relay`
 - Summary: Implemented the LAN-only relay submit-gating + cashier cloud-fallback package, fixed cashier relay commit/payment-screen regressions, configured OptiPlex LAN HTTPS relay via Caddy, and completed headed Cypress watch-mode live validation on the dev site proving SA token storage and cashier relay-first local sale commit with relay UI evidence.

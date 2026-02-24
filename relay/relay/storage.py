@@ -1185,6 +1185,107 @@ def update_pick_status(local_sale_ref, picking_status, picker_user_id=None, note
         if row["dispatch_status"] == "RELEASED":
             return {"ok": False, "code": "ALREADY_RELEASED"}
 
+        # Persist line-wise pick quantities/status in each line payload so picker edits
+        # survive refresh/offline operation without changing billed invoice line values.
+        payload_obj = payload if isinstance(payload, dict) else {}
+        line_updates = payload_obj.get("line_updates") if isinstance(payload_obj.get("line_updates"), list) else []
+        if line_updates:
+            line_rows = conn.execute(
+                """
+                SELECT id, qty, uom, pick_status, payload
+                FROM relay_local_sale_lines
+                WHERE local_sale_ref = ?
+                """,
+                (local_sale_ref,),
+            ).fetchall()
+            line_map = {int(r["id"]): r for r in line_rows}
+
+            for line_update in line_updates:
+                if not isinstance(line_update, dict):
+                    continue
+                try:
+                    line_id = int(line_update.get("line_id") or line_update.get("id"))
+                except Exception:
+                    line_id = 0
+                if not line_id or line_id not in line_map:
+                    continue
+
+                line_row = line_map[line_id]
+                existing_payload = _loads(line_row["payload"]) if line_row["payload"] else {}
+                if not isinstance(existing_payload, dict):
+                    existing_payload = {}
+
+                ordered_qty = float(line_row["qty"] or 0)
+                ordered_uom = (line_row["uom"] or "").strip()
+                try:
+                    picked_qty = float(line_update.get("picked_qty") if line_update.get("picked_qty") is not None else ordered_qty)
+                except Exception:
+                    picked_qty = ordered_qty
+
+                if picked_qty < 0:
+                    picked_qty = 0.0
+
+                try:
+                    conversion_factor = float(
+                        line_update.get("conversion_factor")
+                        if line_update.get("conversion_factor") is not None
+                        else (
+                            (existing_payload or {}).get("conversion_factor")
+                            or 1
+                        )
+                    )
+                except Exception:
+                    conversion_factor = 1.0
+                if not conversion_factor:
+                    conversion_factor = 1.0
+
+                try:
+                    picked_stock_qty = float(
+                        line_update.get("picked_stock_qty")
+                        if line_update.get("picked_stock_qty") is not None
+                        else picked_qty * conversion_factor
+                    )
+                except Exception:
+                    picked_stock_qty = picked_qty * conversion_factor
+
+                line_pick_status = (
+                    str(line_update.get("pick_status") or "").strip().upper()
+                    or ("PICKED" if abs(picked_qty - ordered_qty) < 1e-9 else "PARTIAL")
+                )
+                line_note = str(line_update.get("note") or line_update.get("notes") or "").strip()
+
+                picker_snapshot = existing_payload.get("picker") if isinstance(existing_payload.get("picker"), dict) else {}
+                picker_snapshot.update(
+                    {
+                        "ordered_qty": ordered_qty,
+                        "ordered_uom": ordered_uom,
+                        "picked_qty": picked_qty,
+                        "picked_uom": str(line_update.get("picked_uom") or ordered_uom).strip(),
+                        "conversion_factor": conversion_factor,
+                        "picked_stock_qty": picked_stock_qty,
+                        "pick_status": line_pick_status,
+                        "note": line_note,
+                        "updated_at": now,
+                    }
+                )
+                existing_payload["picker"] = picker_snapshot
+
+                conn.execute(
+                    """
+                    UPDATE relay_local_sale_lines
+                    SET pick_status = ?, line_status = ?, payload = ?, updated_at = ?
+                    WHERE id = ? AND local_sale_ref = ?
+                    """,
+                    (
+                        line_pick_status,
+                        picking_status,
+                        _dumps(existing_payload),
+                        now,
+                        line_id,
+                        local_sale_ref,
+                    ),
+                )
+
         conn.execute(
             """
             UPDATE relay_local_sales

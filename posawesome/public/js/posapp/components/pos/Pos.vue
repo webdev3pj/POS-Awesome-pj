@@ -15,54 +15,66 @@
     ></WorkflowTicketRail>
     <OpeningDialog v-if="dialog" :dialog="dialog"></OpeningDialog>
     <v-row v-show="!dialog">
-      <v-col
-        v-show="!payment && !offers && !coupons"
-        xl="5"
-        lg="5"
-        md="5"
-        sm="5"
-        cols="12"
-        class="pos pr-0"
-      >
-        <ItemsSelector></ItemsSelector>
-      </v-col>
-      <v-col
-        v-show="offers"
-        xl="5"
-        lg="5"
-        md="5"
-        sm="5"
-        cols="12"
-        class="pos pr-0"
-      >
-        <PosOffers></PosOffers>
-      </v-col>
-      <v-col
-        v-show="coupons"
-        xl="5"
-        lg="5"
-        md="5"
-        sm="5"
-        cols="12"
-        class="pos pr-0"
-      >
-        <PosCoupons></PosCoupons>
-      </v-col>
-      <v-col
-        v-show="payment"
-        xl="5"
-        lg="5"
-        md="5"
-        sm="5"
-        cols="12"
-        class="pos pr-0"
-      >
-        <Payments></Payments>
-      </v-col>
+      <template v-if="is_fulfillment_role">
+        <v-col cols="12" class="pos">
+          <FulfillmentWorkspace
+            :pos_profile="pos_profile"
+            :pos_opening_shift="pos_opening_shift"
+            :business_date="session_business_date"
+            :current_role="current_role"
+          ></FulfillmentWorkspace>
+        </v-col>
+      </template>
+      <template v-else>
+        <v-col
+          v-show="!payment && !offers && !coupons"
+          xl="5"
+          lg="5"
+          md="5"
+          sm="5"
+          cols="12"
+          class="pos pr-0"
+        >
+          <ItemsSelector></ItemsSelector>
+        </v-col>
+        <v-col
+          v-show="offers"
+          xl="5"
+          lg="5"
+          md="5"
+          sm="5"
+          cols="12"
+          class="pos pr-0"
+        >
+          <PosOffers></PosOffers>
+        </v-col>
+        <v-col
+          v-show="coupons"
+          xl="5"
+          lg="5"
+          md="5"
+          sm="5"
+          cols="12"
+          class="pos pr-0"
+        >
+          <PosCoupons></PosCoupons>
+        </v-col>
+        <v-col
+          v-show="payment"
+          xl="5"
+          lg="5"
+          md="5"
+          sm="5"
+          cols="12"
+          class="pos pr-0"
+        >
+          <Payments></Payments>
+        </v-col>
 
-      <v-col xl="7" lg="7" md="7" sm="7" cols="12" class="pos">
-        <Invoice></Invoice>
-      </v-col>
+        <v-col xl="7" lg="7" md="7" sm="7" cols="12" class="pos">
+          <Invoice></Invoice>
+        </v-col>
+      </template>
     </v-row>
   </div>
 </template>
@@ -83,6 +95,7 @@ import Variants from './Variants.vue';
 import Returns from './Returns.vue';
 import MpesaPayments from './Mpesa-Payments.vue';
 import WorkflowTicketRail from './WorkflowTicketRail.vue';
+import FulfillmentWorkspace from './FulfillmentWorkspace.vue';
 
 export default {
   data: function () {
@@ -94,6 +107,7 @@ export default {
       payment: false,
       offers: false,
       coupons: false,
+      current_role: '',
     };
   },
 
@@ -113,15 +127,35 @@ export default {
     MpesaPayments,
     SalesOrders,
     WorkflowTicketRail,
+    FulfillmentWorkspace,
+  },
+
+  computed: {
+    is_fulfillment_role() {
+      return ['cline-Picker', 'cline-Dispatch', 'cline-Supervisor'].includes(
+        (this.current_role || '').trim()
+      );
+    },
   },
 
   methods: {
+    get_current_role() {
+      try {
+        return (localStorage.getItem('pos_current_role') || '').trim();
+      } catch (e) {
+        return '';
+      }
+    },
+    refresh_current_role() {
+      this.current_role = this.get_current_role();
+    },
     check_opening_entry() {
       return frappe
         .call('posawesome.posawesome.api.posapp.check_opening_shift', {
           user: frappe.session.user,
         })
         .then((r) => {
+          this.refresh_current_role();
           if (r.message) {
             this.pos_profile = r.message.pos_profile;
             this.pos_opening_shift = r.message.pos_opening_shift;
@@ -205,12 +239,23 @@ export default {
 
   mounted: function () {
     this.$nextTick(function () {
+      this.refresh_current_role();
       this.check_opening_entry();
       this.get_pos_setting();
+      this._handle_storage_event = (event) => {
+        if (!event || event.key === 'pos_current_role') {
+          this.refresh_current_role();
+        }
+      };
+      if (typeof window !== 'undefined' && window.addEventListener) {
+        window.addEventListener('storage', this._handle_storage_event);
+      }
       evntBus.$on('close_opening_dialog', () => {
+        this.refresh_current_role();
         this.dialog = false;
       });
       evntBus.$on('register_pos_data', (data) => {
+        this.refresh_current_role();
         this.pos_profile = data.pos_profile;
         this.get_offers(this.pos_profile.name);
         this.pos_opening_shift = data.pos_opening_shift;
@@ -252,6 +297,9 @@ export default {
     evntBus.$off('show_coupons');
     evntBus.$off('open_closing_dialog');
     evntBus.$off('submit_closing_pos');
+    if (typeof window !== 'undefined' && window.removeEventListener && this._handle_storage_event) {
+      window.removeEventListener('storage', this._handle_storage_event);
+    }
   },
 };
 </script>

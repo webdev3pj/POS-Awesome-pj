@@ -161,8 +161,9 @@ Fallback (not preferred for this workflow):
   - OptiPlex HTTPS reverse-proxy (Caddy) + shop-PC certificate trust guidance
   - Live headed Cypress validation proving SA -> relay token and cashier -> relay local sale -> cloud sync
 - Next recommended work:
+  - Deploy and validate `codex-4-picker-dispatch` shared-shell Picker/Dispatch fulfillment workspace (relay-backed queue/detail/actions)
+  - Add headed Cypress/manual UAT coverage for picker and dispatch workflows (including wire/UOM conversion-factor line editing)
   - Phase 3 relay auth + server-side role enforcement
-  - Picker/Dispatch relay-backed flow coverage and E2E tests
   - shop-PC certificate trust rollout and support docs cleanup
 
 ## Next Session Test Sequence (Recommended)
@@ -186,7 +187,21 @@ Choose `Chrome`.
 6. `cypress/e2e/cashier_relay_down_cloud_fallback_watch.cy.js`
 7. `cypress/e2e/cashier_token_disabled_profile_smoke.cy.js` (regression)
 
-### 4. Optional visual relay demo sequence (Cypress + local relay pages)
+### 4. Picker/Dispatch validation sequence (after deploying `codex-4-picker-dispatch`)
+Run in headed mode (manual + Cypress helpers as available):
+1. Set `cline` role to `Picker` and open POS
+2. Confirm shared-shell fulfillment panel loads (not cashier cart/payment layout)
+3. Open a relay local sale row and verify:
+   - line list visible
+   - `ordered qty`, `UOM`, `conversion factor`, `ordered stock qty` shown
+   - `picked qty` defaults to ordered qty
+4. Edit at least one line picked qty (decimal/wire-style value where possible) and save pick update
+5. Verify relay transaction detail (`/api/transactions/<local_sale_ref>`) shows persisted `payload.picker` line data and `PICK_EVENT` outbox/pick event entries
+6. Set `cline` role to `Dispatch` and open POS
+7. Confirm dispatch queue/release-ready filtering and release action
+8. Verify relay transaction detail + dispatch events after release
+
+### 5. Optional visual relay demo sequence (Cypress + local relay pages)
 Run this when you need business-owner proof of relay local storage/status screens:
 1. `cypress/e2e/admin_set_cline_sa_only_role.cy.js`
 2. `cypress/e2e/sa_workflow_frontend_watch.cy.js`
@@ -195,7 +210,7 @@ Run this when you need business-owner proof of relay local storage/status screen
 5. `cypress/e2e/cashier_workflow_frontend_watch.cy.js`
 6. Open local relay transaction proof page (`/api/transactions/<local_sale_ref>` or dashboard `/` filtered to `local_sale_ref`) and pause for observation (manual or local demo spec, if present)
 
-### 5. What to watch for (relay-specific)
+### 6. What to watch for (relay-specific)
 - SA token dialog still succeeds
 - Cashier `PAY` -> `Submit` path should prefer relay commit path when relay is configured/reachable
 - In LAN-only mode, relay submit should not be blocked solely because cloud backend cannot reach a private LAN relay URL

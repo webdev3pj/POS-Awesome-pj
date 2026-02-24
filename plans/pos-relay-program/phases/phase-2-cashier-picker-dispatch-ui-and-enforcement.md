@@ -16,7 +16,8 @@
 ## Document Currency
 - This is the active phase doc for remaining cashier/picker/dispatch/supervisor UX work.
 - Cashier filtering, LAN-only relay status semantics, cloud fallback UX, and relay-first cashier SO-load/payment-path coverage are implemented and verified on `codex-3-edge-relay`.
-- The remaining tasks in this file are primarily Picker/Dispatch/Supervisor UI completion and cross-role UX polish in shared components.
+- `codex-4-picker-dispatch` now includes a first shared-shell Picker/Dispatch/Supervisor fulfillment workspace wired to relay pick/release APIs (local implementation; deploy/UAT/Cypress coverage pending).
+- The remaining tasks in this file are primarily Picker/Dispatch/Supervisor UX polish, visibility-matrix cleanup across shared components, and test coverage.
 - Use `../CHANGELOG_PROGRESS.md` and the cashier UAT doc for the latest verified cashier status.
 
 ## Purpose
@@ -50,6 +51,13 @@ Complete the operator-facing role UX so each role sees the right screens/actions
 - LAN-only relay mode cashier UX semantics implemented (browser-LAN relay health as submit gate) and live-validated on the OptiPlex/dev site.
 - Cashier prompted cloud fallback when relay is down but cloud is reachable implemented and validated (Cypress watch mode).
 - Relay-first cashier submit path live-validated end-to-end with local relay transaction/outbox evidence and cloud sync completion.
+- Shared-shell Picker/Dispatch/Supervisor fulfillment workspace added in `Pos.vue` (`Local implementation`, pending deploy/UAT):
+  - role-default fulfillment panel replaces cashier cart/payment layout for fulfillment roles
+  - relay pick queue + relay transaction detail views
+  - picker line list with editable `picked_qty` (defaults to ordered qty)
+  - UOM/conversion factor and derived stock qty display for line-level picking (wire-friendly decimals)
+  - dispatch release action wired to relay release endpoint
+- Relay storage now persists line-level pick results in local sale line payloads (`relay_local_sale_lines.payload.picker`) during `/relay/pick/update` so picker edits survive refresh/offline usage (`Local implementation`, pending live UAT).
 
 ## Recommended UX Direction (Same POS Awesome Shell for All Roles)
 - Use one POS Awesome UI shell for all roles (same navigation, same relay/cloud status chips, same monitor rail).
@@ -66,12 +74,12 @@ Complete the operator-facing role UX so each role sees the right screens/actions
 - [ ] Add read-only current role display in `Navbar.vue`.
 - [ ] Implement per-role visibility matrix in `Invoice.vue` (Held, Select SO, Return, Save/New, PAY, draft print behavior).
 - [ ] Harden `Payments.vue` role gating beyond SA only (picker/dispatch/supervisor UX rules).
-- [ ] Implement/complete picker workflow UI for pick queue and pick status actions (within the shared POS shell).
-- [ ] Implement/complete dispatch workflow UI for release actions and hold/reason states (within the shared POS shell).
+- [ ] Implement/complete picker workflow UI for pick queue and pick status actions (within the shared POS shell). `Partial`: first relay-backed shared-shell workspace exists on `codex-4-picker-dispatch`; needs deploy/UAT/Cypress and UX polish (pick ticket printing, line notes/reason presets, supervisor exception paths).
+- [ ] Implement/complete dispatch workflow UI for release actions and hold/reason states (within the shared POS shell). `Partial`: relay-backed release action and queue filtering exist on `codex-4-picker-dispatch`; needs deploy/UAT/Cypress and hold/reason/override refinements.
 - [ ] Add supervisor UI affordances for exception review/override (without weakening default restrictions).
 - [ ] Decide whether the ticket monitor rail remains read-only in Phase 2 or gains role-specific row actions (open details, quick filters, transition shortcuts).
-- [ ] Design and implement role-specific default views/panels in the shared POS shell (SA/Cashier/Picker/Dispatch/Supervisor) without duplicating app routes unnecessarily.
-- [ ] Wire picker/dispatch UI actions to relay-backed endpoints (`/relay/pick-queue`, `/relay/pick/update`, `/relay/dispatch/release`) so offline relay remains the operational source.
+- [ ] Design and implement role-specific default views/panels in the shared POS shell (SA/Cashier/Picker/Dispatch/Supervisor) without duplicating app routes unnecessarily. `Partial`: Picker/Dispatch/Supervisor now route to shared fulfillment panel in `Pos.vue`; SA/Cashier/UI-polish work remains.
+- [ ] Wire picker/dispatch UI actions to relay-backed endpoints (`/relay/pick-queue`, `/relay/pick/update`, `/relay/dispatch/release`) so offline relay remains the operational source. `Partial`: wired in local implementation; needs live verification and Cypress coverage.
 - [ ] Align labels/messages with role terminology used in `01-role-based-workflow-spec.md`.
 - [ ] Update role spec statuses after implementation.
 
@@ -84,6 +92,7 @@ Complete the operator-facing role UX so each role sees the right screens/actions
 - [x] LAN-only relay mode status/fallback Cypress coverage (relay down + cloud up / cloud down cases).
 - [ ] Picker UI workflow Cypress coverage (queue -> pick update -> status changes reflected in relay/UI).
 - [ ] Dispatch UI workflow Cypress coverage (release path + hold/reason flows reflected in relay/UI).
+- [ ] Manual/headed UAT on OptiPlex/dev site for shared-shell picker/dispatch workspace (`codex-4-picker-dispatch`) including wire/UOM conversion-factor line editing checks.
 - [ ] Supervisor exception/override Cypress coverage (once supervisor UX is defined).
 
 ## Known Risks
