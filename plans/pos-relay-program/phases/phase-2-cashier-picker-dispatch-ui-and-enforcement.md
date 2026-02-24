@@ -15,13 +15,15 @@
 
 ## Document Currency
 - This is the active phase doc for remaining cashier/picker/dispatch/supervisor UX work.
-- Cashier filtering and basic cashier SO-load/payment-path coverage are already implemented and verified; the remaining tasks in this file focus on deeper role UI completion and broader role coverage.
+- Cashier filtering, LAN-only relay status semantics, cloud fallback UX, and relay-first cashier SO-load/payment-path coverage are implemented and verified on `codex-3-edge-relay`.
+- The remaining tasks in this file are primarily Picker/Dispatch/Supervisor UI completion and cross-role UX polish in shared components.
 - Use `../CHANGELOG_PROGRESS.md` and the cashier UAT doc for the latest verified cashier status.
 
 ## Purpose
 Complete the operator-facing role UX so each role sees the right screens/actions and is blocked from the wrong ones at the UI level.
 
 ## In Scope
+- Single-shell role strategy within POS Awesome (same app UI, role-limited capabilities)
 - Role display in navbar
 - Role-based visibility/disable rules across POS components
 - Picker and Dispatch operator UI workflow completion
@@ -45,17 +47,31 @@ Complete the operator-facing role UX so each role sees the right screens/actions
   - cashier can load SA-created SO into payment screen (`Partial`, submit success depends on environment/relay config)
 - Regression smoke test added for `custom_have_token = 0` on POS Profile to ensure cashier POS still opens and payment screen is reachable (`Implemented`, Cypress).
 - OptiPlex handoff package docs added for next relay-focused cashier validation pass (`Implemented`, docs).
+- LAN-only relay mode cashier UX semantics implemented (browser-LAN relay health as submit gate) and live-validated on the OptiPlex/dev site.
+- Cashier prompted cloud fallback when relay is down but cloud is reachable implemented and validated (Cypress watch mode).
+- Relay-first cashier submit path live-validated end-to-end with local relay transaction/outbox evidence and cloud sync completion.
+
+## Recommended UX Direction (Same POS Awesome Shell for All Roles)
+- Use one POS Awesome UI shell for all roles (same navigation, same relay/cloud status chips, same monitor rail).
+- Change what the operator can *see/edit/do* based on role, instead of launching separate apps.
+- Default role landing/panel recommendations:
+  - SA: cart + customer + `Save/New` token flow (payment controls disabled/hidden)
+  - Cashier: cart + `Select S.O` + payment flow
+  - Picker: pick queue / order detail / line pick actions (read-only pricing/payment)
+  - Dispatch: release queue / release confirmation / hold reasons (read-only payment)
+  - Supervisor: read-all + override/exception tools with explicit audit prompts
+- All operator state transitions should sync through the offline relay first when relay-backed flows are used (pick/release events recorded locally and synced via relay outbox).
 
 ## Implementation Tasks
 - [ ] Add read-only current role display in `Navbar.vue`.
 - [ ] Implement per-role visibility matrix in `Invoice.vue` (Held, Select SO, Return, Save/New, PAY, draft print behavior).
 - [ ] Harden `Payments.vue` role gating beyond SA only (picker/dispatch/supervisor UX rules).
-- [ ] Implement LAN-only relay status semantics in cashier UX (`Navbar.vue`/`Payments.vue`) so browser-LAN relay health (not cloud-backend relay check) becomes the effective submit gate in LAN-only mode.
-- [ ] Implement cashier prompted cloud fallback when relay is down but cloud is reachable (per POS Profile toggle), with clear operator messaging.
-- [ ] Implement/complete picker workflow UI for pick queue and pick status actions.
-- [ ] Implement/complete dispatch workflow UI for release actions and hold/reason states.
+- [ ] Implement/complete picker workflow UI for pick queue and pick status actions (within the shared POS shell).
+- [ ] Implement/complete dispatch workflow UI for release actions and hold/reason states (within the shared POS shell).
 - [ ] Add supervisor UI affordances for exception review/override (without weakening default restrictions).
 - [ ] Decide whether the ticket monitor rail remains read-only in Phase 2 or gains role-specific row actions (open details, quick filters, transition shortcuts).
+- [ ] Design and implement role-specific default views/panels in the shared POS shell (SA/Cashier/Picker/Dispatch/Supervisor) without duplicating app routes unnecessarily.
+- [ ] Wire picker/dispatch UI actions to relay-backed endpoints (`/relay/pick-queue`, `/relay/pick/update`, `/relay/dispatch/release`) so offline relay remains the operational source.
 - [ ] Align labels/messages with role terminology used in `01-role-based-workflow-spec.md`.
 - [ ] Update role spec statuses after implementation.
 
@@ -64,20 +80,25 @@ Complete the operator-facing role UX so each role sees the right screens/actions
 - [ ] Cypress assertions for hidden/disabled controls by role.
 - [x] Regression checks for cashier SO selection filtering (POS Profile series + age) on live dev site.
 - [x] Smoke regression: cashier POS/payment screen still works when `custom_have_token = 0`.
-- [ ] Full cashier payment submit success under relay-configured or token-disabled submit environment.
-- [ ] LAN-only relay mode status/fallback Cypress coverage (relay down + cloud up / cloud down cases) once implemented.
+- [x] Full cashier payment submit success under relay-configured submit environment (relay local sale + cloud sync evidence captured).
+- [x] LAN-only relay mode status/fallback Cypress coverage (relay down + cloud up / cloud down cases).
+- [ ] Picker UI workflow Cypress coverage (queue -> pick update -> status changes reflected in relay/UI).
+- [ ] Dispatch UI workflow Cypress coverage (release path + hold/reason flows reflected in relay/UI).
+- [ ] Supervisor exception/override Cypress coverage (once supervisor UX is defined).
 
 ## Known Risks
 - UI-only blocks can create false sense of security until Phase 3 auth lands.
 - Shared components may have side effects when hidden/disabled logic is added.
 - Relay/cloud status semantics can confuse operators if LAN-only mode diagnostics and submit gating are not clearly distinguished in the UI.
+- A single-shell role strategy improves training and consistency, but increases the importance of strict backend/relay authorization and comprehensive hidden/disabled control tests.
 
 ## Deferred Items
 - Relay/server-side authorization enforcement (Phase 3).
 
 ## Exit Criteria
 - Role visibility matrix in `01-role-based-workflow-spec.md` is mostly `Implemented` for UI-level rules.
-- Picker and Dispatch operators can complete their UI workflows without using cashier screens.
+- Picker and Dispatch operators can complete their UI workflows inside the shared POS shell without using cashier screens.
+- Relay-backed pick/release actions visibly update local relay state and survive cloud interruptions (with later sync).
 
 ## Cross-References
 - `../01-role-based-workflow-spec.md`

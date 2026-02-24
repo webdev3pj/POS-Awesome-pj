@@ -4,6 +4,7 @@
 - This file defines exactly what each role should be able to see and do in POS.
 - SA can build orders/tokens and monitor status, but must not take payment or manage cash shifts.
 - Cashier owns payment and cash opening/closing.
+- Recommended UX direction: all roles use the same POS Awesome shell, but each role is limited to the actions/screens they are allowed to use.
 - The left ticket monitor sidebar is visible to all roles and is planned/scoped around `POS Profile + business date`.
 - UI blocks improve safety, but real security still requires server/relay authorization (Phase 3).
 
@@ -88,6 +89,30 @@ Primary job:
 ### Supervisor
 Primary job:
 - Approve exceptions, overrides, and sensitive actions.
+
+## Recommended Operator UX Strategy (Single POS Awesome Shell)
+### Recommendation
+- Use one POS Awesome UI shell for all roles (same app, same navbar, same status chips, same monitor rail).
+- Limit actions, editability, and default panels by role instead of creating separate apps.
+
+### Why this is the best fit here
+- Lower training cost: staff learn one UI layout.
+- Lower maintenance cost: fewer duplicated flows/components.
+- Better observability consistency: relay/cloud status and monitor rail appear in one place.
+- Better offline continuity: all roles can operate against the same relay-backed local state model.
+
+### Non-negotiable constraint
+- Because all roles share the same UI shell, backend/relay authorization (Phase 3) is mandatory.
+- Hidden/disabled controls are UX guardrails, not security.
+
+## Relay-First Sync Principle for All Roles (Operational Rule)
+- If a workflow action affects store operations, it should be representable in local relay state first, then synced to cloud via relay outbox when applicable.
+- Current proven flow:
+  - SA token create -> relay token + `TOKEN_CREATED`
+  - Cashier payment commit -> relay local sale + `SALE_COMMITTED`
+- Remaining role flows should follow the same pattern:
+  - Picker updates -> relay pick events / sale line status updates (then sync)
+  - Dispatch release -> relay dispatch events / release status updates (then sync)
 
 ## Component Visibility Matrix (Intended Behavior)
 Status tags in the last column reflect the current program branch family state; evidence detail lives in UAT docs and `CHANGELOG_PROGRESS.md`.
@@ -214,8 +239,15 @@ What exists:
 - Relay pick queue and pick update APIs (`Implemented` backend foundation).
 
 What is missing:
-- Picker-focused UI screen/visibility and guardrails (Phase 2).
+- Picker-focused UI screen/visibility and guardrails in the shared POS shell (Phase 2).
 - Relay auth/role authorization (Phase 3).
+
+Recommended picker flow (same POS shell, relay-backed):
+- Default picker landing panel shows a relay-backed pick queue (paid, not yet released, pick-pending/in-progress/exception).
+- Picker opens an order detail panel (read-only customer/order/payment summary, editable pick actions only).
+- Picker updates line/item pick status and records exceptions/notes through relay endpoints.
+- Relay updates local sale / line state immediately for offline continuity and queues sync events.
+- Ticket monitor rail remains visible for cross-role context; picker actions may later deep-link from rail row -> pick detail panel.
 
 ### Dispatch (`cline-Dispatch`)
 Status: `Partial`
@@ -224,8 +256,14 @@ What exists:
 - Relay dispatch release API and state transitions (`Implemented` backend foundation).
 
 What is missing:
-- Dispatch operator UI and visibility (Phase 2).
+- Dispatch operator UI and visibility in the shared POS shell (Phase 2).
 - Server/relay authorization (Phase 3).
+
+Recommended dispatch flow (same POS shell, relay-backed):
+- Default dispatch landing panel shows release-ready orders (picked/paid, not released) and held/exception items requiring resolution.
+- Dispatch confirms release with an explicit action (and reason if hold/override path is used).
+- Relay records dispatch release event locally and updates local sale release status immediately.
+- Sync to cloud happens through relay outbox/event sync without blocking the local release action when offline policy allows.
 
 ### Supervisor (`cline-Supervisor`)
 Status: `Planned` / `Partial`
@@ -238,6 +276,10 @@ What is missing:
 - Auditable approval actions and reason capture.
 - Relay/server-side supervisor authorization enforcement.
 
+Recommended supervisor behavior in shared shell:
+- Supervisor can view the same operator panels but gets explicit override buttons only on exception paths.
+- Every override requires a reason and should be written to relay/backend audit logs.
+
 ## Backend and Relay Authorization Expectations (Target State)
 ### Backend (ERPNext/Frappe)
 - Validate role on sensitive POS APIs where role-specific action matters.
@@ -249,6 +291,7 @@ What is missing:
 - Authorize action by trusted role/identity.
 - Reject spoofed role payloads from browser.
 - Log role/user/device on all mutating workflow transitions.
+- Preserve offline-first behavior for authorized role actions by writing local state/events first, then syncing via outbox.
 
 Status: `Planned` (Phase 3)
 
