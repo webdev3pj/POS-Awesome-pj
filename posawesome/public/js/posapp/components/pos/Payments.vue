@@ -1715,15 +1715,15 @@ export default {
         evntBus.$on("send_invoice_doc_payment", (invoice_doc) => {
           this.invoice_doc = invoice_doc;
           this.current_role = this.get_current_role();
-          if (!Array.isArray(this.invoice_doc.payments)) {
-            this.invoice_doc.payments = [];
-          }
+          let normalizedPayments = Array.isArray(this.invoice_doc.payments)
+            ? [...this.invoice_doc.payments]
+            : [];
           if (
-            this.invoice_doc.payments.length === 0 &&
+            normalizedPayments.length === 0 &&
             this.pos_profile &&
             Array.isArray(this.pos_profile.payments)
           ) {
-            this.invoice_doc.payments = this.pos_profile.payments.map((row, index) => ({
+            normalizedPayments = this.pos_profile.payments.map((row, index) => ({
               idx: index + 1,
               name:
                 row.name ||
@@ -1736,7 +1736,7 @@ export default {
               account: row.account || "",
             }));
           }
-          this.invoice_doc.payments.forEach((payment, index) => {
+          normalizedPayments.forEach((payment, index) => {
             if (!payment.idx) {
               payment.idx = index + 1;
             }
@@ -1747,6 +1747,7 @@ export default {
               payment.base_amount = 0;
             }
           });
+          this.$set(this.invoice_doc, "payments", normalizedPayments);
           const default_payment = this.invoice_doc.payments.find(
             (payment) => payment.default == 1
           );
