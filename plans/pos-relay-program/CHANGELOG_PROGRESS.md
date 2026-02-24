@@ -23,6 +23,63 @@ Note:
 
 ---
 
+## 2026-02-24 - LAN-only relay + cloud fallback implemented and live-validated on OptiPlex (SA -> Cashier -> Relay -> Cloud)
+- Branch: `codex-3-edge-relay`
+- Summary: Implemented the LAN-only relay submit-gating + cashier cloud-fallback package, fixed cashier relay commit/payment-screen regressions, configured OptiPlex LAN HTTPS relay via Caddy, and completed headed Cypress watch-mode live validation on the dev site proving SA token storage and cashier relay-first local sale commit with relay UI evidence.
+- What changed:
+  - Implemented LAN-only relay connectivity mode (browser-LAN health check as submit gate) and relay-down prompted cloud fallback toggle in POS Profile-backed relay logic.
+  - Added/used POS Profile relay controls:
+    - `posa_edge_relay_connectivity_mode`
+    - `posa_allow_cloud_fallback_when_relay_down`
+  - Added OptiPlex LAN HTTPS relay reverse proxy + certificate tooling (Caddy) and non-technical shop PC trust runbook guidance.
+  - Fixed cashier relay flow regressions across multiple commits (deployed during this session):
+    - derive relay token from SO line-item when top-level token fields are blank (`1c47d36`)
+    - render/seed payment modes correctly on SO -> SI cashier payment screen (`5522d5f`, `fcc719d`, `fd781cc`)
+  - Added/used headed Cypress watch-mode relay demo specs to show local relay dashboard/token/transaction detail and `/queue` UI updates with explicit 20-second observation pauses (local test artifacts/specs used for UAT demonstration).
+  - Updated plan docs and added a new dated UAT report for the completed relay demo/evidence set.
+- What was verified:
+  - Dev site deployed + migrated with relay mode fields available.
+  - `PJ7 CASHIER` configured for LAN HTTPS relay and fallback:
+    - `custom_edge_relay_url = https://192.168.50.168`
+    - `posa_edge_relay_connectivity_mode = lan_only_browser_checked`
+    - `posa_allow_cloud_fallback_when_relay_down = 1`
+  - Local relay health on OptiPlex:
+    - `http://127.0.0.1:8787/health` -> `ok: true`
+    - `https://192.168.50.168/health` -> `ok: true`
+  - Full headed Cypress watch-mode coverage (Chrome) passes on current deployed app:
+    - admin profile config
+    - SA role preflight
+    - SA workflow
+    - cashier role preflight
+    - cashier workflow
+    - relay-down/cloud-fallback workflow
+    - token-disabled regression smoke
+  - Full demo (Cypress, headed) proving relay data lifecycle:
+    - SA creates `Sales Order`/token `SAL-ORD-PJ7-2026-00009`
+    - Relay stores token and emits `TOKEN_CREATED` outbox event (`done`)
+    - Cashier loads the SO, pays, and relay commits local sale `LSR-PJ7 -20260224200538-34917A`
+    - Relay transaction detail shows:
+      - `sale_status = SALE_COMMITTED_LOCAL`
+      - `pick_status = PAID_PENDING_PICK`
+      - `dispatch_status = PENDING`
+      - `cloud_sync_status = SALE_SYNCED_SI_SUBMITTED`
+      - `cloud_invoice_name = ACC-SINV-2026-00265`
+    - Relay token state transitions to `TOKEN_PAID` with `consumed_sale_ref` set to the new local sale ref
+    - Relay dashboard (`/`) shows the local sale row and v2 outbox counters updating
+  - Legacy queue UI (`/queue`) can be shown updating live via Cypress when a legacy queue event is enqueued; documented distinction from v2 relay outbox/transactions used by SA/Cashier local-first flow.
+- What remains:
+  - Commit/push Cypress relay demo specs + cashier spec hardening if these test improvements should be retained in the branch (currently local-only).
+  - Clear or formally classify the one historical legacy queue/outbox failure row (`LSR-PJ7 -20260223063408-6D29F5`, old `404` path) so dashboards are cleaner for business demos.
+  - Continue with next milestone work:
+    - Phase 3 relay auth + server-side role enforcement hardening
+    - Picker/Dispatch relay-backed UI/E2E coverage
+    - shop-PC certificate trust rollout + rollout checklist execution
+- Links:
+  - `uat/2026-02-24-optiplex-lan-https-relay-sa-cashier-e2e-demo.md`
+  - `runbooks/optiplex-edge-relay-next-session.md`
+  - `runbooks/shop-pc-lan-relay-setup-non-technical.md`
+  - `03-offline-edge-relay-and-windows-service-spec.md`
+
 ## 2026-02-23 - OptiPlex zero-context handoff package docs (LAN-only mode + cloud fallback implementation handoff)
 - Branch: `codex-3-edge-relay`
 - Summary: Added a zero-context relay-host handoff package so a fresh Codex session on the OptiPlex can start immediately, with exact branch/baseline commit, local-only secret file requirements, LAN-only relay mode implementation target, and non-technical shop-PC setup guidance.

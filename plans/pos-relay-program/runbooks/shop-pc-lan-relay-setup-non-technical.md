@@ -5,6 +5,7 @@
 - Run the relay certificate installer as **Administrator**.
 - Open `https://192.168.50.168/health` in Chrome.
 - If it opens without a browser warning, that PC is ready to use the local relay over LAN HTTPS.
+- This setup path was validated on the OptiPlex/dev-site relay demo on `2026-02-24`; remaining work is rolling it out on the other shop PCs.
 
 ## Why this is needed (plain English)
 - Your POS page comes from Frappe Cloud (`https://...frappe.cloud`).
@@ -17,6 +18,7 @@
 - The OptiPlex relay machine is running and the relay HTTPS setup was completed by Codex/IT.
 - You have the file:
   - `install_shop_pc_relay_cert.bat`
+- (Codex/IT note: this is exported/generated from the OptiPlex relay HTTPS setup package; staff should receive the file directly and should not browse repo folders)
 - You are logged into Windows with rights to approve an Administrator prompt.
 
 ## One-Time Setup Steps (per PC)
@@ -32,6 +34,15 @@
    - a small JSON page appears (relay health response)
 
 If this works, the PC is ready.
+
+## Quick extra check in POS (optional, after cert trust is installed)
+After Codex/IT confirms the POS Profile relay URL is set:
+1. Open the POS page (`https://...frappe.cloud`)
+2. Wait for the POS status chips at the top
+3. Confirm you can see:
+   - `Relay Online (LAN)` (green)
+
+If the POS page works but does not show `Relay Online (LAN)`, tell Codex/IT.
 
 ## What the staff member does NOT need to do
 - No command line
@@ -67,4 +78,5 @@ What to tell Codex/IT:
 
 ## Notes for Codex/IT (do not ask staff to do this)
 - The certificate installer is generated/maintained from `relay/windows_https/install_shop_pc_relay_cert.ps1` and `relay/windows_https/install_shop_pc_relay_cert.bat`.
+- Exported installer/cert artifacts for distribution may be staged under `relay/windows_https/export/` on the OptiPlex.
 - If relay LAN HTTPS moves to a hostname (fallback plan), update this document and the health-check URL accordingly.

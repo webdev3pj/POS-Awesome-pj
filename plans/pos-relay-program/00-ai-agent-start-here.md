@@ -2,8 +2,8 @@
 
 ## TL;DR (Business Owner)
 - This branch is building a role-based store workflow: SA creates orders/tokens, cashier takes payment, then picker and dispatch complete fulfillment.
-- SA and cashier frontend flows are already live-tested on the dev site (with relay-missing warnings in that environment).
-- The current focus is making the same SA/Cashier flow work cleanly with a real Edge Relay running on the OptiPlex/local server.
+- SA and cashier frontend flows are live-tested on the dev site, including relay-first cashier submit through the OptiPlex Edge Relay.
+- The current focus has moved to relay hardening (auth/authorization), Picker/Dispatch flow coverage, and rollout/operations cleanup (shop PCs + docs/UAT).
 - SA must not open/close cash shifts; cashier owns money-related opening/closing.
 - The ticket sidebar monitor is now planned to use `POS Profile + business date` (not only opening shift), so SA orders appear even before a cashier opens shift.
 - Sales Order series per POS Profile is implemented and used for cashier `Select S.O` filtering (for `PJ7 CASHIER`, tested with `SAL-ORD-PJ7-.YYYY.-`).
@@ -43,9 +43,9 @@ Key business rules currently agreed:
 - Inherited validated work:
   - `kilo-codex-v3`: SA Sales Order token flow, no-cash SA session, monitor rail foundation
   - `codex-2-cashier`: cashier `Select S.O` filtering (naming series + age), cashier live E2E coverage, token-disabled regression coverage
-- Current state: SA and cashier flows are validated on the dev site in non-relay-configured conditions; local relay acceptance + HTTP smoke are passing; next step is LAN-only relay hardening (status gating + fallback) and then live relay-enabled SA/Cashier testing from the OptiPlex/local relay host.
-- Priority implementation/verification target: relay-enabled end-to-end SA/Cashier flow and submit outcomes, then Picker/Dispatch UI/E2E coverage.
-- Frappe Cloud topology note: do not assume a raw LAN relay URL (`http://192.168.x.x:8787`) will work for relay-enabled submit in current behavior; current target is LAN-only mode (browser-LAN relay status as submit gate) with LAN HTTPS on the OptiPlex.
+- Current state: LAN-only relay mode + prompted cloud fallback are implemented, OptiPlex LAN HTTPS relay (`https://192.168.50.168`) is configured, and relay-enabled SA/Cashier end-to-end flow has been live-validated in headed Cypress on the dev site (SA token -> relay local sale -> cloud sync invoice).
+- Priority implementation/verification target: Phase 3 relay auth/server-side role enforcement and Picker/Dispatch relay-backed UI/E2E coverage, then rollout hardening and shop-PC trust rollout.
+- Frappe Cloud topology note: raw private LAN relay URLs are still not cloud-backend reachable; in LAN-only mode this is expected and treated as diagnostic-only while browser-LAN HTTPS health is the submit gate.
 
 ## What Is Already Implemented (Branch-Accurate)
 ### Relay foundation (`Implemented`)
@@ -54,6 +54,7 @@ Key business rules currently agreed:
 - Local-first commit endpoint (`/relay/commit-invoice`) with idempotency.
 - Queue/dashboard/outbox/transactions observability endpoints.
 - ERPNext accessibility check (`/api/erpnext-access-check`) and `public_base_url` support.
+- LAN HTTPS reverse-proxy deployment on OptiPlex via Caddy and browser-reachable relay health over `https://192.168.50.168` (validated).
 
 ### POS role foundation (`Implemented`/`Partial`)
 - Opening dialog derives a single `cline-*` role from ERPNext roles.
@@ -66,9 +67,11 @@ Key business rules currently agreed:
 - SA token creation as submitted `Sales Order` is implemented and live-tested (dev site).
 - Ticket sidebar workflow monitor rail is implemented and live-tested (read-only v1).
 - Relay-enabled payments use `/relay/commit-invoice`.
-- Relay-enabled failure path blocks direct cloud fallback.
+- LAN-only relay submit gating (browser-LAN relay health) is implemented.
+- Cashier prompted cloud fallback when relay is down but cloud is up is implemented (POS Profile toggle controlled).
 - Local sale reference display exists.
 - Cashier `Select S.O` filtering by POS Profile Sales Order naming series + age is implemented and live-tested.
+- Relay-first cashier submit is live-validated end-to-end on the dev site with local relay transaction/outbox evidence and cloud sync completion.
 
 ### Existing and upgraded Sales Order support (`Implemented`)
 - POS can search and load submitted unbilled Sales Orders.
@@ -90,7 +93,7 @@ Key business rules currently agreed:
 ### Missing (critical)
 - Relay authentication for mutating endpoints.
 - Server-side relay role authorization (do not trust browser localStorage role).
-- Relay-enabled end-to-end cashier submit proof on the live dev site (with a configured reachable relay) is still pending.
+- Picker/Dispatch relay-backed live E2E proof (local sale progression after cashier commit) is still pending.
 
 ### Deferred (explicit)
 - SA-stage `sales_partner` capture on Sales Order token creation.
@@ -98,15 +101,14 @@ Key business rules currently agreed:
 - SA relay-first/offline token creation until online-first path is stable.
 
 ## Immediate Next Recommended Task
-Implement the `codex-3-edge-relay` LAN-only relay mode + cloud fallback package on the OptiPlex track, then validate relay-enabled SA + Cashier in headed Cypress.
+Move to the next milestone: Phase 3 relay auth + server-side role enforcement hardening, then extend live relay validation to Picker/Dispatch flows and rollout operations (shop-PC trust + support runbooks).
 
 Why this is next:
-- SA/Cashier cloud-side behavior is already proven well enough for the next milestone.
-- Relay-enabled cashier submit behavior is the highest-value remaining uncertainty.
-- The current blocker is Frappe Cloud-to-LAN relay reachability assumptions in status gating.
-- LAN-only mode + prompted cloud fallback reduces cashier downtime when relay is unavailable.
-- It directly prepares the OptiPlex/live-relay testing session.
-- It informs Phase 3 auth hardening with real deployment behavior.
+- SA/Cashier relay-first flow is now proven on the dev site and local OptiPlex relay.
+- The biggest remaining risk is security/trust hardening on relay mutating endpoints and role enforcement.
+- Picker/Dispatch is the next operational workflow that depends on the relay local sale state already being correct.
+- Shop-PC certificate trust rollout and support instructions are now the main deployment-readiness tasks for store adoption.
+- It reduces the gap between successful demo validation and repeatable production-style operation.
 
 ## OptiPlex / Relay Host Startup (No Chat Context)
 If a new session starts on the OptiPlex relay machine and does not have this conversation context:
@@ -115,8 +117,8 @@ If a new session starts on the OptiPlex relay machine and does not have this con
 - Checkout/use branch `codex-3-edge-relay`
 - Start the local relay and verify `/health`
 - Copy the local-only `.env` (Cypress secrets) to the repo root if Cypress will run on the OptiPlex
-- Implement LAN-only mode + cloud fallback + LAN HTTPS reverse-proxy automation (current target)
-- Configure `PJ7 CASHIER` relay URL/mode/fallback settings and run the documented Cypress sequence
+- Relay-enabled SA/Cashier demo is already proven; rerun only if revalidating after new changes
+- Next target: Phase 3 auth hardening + Picker/Dispatch relay flow coverage + rollout docs/checklists
 
 ## Decision Register
 ### Accepted

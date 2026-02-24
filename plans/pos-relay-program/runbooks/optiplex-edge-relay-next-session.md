@@ -3,7 +3,7 @@
 ## TL;DR (Business Owner)
 - This is the first file to open on the OptiPlex machine.
 - It tells a new AI agent exactly what branch to use, how to start the Edge Relay locally, what to configure in `PJ7 CASHIER`, and what tests to run.
-- Goal for the next relay session: prove SA + Cashier flow works against a real local Edge Relay (not just cloud-only UI checks).
+- Relay-enabled SA + Cashier flow is already proven on the OptiPlex/dev site; next sessions should build on that proof (auth hardening, picker/dispatch, rollout), or rerun the relay demo sequence when validating new changes.
 - Local relay core endpoints are already smoke-tested on branch `codex-3-edge-relay`.
 - For a completely fresh Codex session, also open `optiplex-fresh-codex-zero-context-handoff.md`.
 
@@ -22,8 +22,12 @@ Provide a zero-context startup guide for a new AI coding agent session on the Op
 - GitHub baseline commit for this handoff/runbook: `424c79a`
 - Current relay-focused branch status:
   - SA + Cashier browser flows are already validated in cloud/non-relay-missing scenarios on `codex-2-cashier`
-  - `codex-3-edge-relay` starts relay-focused hardening and local relay smoke validation
+  - `codex-3-edge-relay` now includes relay-focused hardening (LAN-only mode + cloud fallback), OptiPlex LAN HTTPS setup, and live relay-enabled SA/Cashier validation
   - local relay HTTP smoke (`/health`, `/relay/session/open`, `/relay/token/create`, `/relay/commit-invoice`) passed
+  - headed Cypress relay demo proof completed:
+    - SA token/SO `SAL-ORD-PJ7-2026-00009`
+    - relay local sale `LSR-PJ7 -20260224200538-34917A`
+    - cloud invoice via relay sync `ACC-SINV-2026-00265`
 
 ## Files to Read First (in order)
 1. `plans/pos-relay-program/00-ai-agent-start-here.md`
@@ -59,6 +63,8 @@ This stores local relay credentials/settings (`frappe_base_url`, `api_key`, `api
 ## Current Known Good Facts (Do Not Re-Debug First)
 - SA flow works on live dev site (Sales Order token + monitor rail)
 - Cashier `Select S.O` filtering by POS Profile SO naming series + age works after app fix (`54ef47a`)
+- LAN-only relay mode + cashier prompted cloud fallback are implemented and validated on `codex-3-edge-relay`
+- OptiPlex LAN HTTPS relay (`https://192.168.50.168`) works locally after certificate trust (Caddy reverse proxy)
 - `PJ7 CASHIER` expected SO series for tests: `SAL-ORD-PJ7-.YYYY.-`
 - `PJ7 CASHIER` expected `Select S.O Max Age (Days)`: `1`
 - Cypress specs exist for:
@@ -66,7 +72,11 @@ This stores local relay credentials/settings (`frappe_base_url`, `api_key`, `api
   - profile preflight/config
   - SA flow
   - cashier flow
+  - relay-down/cloud-fallback flow
   - token-disabled regression (`custom_have_token = 0`)
+- Relay observability distinction:
+  - `/queue` = legacy queue UI (`relay_queue`)
+  - SA/Cashier local-first relay flow is primarily visible in dashboard `/` + `/api/outbox` + `/api/transactions`
 
 ## OptiPlex Local Relay Startup (Windows)
 ### Option A (preferred for convenience)
@@ -126,26 +136,34 @@ Where to set this in the site frontend (ERPNext/Frappe Desk):
 Fallback (not preferred for this workflow):
 - site config key `posa_edge_relay_url` in `site_config.json` (used only when POS Profile field is blank)
 
-### Relay URL notes (current behavior vs planned LAN-only mode)
-- Critical for Frappe Cloud today:
-  - a raw LAN URL like `http://192.168.50.168:8787` is not enough for relay-enabled cashier submit in the current branch behavior.
-  - backend relay connectivity checks run from Frappe Cloud and cannot reach `192.168.x.x`, so POS can show relay down and block relay submit.
+### Relay URL notes (current behavior + LAN-only mode)
+- Historical baseline (pre-LAN-only mode):
+  - a raw LAN URL like `http://192.168.50.168:8787` was not enough for relay-enabled cashier submit because cloud backend relay checks could block submit.
+- Current validated mode on this branch:
+  - use LAN HTTPS `https://192.168.50.168` with POS Profile LAN-only relay mode
+  - browser-LAN relay health is the submit gate
+  - cloud backend relay reachability for a private LAN URL is diagnostic-only
 - Browser note (HTTPS page -> HTTP relay):
   - the POS page is served from `https://...frappe.cloud`
   - direct browser `fetch()` to `http://192.168.50.168:8787` may also be blocked as mixed content in Chrome.
-- If no code changes are made first:
+- If cloud-side relay diagnostics must also pass from outside the LAN:
   - use a public HTTPS tunnel URL (Cloudflare Tunnel / ngrok / equivalent)
   - set `custom_edge_relay_url` and relay `public_base_url` to that same URL
-- If implementing the LAN-only mode work first (current target):
-  - use a LAN HTTPS relay URL (`https://192.168.50.168`) after reverse-proxy + certificate trust setup
+- For the current validated LAN-only deployment path:
+  - use LAN HTTPS relay URL (`https://192.168.50.168`) after reverse-proxy + certificate trust setup
   - set the same LAN HTTPS URL in POS Profile `Edge Relay URL` and relay `public_base_url`
 - LAN-only URL (`http://192.168.50.168:8787`) can still be used for local relay health checks on the OptiPlex itself.
 
-### Planned Next Implementation Target (relay-focused)
-- LAN-only relay mode (`browser-LAN` relay health is submit gate)
-- Cashier prompted cloud fallback when relay is down but cloud is up
-- OptiPlex HTTPS reverse-proxy automation (Caddy) + shop-PC certificate trust scripts
-- Full spec and starter prompt: `optiplex-fresh-codex-zero-context-handoff.md`
+### Current Relay-Focused Status / Next Target
+- Completed on `codex-3-edge-relay`:
+  - LAN-only relay mode (`browser-LAN` relay health is submit gate)
+  - Cashier prompted cloud fallback when relay is down but cloud is up
+  - OptiPlex HTTPS reverse-proxy (Caddy) + shop-PC certificate trust guidance
+  - Live headed Cypress validation proving SA -> relay token and cashier -> relay local sale -> cloud sync
+- Next recommended work:
+  - Phase 3 relay auth + server-side role enforcement
+  - Picker/Dispatch relay-backed flow coverage and E2E tests
+  - shop-PC certificate trust rollout and support docs cleanup
 
 ## Next Session Test Sequence (Recommended)
 ### 1. Start relay locally and verify `/health`
@@ -159,20 +177,31 @@ npm.cmd run e2e:open
 ```
 Choose `Chrome`.
 
-### 3. Run specs in this order
+### 3. Core relay regression specs (SA/Cashier + fallback)
 1. `cypress/e2e/admin_configure_pj7_cashier_profile.cy.js`
 2. `cypress/e2e/admin_set_cline_sa_only_role.cy.js`
 3. `cypress/e2e/sa_workflow_frontend_watch.cy.js`
 4. `cypress/e2e/admin_set_cline_cashier_only_role.cy.js`
 5. `cypress/e2e/cashier_workflow_frontend_watch.cy.js`
-6. `cypress/e2e/cashier_token_disabled_profile_smoke.cy.js` (regression)
+6. `cypress/e2e/cashier_relay_down_cloud_fallback_watch.cy.js`
+7. `cypress/e2e/cashier_token_disabled_profile_smoke.cy.js` (regression)
 
-### 4. What to watch for (relay-specific)
+### 4. Optional visual relay demo sequence (Cypress + local relay pages)
+Run this when you need business-owner proof of relay local storage/status screens:
+1. `cypress/e2e/admin_set_cline_sa_only_role.cy.js`
+2. `cypress/e2e/sa_workflow_frontend_watch.cy.js`
+3. Open local relay token proof page (`/relay/token/<SO token>`) and pause for observation (manual or local demo spec, if present)
+4. `cypress/e2e/admin_set_cline_cashier_only_role.cy.js`
+5. `cypress/e2e/cashier_workflow_frontend_watch.cy.js`
+6. Open local relay transaction proof page (`/api/transactions/<local_sale_ref>` or dashboard `/` filtered to `local_sale_ref`) and pause for observation (manual or local demo spec, if present)
+
+### 5. What to watch for (relay-specific)
 - SA token dialog still succeeds
 - Cashier `PAY` -> `Submit` path should prefer relay commit path when relay is configured/reachable
-- UI should no longer fail only because relay URL is missing
-- Look for relay success messages (local commit / `local_sale_ref`) instead of relay-missing blockers
-- Relay dashboard/outbox should show activity after cashier submit attempts
+- In LAN-only mode, relay submit should not be blocked solely because cloud backend cannot reach a private LAN relay URL
+- Look for relay success messages (`local_sale_ref`) and relay transaction/outbox evidence after cashier submit
+- Watch relay dashboard `/` `Outbox Counters (v2 Local-First)` and `Transaction Timeline (Local Sales)` for SA/Cashier local-first activity
+- Remember `/queue` is the legacy queue UI and may remain idle while v2 outbox/transaction views update
 
 ## If Something Fails (How to Classify Quickly)
 ### A. Relay not reachable from POS browser
@@ -195,7 +224,8 @@ Cause:
 - cloud cannot reach LAN URL
 
 Fix:
-- use tunnel/public URL (current branch behavior), or implement LAN-only mode and retest
+- in current LAN-only mode, treat cloud-side relay reachability as diagnostic-only and confirm browser-LAN HTTPS relay health/status instead
+- use a tunnel/public URL only if you require cloud-side/backend relay diagnostics to pass
 - set `public_base_url` in relay setup
 
 ### C. Cypress test fails but app likely works
@@ -240,6 +270,7 @@ This now uses an isolated temp DB per test and should not fail due to stale loca
 - `plans/pos-relay-program/CHANGELOG_PROGRESS.md`
 - `plans/pos-relay-program/uat/` (new dated relay-enabled UAT report)
 - `plans/pos-relay-program/00-ai-agent-start-here.md` (status snapshot)
+- `plans/pos-relay-program/03-offline-edge-relay-and-windows-service-spec.md` (if relay behavior/ops notes change)
 - `plans/pos-relay-program/runbooks/shop-pc-lan-relay-setup-non-technical.md` (if trust steps change)
 
 ## See Also

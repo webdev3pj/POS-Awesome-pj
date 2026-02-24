@@ -4,6 +4,7 @@
 - This file explains what the local relay stores, how it syncs later, and how it runs on the Windows store machine.
 - The relay is what protects store operations when the cloud is down, especially for cashier commits.
 - The new POS sidebar monitor is not a relay screen yet; it reads ERPNext workflow state first (v1).
+- LAN-only relay mode (browser-LAN health as submit gate) and cashier prompted cloud fallback are now implemented and live-validated on the OptiPlex/dev site.
 - SA offline-first order creation is planned later (Phase 4), after the online SA flow is stable.
 - Windows service/runbook details stay here so deployment and support are repeatable.
 
@@ -26,11 +27,14 @@
 - For the latest verified relay behavior, use:
   - `CHANGELOG_PROGRESS.md`
   - `uat/2026-02-23-local-edge-relay-smoke.md`
+  - `uat/2026-02-24-optiplex-lan-https-relay-sa-cashier-e2e-demo.md`
   - `runbooks/optiplex-edge-relay-next-session.md`
-- The next planned implementation target (not yet implemented at branch `424c79a`) is:
+- Historical baseline note:
+  - branch baseline `424c79a` documented the LAN/private-cloud constraint before the LAN-only mode implementation.
+- Current implemented state on `codex-3-edge-relay` (verified 2026-02-24):
   - LAN-only relay mode (`browser-LAN` health as submit gate)
   - prompted cloud fallback when relay is down but cloud is up
-  - OptiPlex LAN HTTPS reverse-proxy automation + shop-PC certificate trust scripts
+  - OptiPlex LAN HTTPS reverse-proxy (Caddy) + shop-PC certificate trust setup guidance
 
 ## Purpose
 Define the offline continuity design and operations model for the Edge Relay, including:
@@ -81,28 +85,35 @@ For a step-by-step relay-host startup/test sequence (especially when a new AI se
 - POS workflow monitor rail (Phase 1B) reads an ERPNext API and polls for near-real-time updates; it is not a relay-native screen yet.
 
 ## Frappe Cloud + Private LAN Relay Constraint (Important)
-### Current branch behavior (practical reality)
-- Relay-enabled cashier submit logic depends on relay connectivity status that is checked by an ERPNext/Frappe backend API (`get_relay_connectivity_status`).
+### Historical baseline behavior (before LAN-only mode, e.g. `424c79a`)
+- Relay-enabled cashier submit logic depended on relay connectivity status checked by an ERPNext/Frappe backend API (`get_relay_connectivity_status`).
 - On Frappe Cloud, that backend check runs from the cloud network, not from the store LAN.
-- A private LAN relay URL such as `http://192.168.50.168:8787` is not routable from Frappe Cloud, so the backend will report relay unreachable and the POS may block relay-backed submit.
+- A private LAN relay URL such as `http://192.168.50.168:8787` is not routable from Frappe Cloud, so the backend reported relay unreachable and the POS could block relay-backed submit.
+
+### Current implemented behavior (LAN-only mode on `codex-3-edge-relay`)
+- POS can use `browser-LAN` relay health (for example `https://192.168.50.168/health`) as the effective submit gate when POS Profile mode is set to LAN-only.
+- Cloud-side relay reachability is still useful for diagnostics, but it is not the submit blocker in LAN-only mode.
+- Cashier can be prompted to fall back to direct cloud submit when relay is down but cloud is up (POS Profile toggle controlled).
 
 ### Browser transport note (HTTPS -> HTTP)
 - The Frappe Cloud POS page is served over HTTPS.
 - Direct browser `fetch()` from `https://<site>.frappe.cloud` to `http://192.168.x.x:8787` may be blocked by browser mixed-content policy.
 
-### Recommended deployment pattern for Frappe Cloud + OptiPlex relay (current branch behavior)
-- Use a public HTTPS URL (tunnel or reverse proxy) that forwards to the OptiPlex relay (`192.168.50.168:8787`).
-- Set that public HTTPS URL in:
+### Deployment patterns for Frappe Cloud + OptiPlex relay
+#### Option A (implemented and validated for shop LAN use)
+- Use LAN HTTPS on the OptiPlex (for example `https://192.168.50.168`) and configure POS Profile LAN-only mode.
+- Set that LAN HTTPS URL in:
   - POS Profile `Edge Relay URL` (`custom_edge_relay_url`) on the cloud site
   - relay `public_base_url` in relay setup/config
-- Keep the LAN URL for local health checks and local troubleshooting only.
+- Browser/LAN reachability and certificate trust on shop PCs is required.
+- Cloud backend diagnostics may still fail to reach a private LAN IP and should be treated as diagnostic-only in LAN-only mode.
 
-### Planned next mode (LAN-only, no public tunnel)
-This is a planned improvement target for `codex-3-edge-relay`, not yet implemented in the current baseline:
-- Use LAN HTTPS (`https://192.168.50.168`) via local reverse proxy on the OptiPlex
-- Use browser-LAN relay health (not cloud-backend relay health) as the submit gate
-- Treat cloud relay reachability as diagnostic only in LAN-only mode
-- Add cashier prompted cloud fallback when relay is down but cloud is up
+#### Option B (still valid if cloud-reachable diagnostics are required)
+- Use a public HTTPS URL (tunnel or reverse proxy) that forwards to the OptiPlex relay.
+- Set the same public URL in:
+  - POS Profile `Edge Relay URL` (`custom_edge_relay_url`)
+  - relay `public_base_url`
+- Use when backend/cloud-side relay checks must pass from outside the store LAN.
 
 ## Relay Configuration Files and Paths
 Defined in `relay/relay/storage.py`:
@@ -353,6 +364,7 @@ Key fields:
 Semantics:
 - Drives sync worker retries and backoff.
 - `next_attempt_at` schedules future retry attempts.
+- This is the primary queue/outbox for the current local-first SA/Cashier relay commit workflow (v2 behavior).
 
 ## Indices and Performance Notes
 Current indices in `init_db()`:
@@ -398,7 +410,10 @@ Examples present in branch:
 - Outbox accumulates events for later sync.
 
 ### Relay unreachable (from POS)
-- Relay-enabled commit path is blocked (direct cloud fallback disabled for relay-enabled profiles in current cashier flow).
+- In LAN-only mode:
+  - if cloud is up and POS Profile fallback toggle is enabled, cashier is prompted and may submit directly to cloud
+  - if cloud is down (or fallback toggle is disabled), cashier submit is blocked
+- In non-LAN-only/older behavior, cloud relay diagnostics may still block relay-backed submit when the relay URL is private LAN only.
 
 ### Duplicate submit / double-click
 - Idempotency should return same `local_sale_ref`.
@@ -417,6 +432,14 @@ Examples present in branch:
 - `/api/transactions`
 - `/api/transactions/<local_sale_ref>`
 - `/api/erpnext-access-check`
+
+### Queue/Outbox observability note
+- `/queue` and `/api/queue` expose the legacy compatibility queue (`relay_queue` table).
+- SA/Cashier local-first relay commit flow is primarily observable via:
+  - relay dashboard `/` (Outbox Counters + Transaction Timeline)
+  - `/api/outbox`
+  - `/api/transactions`
+  - `/api/transactions/<local_sale_ref>`
 
 ### Relay workflow endpoints
 - `/relay/token/create`
@@ -515,6 +538,7 @@ ERPNext/Frappe Cloud cannot reach LAN-only relay addresses for backend diagnosti
 - Relay `/health` returns healthy.
 - Dashboard counters update.
 - `/api/outbox` backlog is understood and monitored.
+- Team understands `/queue` (legacy queue) vs `relay_outbox` (current local-first cashier/SA event sync path).
 - `/api/transactions` shows recent local sales.
 - `public_base_url` reachability check passes after network changes.
 - Windows startup/firewall settings remain intact after OS updates.
