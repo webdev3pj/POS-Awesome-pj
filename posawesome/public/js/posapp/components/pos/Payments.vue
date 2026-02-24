@@ -867,6 +867,9 @@ export default {
                             vm.invoice_doc.token_id ||
                             vm.invoice_doc.sales_order ||
                             vm.invoice_doc.sales_order_name ||
+                            ((Array.isArray(vm.invoice_doc.items)
+                              ? vm.invoice_doc.items.find((row) => (row || {}).sales_order)
+                              : null) || {}).sales_order ||
                             (/^SAL-ORD-/i.test(String(vm.invoice_doc.name || ""))
                               ? vm.invoice_doc.name
                               : String(vm.invoice_doc.name || "").slice(-5)),
@@ -1125,9 +1128,18 @@ export default {
       const endpoint = `${base}/relay/commit-invoice`;
 
       const docName = String((vm.invoice_doc && vm.invoice_doc.name) || "").trim();
+      const lineItemSalesOrderRef = String(
+        (
+          (Array.isArray(vm.invoice_doc && vm.invoice_doc.items)
+            ? vm.invoice_doc.items.find((row) => (row || {}).sales_order)
+            : null) || {}
+        ).sales_order || ""
+      ).trim();
       const salesOrderTokenRef = String(
         (vm.invoice_doc &&
-          (vm.invoice_doc.sales_order || vm.invoice_doc.sales_order_name)) ||
+          (vm.invoice_doc.sales_order ||
+            vm.invoice_doc.sales_order_name ||
+            lineItemSalesOrderRef)) ||
           ""
       ).trim();
       const fallbackTokenId =
