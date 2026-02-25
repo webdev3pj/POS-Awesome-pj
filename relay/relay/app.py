@@ -1,5 +1,7 @@
 import os
+import hmac
 import hashlib
+import ipaddress
 import threading
 from flask import Flask, flash, jsonify, redirect, render_template, request
 
@@ -16,6 +18,7 @@ from .storage import (
     list_local_sales,
     list_outbox,
     list_queue,
+    cleanup_outbox_rows,
     load_config,
     open_cashier_session,
     outbox_counts,
@@ -47,12 +50,111 @@ def create_app():
 
     _start_sync_thread()
 
+    RELAY_ROLE_GROUPS = {
+        "fulfillment_any": (
+            "cline-Sales Associate",
+            "cline-Cashier",
+            "cline-Picker",
+            "cline-Dispatch",
+            "cline-Supervisor",
+        ),
+        "token_create": ("cline-Sales Associate", "cline-Cashier", "cline-Supervisor"),
+        "session_cashier": ("cline-Cashier", "cline-Supervisor"),
+        "commit_invoice": ("cline-Cashier", "cline-Supervisor"),
+        "pick_update": ("cline-Picker", "cline-Supervisor"),
+        "dispatch_release": ("cline-Dispatch", "cline-Supervisor"),
+        "token_void": ("cline-Supervisor",),
+    }
+
+    def _json_error(code, message, status_code=400, extra=None):
+        payload = {"ok": False, "code": code, "message": message}
+        if isinstance(extra, dict):
+            payload.update(extra)
+        return jsonify(payload), int(status_code)
+
+    def _client_ip():
+        xff = (request.headers.get("X-Forwarded-For") or "").strip()
+        if xff:
+            return xff.split(",")[0].strip()
+        return (request.remote_addr or "").strip()
+
+    def _client_allowed_by_subnet():
+        cfg = load_config()
+        ip_text = _client_ip()
+        if not ip_text:
+            return False
+        try:
+            ip = ipaddress.ip_address(ip_text)
+            if ip.is_loopback:
+                return True
+            subnet = (cfg.get("allowed_subnet") or "").strip()
+            if not subnet:
+                return True
+            net = ipaddress.ip_network(subnet, strict=False)
+            return ip in net
+        except Exception:
+            # Fail open on parsing issues; auth key remains the stronger control when enabled.
+            return True
+
+    def _relay_client_auth_enabled(cfg=None):
+        cfg = cfg or load_config()
+        expected = str(cfg.get("relay_client_auth_key") or "").strip()
+        required = bool(cfg.get("relay_client_auth_required")) or bool(expected)
+        return required, expected
+
+    def _require_relay_client_auth():
+        cfg = load_config()
+        if not _client_allowed_by_subnet():
+            return _json_error(
+                "CLIENT_OUTSIDE_ALLOWED_SUBNET",
+                "Relay request origin is outside the allowed subnet.",
+                403,
+                {"client_ip": _client_ip(), "allowed_subnet": cfg.get("allowed_subnet")},
+            )
+
+        required, expected = _relay_client_auth_enabled(cfg)
+        if not required:
+            return None
+        provided = (request.headers.get("X-Relay-Client-Key") or "").strip()
+        if not expected:
+            return _json_error(
+                "RELAY_CLIENT_AUTH_MISCONFIGURED",
+                "Relay client auth is enabled but no relay_client_auth_key is configured.",
+                503,
+            )
+        if not provided or not hmac.compare_digest(provided, expected):
+            return _json_error("RELAY_CLIENT_AUTH_FAILED", "Invalid relay client key.", 401)
+        return None
+
+    def _extract_role(payload):
+        payload = payload or {}
+        return str(payload.get("role") or payload.get("session_role") or "").strip()
+
+    def _require_relay_role(payload, allowed_roles, role_field="role"):
+        allowed_roles = tuple(str(r).strip() for r in (allowed_roles or []) if str(r).strip())
+        role = _extract_role(payload)
+        if not role:
+            return _json_error(
+                "RELAY_ROLE_REQUIRED",
+                f"{role_field} is required for this relay action.",
+                400,
+                {"allowed_roles": list(allowed_roles)},
+            )
+        if allowed_roles and role not in allowed_roles:
+            return _json_error(
+                "RELAY_ROLE_NOT_AUTHORIZED",
+                f"Role {role} is not allowed for this relay action.",
+                403,
+                {"role": role, "allowed_roles": list(allowed_roles)},
+            )
+        return None
+
     @app.after_request
     def add_cors_headers(response):
         # Allow POS browser clients (served from cloud origin) to post to the local relay
         response.headers["Access-Control-Allow-Origin"] = "*"
         response.headers["Access-Control-Allow-Methods"] = "GET,POST,OPTIONS"
-        response.headers["Access-Control-Allow-Headers"] = "Content-Type,Authorization"
+        response.headers["Access-Control-Allow-Headers"] = "Content-Type,Authorization,X-Relay-Client-Key"
         return response
 
     @app.route("/")
@@ -122,6 +224,8 @@ def create_app():
                 "site_name": (request.form.get("site_name") or "").strip(),
                 "poll_seconds": int(request.form.get("poll_seconds") or 5),
                 "allowed_subnet": (request.form.get("allowed_subnet") or "192.168.50.0/24").strip(),
+                "relay_client_auth_required": str(request.form.get("relay_client_auth_required") or "").strip().lower() in ("1", "true", "on", "yes"),
+                "relay_client_auth_key": (request.form.get("relay_client_auth_key") or "").strip(),
             }
             save_config(payload)
             flash("Relay configuration saved.", "success")
@@ -272,6 +376,28 @@ def create_app():
     def api_outbox():
         return jsonify({"rows": list_outbox(500), "counts": outbox_counts()})
 
+    @app.route("/api/outbox/cleanup", methods=["POST", "OPTIONS"])
+    def api_outbox_cleanup():
+        if request.method == "OPTIONS":
+            return ("", 204)
+        # Cleanup is local-operator tooling; require loopback caller plus relay auth if enabled.
+        if not _client_ip() or _client_ip() not in ("127.0.0.1", "::1"):
+            return _json_error("LOOPBACK_REQUIRED", "Outbox cleanup is allowed only from localhost.", 403)
+        auth_err = _require_relay_client_auth()
+        if auth_err:
+            return auth_err
+        payload = request.get_json(silent=True) or {}
+        result = cleanup_outbox_rows(
+            limit=int(payload.get("limit") or 200),
+            statuses=payload.get("statuses") or [],
+            event_types=payload.get("event_types") or [],
+            created_before=payload.get("created_before") or "",
+            error_contains=payload.get("error_contains") or "",
+            local_ref_contains=payload.get("local_ref_contains") or "",
+            delete=bool(payload.get("delete")),
+        )
+        return jsonify({"ok": True, **result})
+
     @app.route("/api/transactions")
     def api_transactions():
         limit = int(request.args.get("limit") or 200)
@@ -301,18 +427,27 @@ def create_app():
 
     @app.route("/relay/token", methods=["POST"])
     def relay_token():
+        auth_err = _require_relay_client_auth()
+        if auth_err:
+            return auth_err
         payload = request.get_json(silent=True) or {}
         event_id = enqueue_event("token_create", payload)
         return jsonify({"ok": True, "event_id": event_id, "status": "queued"})
 
     @app.route("/relay/pick", methods=["POST"])
     def relay_pick():
+        auth_err = _require_relay_client_auth()
+        if auth_err:
+            return auth_err
         payload = request.get_json(silent=True) or {}
         event_id = enqueue_event("pick_update", payload)
         return jsonify({"ok": True, "event_id": event_id, "status": "queued"})
 
     @app.route("/relay/release", methods=["POST"])
     def relay_release():
+        auth_err = _require_relay_client_auth()
+        if auth_err:
+            return auth_err
         payload = request.get_json(silent=True) or {}
         event_id = enqueue_event("dispatch_release", payload)
         return jsonify({"ok": True, "event_id": event_id, "status": "queued"})
@@ -321,6 +456,9 @@ def create_app():
     def relay_submit_invoice():
         if request.method == "OPTIONS":
             return ("", 204)
+        auth_err = _require_relay_client_auth()
+        if auth_err:
+            return auth_err
 
         payload = request.get_json(silent=True) or {}
         invoice_payload = payload.get("invoice")
@@ -344,8 +482,14 @@ def create_app():
     def relay_token_create_v2():
         if request.method == "OPTIONS":
             return ("", 204)
+        auth_err = _require_relay_client_auth()
+        if auth_err:
+            return auth_err
 
         payload = request.get_json(silent=True) or {}
+        role_err = _require_relay_role(payload, RELAY_ROLE_GROUPS["token_create"])
+        if role_err:
+            return role_err
         expiry_minutes = int(payload.get("expiry_minutes") or 120)
         token = create_token(payload, expiry_minutes=expiry_minutes)
 
@@ -376,7 +520,13 @@ def create_app():
     def relay_token_void_v2(token_id):
         if request.method == "OPTIONS":
             return ("", 204)
+        auth_err = _require_relay_client_auth()
+        if auth_err:
+            return auth_err
         payload = request.get_json(silent=True) or {}
+        role_err = _require_relay_role(payload, RELAY_ROLE_GROUPS["token_void"], role_field="supervisor role")
+        if role_err:
+            return role_err
         result = void_token(
             token_id,
             supervisor_user_id=payload.get("supervisor_user_id"),
@@ -389,7 +539,13 @@ def create_app():
     def relay_session_open_v2():
         if request.method == "OPTIONS":
             return ("", 204)
+        auth_err = _require_relay_client_auth()
+        if auth_err:
+            return auth_err
         payload = request.get_json(silent=True) or {}
+        role_err = _require_relay_role(payload, RELAY_ROLE_GROUPS["session_cashier"])
+        if role_err:
+            return role_err
         session = open_cashier_session(payload)
         outbox_event_id = enqueue_outbox_event(
             "SESSION_OPEN",
@@ -434,7 +590,13 @@ def create_app():
     def relay_session_close_v2():
         if request.method == "OPTIONS":
             return ("", 204)
+        auth_err = _require_relay_client_auth()
+        if auth_err:
+            return auth_err
         payload = request.get_json(silent=True) or {}
+        role_err = _require_relay_role(payload, RELAY_ROLE_GROUPS["session_cashier"])
+        if role_err:
+            return role_err
         session_id = payload.get("session_id")
         if not session_id:
             return jsonify({"ok": False, "code": "SESSION_ID_REQUIRED"}), 400
@@ -454,7 +616,13 @@ def create_app():
     def relay_customer_upsert_v2():
         if request.method == "OPTIONS":
             return ("", 204)
+        auth_err = _require_relay_client_auth()
+        if auth_err:
+            return auth_err
         payload = request.get_json(silent=True) or {}
+        role_err = _require_relay_role(payload, RELAY_ROLE_GROUPS["fulfillment_any"])
+        if role_err:
+            return role_err
         customer = upsert_customer(payload)
         outbox_event_id = enqueue_outbox_event(
             "CUSTOMER_UPSERT",
@@ -474,7 +642,13 @@ def create_app():
     def relay_items_refresh_v2():
         if request.method == "OPTIONS":
             return ("", 204)
+        auth_err = _require_relay_client_auth()
+        if auth_err:
+            return auth_err
         payload = request.get_json(silent=True) or {}
+        role_err = _require_relay_role(payload, RELAY_ROLE_GROUPS["fulfillment_any"])
+        if role_err:
+            return role_err
         items = payload.get("items") or []
         result = refresh_items_cache(items)
         return jsonify({"ok": True, "result": result})
@@ -516,7 +690,13 @@ def create_app():
     def relay_items_refresh_from_cloud_v2():
         if request.method == "OPTIONS":
             return ("", 204)
+        auth_err = _require_relay_client_auth()
+        if auth_err:
+            return auth_err
         payload = request.get_json(silent=True) or {}
+        role_err = _require_relay_role(payload, RELAY_ROLE_GROUPS["fulfillment_any"])
+        if role_err:
+            return role_err
         cfg = load_config()
         result = refresh_items_from_cloud(
             cfg,
@@ -530,8 +710,14 @@ def create_app():
     def relay_commit_invoice_v2():
         if request.method == "OPTIONS":
             return ("", 204)
+        auth_err = _require_relay_client_auth()
+        if auth_err:
+            return auth_err
 
         payload = request.get_json(silent=True) or {}
+        role_err = _require_relay_role(payload, RELAY_ROLE_GROUPS["commit_invoice"])
+        if role_err:
+            return role_err
         idempotency_key = (payload.get("idempotency_key") or "").strip()
         if not idempotency_key:
             return (
@@ -613,8 +799,14 @@ def create_app():
     def relay_pick_update_v2():
         if request.method == "OPTIONS":
             return ("", 204)
+        auth_err = _require_relay_client_auth()
+        if auth_err:
+            return auth_err
 
         payload = request.get_json(silent=True) or {}
+        role_err = _require_relay_role(payload, RELAY_ROLE_GROUPS["pick_update"])
+        if role_err:
+            return role_err
         local_sale_ref = payload.get("local_sale_ref")
         picking_status = payload.get("picking_status")
         if not local_sale_ref or not picking_status:
@@ -641,8 +833,14 @@ def create_app():
     def relay_dispatch_release_v2():
         if request.method == "OPTIONS":
             return ("", 204)
+        auth_err = _require_relay_client_auth()
+        if auth_err:
+            return auth_err
 
         payload = request.get_json(silent=True) or {}
+        role_err = _require_relay_role(payload, RELAY_ROLE_GROUPS["dispatch_release"])
+        if role_err:
+            return role_err
         local_sale_ref = payload.get("local_sale_ref")
         if not local_sale_ref:
             return jsonify({"ok": False, "code": "LOCAL_SALE_REF_REQUIRED"}), 400

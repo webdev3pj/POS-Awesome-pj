@@ -104,11 +104,23 @@ def get_opening_dialog_data():
             data["user_role"] = ""
             data["role_error"] = ""
 
+    # Optional Phase 3 relay client auth bootstrap. Keep empty unless the site
+    # operator configures a shared key in site_config (or equivalent conf source).
+    relay_client_auth_key = cstr(frappe.conf.get("posa_edge_relay_client_key") or "").strip()
+    data["relay_client_auth_key"] = relay_client_auth_key
+    data["relay_client_auth_required"] = 1 if relay_client_auth_key else 0
+
     return data
 
 
 @frappe.whitelist()
 def create_opening_voucher(pos_profile, company, balance_details):
+    if _is_relay_workflow_enabled(cstr(pos_profile or "").strip()):
+        _require_operational_role_for_action(
+            ("cline-Cashier", "cline-Supervisor"),
+            "create POS opening shifts",
+        )
+
     balance_details = json.loads(balance_details)
 
     new_pos_opening = frappe.get_doc(
@@ -170,6 +182,49 @@ def _get_single_operational_role():
     if len(cline_roles) != 1:
         return ""
     return cstr(cline_roles[0]).strip()
+
+
+def _request_header(name):
+    name = cstr(name or "").strip()
+    if not name:
+        return ""
+    try:
+        getter = getattr(frappe, "get_request_header", None)
+        if callable(getter):
+            return cstr(getter(name) or "").strip()
+    except Exception:
+        pass
+    try:
+        req = getattr(frappe.local, "request", None)
+        if req and getattr(req, "headers", None):
+            return cstr(req.headers.get(name) or "").strip()
+    except Exception:
+        pass
+    return ""
+
+
+def _is_relay_sync_request():
+    return bool(_request_header("X-Relay-Event-ID"))
+
+
+def _require_operational_role_for_action(allowed_roles, action_label, allow_relay_sync=False):
+    allowed_roles = tuple(cstr(r).strip() for r in (allowed_roles or []) if cstr(r).strip())
+
+    if allow_relay_sync and _is_relay_sync_request():
+        return "__relay_sync__"
+
+    role = _get_single_operational_role()
+    if not role:
+        frappe.throw(
+            _(
+                "A single operational role is required to {0}. Assign exactly one cline-* role."
+            ).format(action_label)
+        )
+    if allowed_roles and role not in allowed_roles:
+        frappe.throw(
+            _("Role {0} is not allowed to {1}.").format(role, action_label)
+        )
+    return role
 
 
 @frappe.whitelist()
@@ -1478,6 +1533,12 @@ def get_relay_workflow_monitor_board(
 
 @frappe.whitelist()
 def update_relay_picking_status(sales_invoice, picking_status, exceptions_note=None, pos_profile=None, pos_profile_id=None):
+    _require_operational_role_for_action(
+        ("cline-Picker", "cline-Supervisor"),
+        "update relay picking status",
+        allow_relay_sync=True,
+    )
+
     if picking_status not in RELAY_PICKING_STATUSES:
         frappe.throw(_("Invalid picking status: {0}").format(picking_status))
 
@@ -1518,6 +1579,12 @@ def update_relay_picking_status(sales_invoice, picking_status, exceptions_note=N
 
 @frappe.whitelist()
 def release_relay_dispatch(sales_invoice, allow_exception_release=0, pos_profile=None, pos_profile_id=None):
+    _require_operational_role_for_action(
+        ("cline-Dispatch", "cline-Supervisor"),
+        "release relay dispatch",
+        allow_relay_sync=True,
+    )
+
     if not _relay_workflow_doctype_exists():
         frappe.throw(_("Relay workflow state DocType is missing. Please run migration."))
 
@@ -1603,6 +1670,11 @@ def update_invoice_from_order(data):
 
 @frappe.whitelist()
 def create_sales_order_token(data):
+    _require_operational_role_for_action(
+        ("cline-Sales Associate", "cline-Cashier", "cline-Supervisor"),
+        "create sales order tokens",
+    )
+
     if isinstance(data, str):
         data = json.loads(data or "{}")
     data = data or {}
@@ -1864,6 +1936,14 @@ def submit_invoice(invoice, data):
     invoice = json.loads(invoice)
     invoice_doc = frappe.get_doc("Sales Invoice", invoice.get("name"))
     invoice_doc.update(invoice)
+
+    if _is_relay_workflow_enabled(cstr(invoice_doc.get("pos_profile") or "").strip()):
+        _require_operational_role_for_action(
+            ("cline-Cashier", "cline-Supervisor"),
+            "submit invoices",
+            allow_relay_sync=True,
+        )
+
     if invoice.get("posa_delivery_date"):
         invoice_doc.update_stock = 0
     mop_cash_list = [

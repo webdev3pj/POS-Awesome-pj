@@ -208,6 +208,15 @@ export default {
             // Get role from user's ERPNext roles (derived, not user-selected)
             vm.detected_role = r.message.user_role || '';
             vm.role_error = r.message.role_error || '';
+            try {
+              const relayKey = String(r.message.relay_client_auth_key || "").trim();
+              if (relayKey) {
+                localStorage.setItem("posa_relay_client_key", relayKey);
+              } else if (parseInt(r.message.relay_client_auth_required || 0, 10) !== 1) {
+                // Only clear when backend explicitly indicates auth is not required.
+                localStorage.removeItem("posa_relay_client_key");
+              }
+            } catch (e) {}
           }
         },
       });

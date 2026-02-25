@@ -42,6 +42,17 @@
         <label>Queue Poll Seconds</label>
         <input type="number" name="poll_seconds" value="{{ config.poll_seconds }}" />
       </div>
+      <div>
+        <label>Relay Client Auth Key (Phase 3)</label>
+        <input name="relay_client_auth_key" value="{{ config.relay_client_auth_key or '' }}" placeholder="Shared key for POS browser -> relay requests" />
+      </div>
+      <div>
+        <label style="display:block">Require Relay Client Auth Key</label>
+        <label style="display:flex;gap:8px;align-items:center">
+          <input type="checkbox" name="relay_client_auth_required" {% if config.relay_client_auth_required %}checked{% endif %} />
+          <span>Enforce X-Relay-Client-Key on mutating relay endpoints</span>
+        </label>
+      </div>
     </div>
     <div class="actions" style="margin-top:12px">
       <button type="submit">Save Configuration</button>

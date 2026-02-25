@@ -948,6 +948,14 @@ export default {
         "";
       return String(raw || "").trim().replace(/\/$/, "");
     },
+    get_relay_client_headers(extra = {}) {
+      const headers = { ...extra };
+      try {
+        const relayKey = (localStorage.getItem("posa_relay_client_key") || "").trim();
+        if (relayKey) headers["X-Relay-Client-Key"] = relayKey;
+      } catch (e) {}
+      return headers;
+    },
     relay_customer_fallback_enabled() {
       const relayEnabled =
         parseInt((this.pos_profile && this.pos_profile.custom_have_token) || 0, 10) === 1;
@@ -1246,7 +1254,7 @@ export default {
 
       fetch(`${relayBaseUrl}/relay/token/create`, {
         method: "POST",
-        headers: { "Content-Type": "application/json" },
+        headers: this.get_relay_client_headers({ "Content-Type": "application/json" }),
         body: JSON.stringify(tokenPayload),
       }).catch(() => {
         evntBus.$emit("show_mesage", {
@@ -1356,9 +1364,9 @@ export default {
           `${base}/relay/customer/search?q=${encodeURIComponent(this.customer)}&limit=20`,
           {
             method: "GET",
-            headers: {
+            headers: this.get_relay_client_headers({
               Accept: "application/json",
-            },
+            }),
           }
         );
         const payload = await resp.json();
@@ -1953,6 +1961,7 @@ export default {
           token_id: (this.invoice_doc.name || "").slice(-5),
           pos_profile_id: this.pos_profile.name,
           cashier_user_id: frappe.session.user,
+          role: this.current_role || this.get_current_role() || "",
           customer_id: this.invoice_doc.customer,
           customer_name: this.invoice_doc.customer_name,
           items: (this.invoice_doc.items || []).map((row) => ({
@@ -1967,9 +1976,9 @@ export default {
 
         fetch(`${relayBaseUrl.replace(/\/$/, "")}/relay/token/create`, {
           method: "POST",
-          headers: {
+          headers: this.get_relay_client_headers({
             "Content-Type": "application/json",
-          },
+          }),
           body: JSON.stringify(tokenPayload),
         }).catch(() => {
           // non-blocking: token sync is best-effort at draft stage

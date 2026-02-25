@@ -23,6 +23,10 @@ DEFAULT_CONFIG = {
     "offline_mode": True,
     "poll_seconds": 5,
     "allowed_subnet": "192.168.50.0/24",
+    # Phase 3 baseline relay client auth (browser -> relay). Keep disabled until
+    # a matching key is configured in the cloud app bootstrap response.
+    "relay_client_auth_required": False,
+    "relay_client_auth_key": "",
 }
 
 
@@ -877,6 +881,82 @@ def list_outbox(limit=200):
         for row in rows:
             row["payload"] = _loads(row.get("payload"))
         return rows
+
+
+def cleanup_outbox_rows(
+    limit=200,
+    statuses=None,
+    event_types=None,
+    created_before=None,
+    error_contains=None,
+    local_ref_contains=None,
+    delete=False,
+):
+    statuses = [str(s).strip() for s in (statuses or []) if str(s).strip()]
+    event_types = [str(s).strip() for s in (event_types or []) if str(s).strip()]
+    created_before = str(created_before or "").strip()
+    error_contains = str(error_contains or "").strip()
+    local_ref_contains = str(local_ref_contains or "").strip()
+
+    where = []
+    params = []
+    if statuses:
+        where.append("status IN ({})".format(",".join(["?"] * len(statuses))))
+        params.extend(statuses)
+    if event_types:
+        where.append("event_type IN ({})".format(",".join(["?"] * len(event_types))))
+        params.extend(event_types)
+    if created_before:
+        where.append("created_at < ?")
+        params.append(created_before)
+    if error_contains:
+        where.append("COALESCE(last_error, '') LIKE ?")
+        params.append(f"%{error_contains}%")
+    if local_ref_contains:
+        where.append("COALESCE(local_ref, '') LIKE ?")
+        params.append(f"%{local_ref_contains}%")
+
+    where_sql = " WHERE " + " AND ".join(where) if where else ""
+
+    with get_db() as conn:
+        cur = conn.execute(
+            f"""
+            SELECT event_id, event_type, idempotency_key, local_ref, payload,
+                   status, retries, next_attempt_at, last_error, cloud_ref,
+                   created_at, updated_at
+            FROM relay_outbox
+            {where_sql}
+            ORDER BY created_at ASC
+            LIMIT ?
+            """,
+            tuple(params + [int(limit)]),
+        )
+        rows = [dict(r) for r in cur.fetchall()]
+        for row in rows:
+            row["payload"] = _loads(row.get("payload"))
+
+        deleted = 0
+        if delete and rows:
+            conn.executemany(
+                "DELETE FROM relay_outbox WHERE event_id = ?",
+                [(r["event_id"],) for r in rows],
+            )
+            deleted = len(rows)
+
+    return {
+        "rows": rows,
+        "matched": len(rows),
+        "deleted": deleted,
+        "dry_run": not bool(delete),
+        "filters": {
+            "statuses": statuses,
+            "event_types": event_types,
+            "created_before": created_before,
+            "error_contains": error_contains,
+            "local_ref_contains": local_ref_contains,
+            "limit": int(limit),
+        },
+    }
 
 
 def outbox_counts():

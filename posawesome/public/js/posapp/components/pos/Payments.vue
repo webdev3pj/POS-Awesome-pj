@@ -807,6 +807,14 @@ export default {
         return "";
       }
     },
+    get_relay_client_headers(extra = {}) {
+      const headers = { ...extra };
+      try {
+        const relayKey = (localStorage.getItem("posa_relay_client_key") || "").trim();
+        if (relayKey) headers["X-Relay-Client-Key"] = relayKey;
+      } catch (e) {}
+      return headers;
+    },
     block_sales_associate_payment() {
       this.current_role = this.get_current_role();
       if (!this.is_sales_associate_role) {
@@ -1165,9 +1173,9 @@ export default {
         try {
           const currentResp = await fetch(queryUrl, {
             method: "GET",
-            headers: {
+            headers: vm.get_relay_client_headers({
               Accept: "application/json",
-            },
+            }),
           });
           const currentPayload = await currentResp.json();
           if (currentResp.ok && currentPayload.ok && currentPayload.session) {
@@ -1179,9 +1187,9 @@ export default {
 
         const openResp = await fetch(`${base}/relay/session/open`, {
           method: "POST",
-          headers: {
+          headers: vm.get_relay_client_headers({
             "Content-Type": "application/json",
-          },
+          }),
           body: JSON.stringify({
             pos_profile_id: vm.pos_profile.name,
             cashier_user_id: frappe.session.user,
@@ -1200,9 +1208,9 @@ export default {
         .then((cashierSessionId) => {
           return fetch(endpoint, {
             method: "POST",
-            headers: {
+            headers: vm.get_relay_client_headers({
               "Content-Type": "application/json",
-            },
+            }),
             body: JSON.stringify({
               token_id: tokenId,
               idempotency_key: idempotencyKey,

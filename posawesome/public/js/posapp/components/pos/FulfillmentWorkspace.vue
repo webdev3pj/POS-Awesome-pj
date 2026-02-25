@@ -388,8 +388,18 @@ export default {
     showMessage(text, color) {
       evntBus.$emit("show_mesage", { text, color });
     },
+    relayHeaders(extra = {}) {
+      const headers = { ...extra };
+      try {
+        const relayKey = (localStorage.getItem("posa_relay_client_key") || "").trim();
+        if (relayKey) headers["X-Relay-Client-Key"] = relayKey;
+      } catch (e) {}
+      return headers;
+    },
     async getJson(path) {
-      const r = await fetch(`${this.relayBase}${path}`, { headers: { Accept: "application/json" } });
+      const r = await fetch(`${this.relayBase}${path}`, {
+        headers: this.relayHeaders({ Accept: "application/json" }),
+      });
       const data = await r.json().catch(() => ({}));
       if (!r.ok) throw new Error(data.message || data.code || `HTTP ${r.status}`);
       return data;
@@ -397,7 +407,7 @@ export default {
     async postJson(path, payload) {
       const r = await fetch(`${this.relayBase}${path}`, {
         method: "POST",
-        headers: { "Content-Type": "application/json", Accept: "application/json" },
+        headers: this.relayHeaders({ "Content-Type": "application/json", Accept: "application/json" }),
         body: JSON.stringify(payload || {}),
       });
       const data = await r.json().catch(() => ({}));
