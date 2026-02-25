@@ -22,13 +22,14 @@
 - `CHANGELOG_PROGRESS.md`
 
 ## Document Currency
-- This is the current offline/relay reference for the active branch family and is aligned with relay-focused work through `codex-4-picker-dispatch` (inherits `codex-3-edge-relay` LAN-only/fallback work and adds picker/dispatch relay-local workflow validation).
+- This is the current offline/relay reference for the active branch family and is aligned through `codex-4.1-picked-dispatch-relay` (inherits `codex-3-edge-relay` LAN-only/fallback work, `codex-4-picker-dispatch` fulfillment workspace work, and `codex-4.1` picker/dispatch cloud sync parity + OptiPlex autostart hardening).
 - Some sections describe target-state service packaging/security that is still planned (especially Phase 3/Phase 4+ items).
 - For the latest verified relay behavior, use:
   - `CHANGELOG_PROGRESS.md`
   - `uat/2026-02-23-local-edge-relay-smoke.md`
   - `uat/2026-02-24-optiplex-lan-https-relay-sa-cashier-e2e-demo.md`
   - `uat/2026-02-24-optiplex-picker-dispatch-shared-shell-relay-local-first.md`
+  - `uat/2026-02-25-optiplex-picker-dispatch-cloud-sync-and-autostart-validation.md`
   - `runbooks/optiplex-edge-relay-next-session.md`
 - Historical baseline note:
   - branch baseline `424c79a` documented the LAN/private-cloud constraint before the LAN-only mode implementation.
@@ -40,7 +41,11 @@
   - shared-shell picker/dispatch actions persist locally through relay (`/relay/pick/update`, `/relay/dispatch/release`)
   - line-wise picker quantities persist into `relay_local_sale_lines.payload.picker` with UOM/conversion metadata
   - dispatch release updates local relay sale status and appends local dispatch event
-  - relay outbox correctly queues `PICK_EVENT` / `RELEASE_EVENT`, but cloud sync for these events is currently failing with `500` in the dev backend
+  - relay outbox correctly queues `PICK_EVENT` / `RELEASE_EVENT` (local-first behavior)
+- Current implemented state on `codex-4.1-picked-dispatch-relay` (verified 2026-02-25 on OptiPlex/dev site):
+  - relay sync worker enriches fulfillment outbox events with `sales_invoice` + `pos_profile` and normalizes picker statuses for cloud endpoint parity
+  - fresh relay outbox `PICK_EVENT` / `RELEASE_EVENT` rows sync to cloud (`done`) and update cloud `POS Relay Workflow State` to `Picked` / `Released`
+  - OptiPlex relay+Caddy auto-start is hardened and verified via Windows boot task `POSRelayStack_Autostart_OnStart` (runs as `SYSTEM`)
 
 ## Purpose
 Define the offline continuity design and operations model for the Edge Relay, including:
@@ -398,13 +403,15 @@ These support common dashboard/query paths and worker polling filters.
 ### Eventual consistency
 - Local operation success and cloud sync success are separate states.
 - Operators must use outbox/transaction views to monitor backlog and failures.
-- This separation is now directly observed in live Picker/Dispatch UAT: local relay pick/release updates succeeded while outbox sync to cloud retried due backend `500` errors.
+- This separation is directly observed in live Picker/Dispatch UAT:
+  - pre-fix rows show local relay success while outbox retries cloud sync (historical `500`/`417` errors)
+  - post-fix fresh rows show local relay success followed by cloud sync completion (`done`)
 
 ## Sync Event Types and Cloud Mapping (Current Known Behavior)
 Examples present in branch:
 - `SALE_COMMITTED` -> cloud sync path exists (`Implemented` foundation; live dev-site relay-first cashier UAT verified)
-- `PICK_EVENT` -> local enqueue/outbox path verified (`Implemented` local-first foundation); dev backend sync endpoint currently returns `500` (`Partial` cloud parity)
-- `RELEASE_EVENT` -> local enqueue/outbox path verified (`Implemented` local-first foundation); dev backend sync endpoint currently returns `500` (`Partial` cloud parity)
+- `PICK_EVENT` -> local enqueue/outbox path verified and fresh cloud sync parity live-validated on `codex-4.1-picked-dispatch-relay` (`Implemented`/`Partial` because auth hardening still pending and historical rows may remain queued)
+- `RELEASE_EVENT` -> local enqueue/outbox path verified and fresh cloud sync parity live-validated on `codex-4.1-picked-dispatch-relay` (`Implemented`/`Partial` because auth hardening still pending and historical rows may remain queued)
 - `TOKEN_CREATED`, `SESSION_OPEN`, `SESSION_CLOSE` -> currently intentional no-op cloud ack in worker (`Partial parity`)
 
 ## What Is NOT Stored on Relay (Current Model)
@@ -468,16 +475,21 @@ Examples present in branch:
 
 ## Windows Operation Model (Current Branch Reality)
 ### Current startup model (`Implemented`)
-The current branch documents and supports a practical Windows launcher workflow, not a full Windows Service binary install by default:
+The current branch documents and supports a practical Windows launcher workflow, with verified scheduled-task autostart (not a full Windows Service binary install by default):
 - `relay/start_relay.bat` performs install/bootstrap/start tasks.
-- UI bootstrap creates:
-  - inbound firewall rule,
-  - Windows startup task (launch on user logon).
+- Relay HTTPS stack automation scripts now exist in `relay/windows_autostart/` and can install:
+  - user-logon fallback autostart (HKCU Run)
+  - boot-time Scheduled Task `POSRelayStack_Autostart_OnStart` (preferred, runs as `SYSTEM`)
+- OptiPlex UAT verified the boot-time task starts relay + Caddy LAN HTTPS and returns healthy `/health` checks after startup-script fixes.
 
 ### Current documented daily usage
 - Start relay via `start_relay.bat`.
 - Check status at `/health`.
 - Monitor queue/outbox via dashboard and JSON endpoints.
+- If reboot/startup behavior is under test, verify:
+  - `Get-ScheduledTaskInfo -TaskName POSRelayStack_Autostart_OnStart`
+  - `http://127.0.0.1:8787/health`
+  - `https://192.168.50.168/health`
 
 ## Windows Service Specification (Program Target / Ops Guidance)
 This section is the operational spec for a maintainable Windows deployment, whether implemented via Scheduled Task, NSSM, or native service wrapper later.
@@ -495,7 +507,7 @@ This section is the operational spec for a maintainable Windows deployment, whet
 - Do not run with unnecessary admin rights outside bootstrap steps.
 
 ### Startup and Recovery
-- Startup mode: automatic on boot or user logon (current implementation uses startup task on logon).
+- Startup mode: automatic on boot or user logon (current OptiPlex implementation now supports both; preferred verified mode is boot task `POSRelayStack_Autostart_OnStart` running as `SYSTEM`, with user-logon fallback available).
 - Recovery: restart on failure (if wrapped as service) or scheduled task relaunch policy.
 - Document manual restart command and recovery procedure.
 

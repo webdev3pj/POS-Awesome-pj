@@ -16,8 +16,9 @@
 ## Document Currency
 - This is the active phase doc for remaining cashier/picker/dispatch/supervisor UX work.
 - Cashier filtering, LAN-only relay status semantics, cloud fallback UX, and relay-first cashier SO-load/payment-path coverage are implemented and verified on `codex-3-edge-relay`.
-- `codex-4-picker-dispatch` now includes a shared-shell Picker/Dispatch/Supervisor fulfillment workspace wired to relay pick/release APIs and has been live-validated on the dev site/OptiPlex relay for local-first picker/dispatch state updates.
-- Remaining tasks in this file are primarily Picker/Dispatch/Supervisor UX polish, visibility-matrix cleanup across shared components, committed/repeatable Cypress coverage, and cloud parity validation once backend picker/dispatch sync endpoints are fixed.
+- `codex-4-picker-dispatch` introduced a shared-shell Picker/Dispatch/Supervisor fulfillment workspace wired to relay pick/release APIs and was live-validated on the dev site/OptiPlex relay for local-first picker/dispatch state updates.
+- `codex-4.1-picked-dispatch-relay` completes live cloud parity validation for fresh picker/dispatch relay outbox events (`PICK_EVENT`, `RELEASE_EVENT`) on the dev site.
+- Remaining tasks in this file are primarily Picker/Dispatch/Supervisor UX polish, visibility-matrix cleanup across shared components, and committed/repeatable Cypress coverage.
 - Use `../CHANGELOG_PROGRESS.md` and the cashier UAT doc for the latest verified cashier status.
 
 ## Purpose
@@ -64,9 +65,7 @@ Complete the operator-facing role UX so each role sees the right screens/actions
   - picker transitions `PICK_IN_PROGRESS` -> `PICKED_READY_FOR_RELEASE`
   - Dispatch shared-shell release updates `dispatch_status = RELEASED`
   - released row disappears from relay pick queue
-- Current backend parity gap (outside Phase 2 UI itself but affects end-to-end cloud status):
-  - relay outbox `PICK_EVENT` sync -> `500` (`update_relay_picking_status`)
-  - relay outbox `RELEASE_EVENT` sync -> `500` (`release_relay_dispatch`)
+- Cloud parity for fresh picker/dispatch relay outbox events is now live-validated on `codex-4.1-picked-dispatch-relay` (relay outbox rows move to `done`; cloud `POS Relay Workflow State` updates to `Picked` / `Released`). Historical queued rows from pre-fix runs may still remain and should be treated as legacy artifacts during demos.
 
 ## Recommended UX Direction (Same POS Awesome Shell for All Roles)
 - Use one POS Awesome UI shell for all roles (same navigation, same relay/cloud status chips, same monitor rail).
@@ -102,14 +101,14 @@ Complete the operator-facing role UX so each role sees the right screens/actions
 - [x] Picker UI workflow Cypress coverage (queue -> pick update -> status changes reflected in relay/UI) via local helper spec in headed watch mode on OptiPlex (`codex-4-picker-dispatch`). Note: helper spec is local-only in current docs-only commit; commit or recreate for branch history.
 - [x] Dispatch UI workflow Cypress coverage (release path reflected in relay/UI) via local helper spec in headed watch mode on OptiPlex (`codex-4-picker-dispatch`). Hold/reason variants remain untested.
 - [x] Manual/headed UAT on OptiPlex/dev site for shared-shell picker/dispatch workspace (`codex-4-picker-dispatch`) including line-wise picked quantity persistence and UOM/conversion-factor display. Cloud sync endpoint parity still pending.
-- [ ] Cloud parity validation for picker/dispatch events after backend fixes (`PICK_EVENT` / `RELEASE_EVENT` sync completion and cloud-state update confirmation).
+- [x] Cloud parity validation for picker/dispatch events (`PICK_EVENT` / `RELEASE_EVENT` sync completion and cloud-state update confirmation) on `codex-4.1-picked-dispatch-relay` using headed Cypress watch mode + relay/cloud API evidence.
 - [ ] Supervisor exception/override Cypress coverage (once supervisor UX is defined).
 
 ## Known Risks
 - UI-only blocks can create false sense of security until Phase 3 auth lands.
 - Shared components may have side effects when hidden/disabled logic is added.
 - Relay/cloud status semantics can confuse operators if LAN-only mode diagnostics and submit gating are not clearly distinguished in the UI.
-- Fulfillment operators may misread success if local relay pick/release updates succeed but cloud sync endpoints are failing; UI needs clear local-vs-cloud sync messaging for picker/dispatch too.
+- Fulfillment operators may still misread success if historical queued outbox rows (older pre-fix events) are visible during demos; UI/runbooks should clarify how to identify fresh events by timestamp/local ref and distinguish local status from cloud sync counters.
 - A single-shell role strategy improves training and consistency, but increases the importance of strict backend/relay authorization and comprehensive hidden/disabled control tests.
 
 ## Deferred Items

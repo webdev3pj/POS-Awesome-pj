@@ -3,7 +3,7 @@
 ## TL;DR (Business Owner)
 - This is the first file to open on the OptiPlex machine.
 - It tells a new AI agent exactly what branch to use, how to start the Edge Relay locally, what to configure in `PJ7 CASHIER`, and what tests to run.
-- Relay-enabled SA + Cashier flow is already proven on the OptiPlex/dev site, and Picker/Dispatch local-first relay flow is now also proven on `codex-4-picker-dispatch`; next sessions should build on that proof (cloud parity for fulfillment events, auth hardening, rollout), or rerun demos/UAT when validating new changes.
+- Relay-enabled SA + Cashier flow is already proven on the OptiPlex/dev site, and Picker/Dispatch relay-first flow (including cloud fulfillment sync parity) is now proven on `codex-4.1-picked-dispatch-relay`; next sessions should build on that proof (auth hardening, rollout), or rerun demos/UAT when validating new changes.
 - Local relay core endpoints are already smoke-tested and the relay-host runbook process is established from `codex-3-edge-relay` forward.
 - For a completely fresh Codex session, also open `optiplex-fresh-codex-zero-context-handoff.md`.
 
@@ -18,22 +18,24 @@ Provide a zero-context startup guide for a new AI coding agent session on the Op
 
 ## Branch and Starting Point
 - Repo: `POS-Awesome-pj`
-- Branch to use (current): `codex-4-picker-dispatch`
+- Branch to use (current): `codex-4.1-picked-dispatch-relay`
 - GitHub baseline commit for this handoff/runbook: `424c79a`
 - Current relay-focused branch status:
   - SA + Cashier browser flows are already validated in cloud/non-relay-missing scenarios on `codex-2-cashier`
   - `codex-3-edge-relay` now includes relay-focused hardening (LAN-only mode + cloud fallback), OptiPlex LAN HTTPS setup, and live relay-enabled SA/Cashier validation
-  - `codex-4-picker-dispatch` adds shared-shell Picker/Dispatch/Supervisor fulfillment workspace + relay line-wise picker payload persistence and has now been live-validated locally on OptiPlex/dev site for picker/dispatch state changes
+  - `codex-4-picker-dispatch` adds shared-shell Picker/Dispatch/Supervisor fulfillment workspace + relay line-wise picker payload persistence and has been live-validated locally on OptiPlex/dev site for picker/dispatch state changes
+  - `codex-4.1-picked-dispatch-relay` fixes picker/dispatch cloud fulfillment sync parity and OptiPlex relay autostart (boot task) and has been live-validated on OptiPlex/dev site
   - local relay HTTP smoke (`/health`, `/relay/session/open`, `/relay/token/create`, `/relay/commit-invoice`) passed
   - headed Cypress relay demo proof completed:
     - SA token/SO `SAL-ORD-PJ7-2026-00009`
     - relay local sale `LSR-PJ7 -20260224200538-34917A`
     - cloud invoice via relay sync `ACC-SINV-2026-00265`
-  - headed Cypress picker/dispatch fulfillment validation completed (local relay persistence proof):
+  - headed Cypress picker/dispatch fulfillment validation completed (local relay persistence + cloud parity proof):
     - picker line-wise `picked_qty` decimal edit persisted in relay `payload.picker`
     - sale moved to `PICKED_READY_FOR_RELEASE`
     - dispatch release set `dispatch_status = RELEASED`
-    - cloud sync for `PICK_EVENT` / `RELEASE_EVENT` currently fails with backend `500` (events queued locally in relay outbox)
+    - fresh relay outbox `PICK_EVENT` / `RELEASE_EVENT` now sync to cloud (`done`) after `codex-4.1-picked-dispatch-relay` fixes
+    - cloud `POS Relay Workflow State` reflects `Picked` / `Released` for the tested invoice (`ACC-SINV-2026-00260`)
 
 ## Files to Read First (in order)
 1. `plans/pos-relay-program/00-ai-agent-start-here.md`
@@ -115,6 +117,16 @@ Set-Location 'I:\vscode repos\POS-Awesome-pj\relay'
 - If you change or deploy branch code that affects `relay/relay/*.py` (for example `relay/relay/storage.py`), restart the local relay process on the OptiPlex before testing.
 - Cloud deploy alone does not update the local Python relay process.
 
+### Current autostart model on this OptiPlex (verified)
+- The OptiPlex now has a boot-time scheduled task:
+  - `POSRelayStack_Autostart_OnStart`
+- It starts the relay + Caddy LAN HTTPS stack on boot (runs as `SYSTEM`) using scripts in `relay/windows_autostart/`.
+- If a future session suspects the relay did not restart correctly after a reboot:
+  - check task result in admin PowerShell (`Get-ScheduledTaskInfo`)
+  - verify both:
+    - `http://127.0.0.1:8787/health`
+    - `https://192.168.50.168/health`
+
 ## Relay Health Checks (Must Pass Before POS Testing)
 Open in browser or use PowerShell:
 - `http://127.0.0.1:8787/`
@@ -176,12 +188,9 @@ Fallback (not preferred for this workflow):
   - picker line-wise pick updates persist to relay line payloads (`payload.picker`) with UOM/conversion metadata
   - dispatch release updates relay local sale and dispatch events
 - Next recommended work:
-  - Fix cloud backend relay sync endpoints for fulfillment events:
-    - `posawesome.posawesome.api.posapp.update_relay_picking_status`
-    - `posawesome.posawesome.api.posapp.release_relay_dispatch`
-  - Re-run picker/dispatch UAT and confirm `PICK_EVENT` / `RELEASE_EVENT` sync to cloud (not just local relay persistence)
-  - Commit/push picker/dispatch Cypress helper specs if they should be retained for repeatable validation
   - Phase 3 relay auth + server-side role enforcement
+  - Commit/push picker/dispatch Cypress helper specs if they should be retained for repeatable validation
+  - Expand picker/dispatch UAT coverage (exception paths, supervisor overrides, hold/reason paths)
   - shop-PC certificate trust rollout and support docs cleanup
 
 ## Next Session Test Sequence (Recommended)
@@ -206,7 +215,7 @@ Choose `Chrome`.
 7. `cypress/e2e/cashier_token_disabled_profile_smoke.cy.js` (regression)
 
 ### 4. Picker/Dispatch validation sequence (after deploying `codex-4-picker-dispatch`)
-Run in headed mode (manual + Cypress helpers as available). Current status: local relay persistence path is already validated; use this sequence after backend picker/dispatch sync fixes or UI changes:
+Run in headed mode (manual + Cypress helpers as available). Current status: local relay persistence and cloud parity for fresh fulfillment events are validated; use this sequence after UI/auth/backend changes:
 1. Set `cline` role to `Picker` and open POS
 2. Confirm shared-shell fulfillment panel loads (not cashier cart/payment layout)
 3. Open a relay local sale row and verify:
@@ -218,7 +227,7 @@ Run in headed mode (manual + Cypress helpers as available). Current status: loca
 6. Set `cline` role to `Dispatch` and open POS
 7. Confirm dispatch queue/release-ready filtering and release action
 8. Verify relay transaction detail + dispatch events after release
-9. Confirm relay outbox `PICK_EVENT` / `RELEASE_EVENT` cloud sync completes (current known dev backend gap: both may queue with `500` until backend endpoints are fixed)
+9. Confirm relay outbox `PICK_EVENT` / `RELEASE_EVENT` cloud sync completes for fresh events and cloud relay workflow state updates to `Picked` / `Released`
 
 ### 5. Optional visual relay demo sequence (Cypress + local relay pages)
 Run this when you need business-owner proof of relay local storage/status screens:
@@ -236,8 +245,9 @@ Run this when you need business-owner proof of relay local storage/status screen
 - Look for relay success messages (`local_sale_ref`) and relay transaction/outbox evidence after cashier submit
 - Watch relay dashboard `/` `Outbox Counters (v2 Local-First)` and `Transaction Timeline (Local Sales)` for SA/Cashier local-first activity
 - For Picker/Dispatch, watch relay transaction detail + outbox rows (`PICK_EVENT`, `RELEASE_EVENT`) and distinguish:
-  - local relay status success (expected now)
-  - cloud sync completion (currently failing with backend `500` in dev)
+  - local relay status success (expected)
+  - cloud sync completion for fresh events (expected after `codex-4.1-picked-dispatch-relay`)
+- Historical outbox rows from pre-fix runs may still show old `500`/`417` errors; use fresh timestamps/local refs when validating.
 - Remember `/queue` is the legacy queue UI and may remain idle while v2 outbox/transaction views update
 
 ## If Something Fails (How to Classify Quickly)

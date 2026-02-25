@@ -195,8 +195,8 @@ Status tags in the last column reflect the current program branch family state; 
 | Take payment | No | Yes | No | No | Conditional | `Partial` | `Planned` (Phase 3 auth) |
 | Submit SI | No | Yes | No | No | Conditional | `Partial` | `Partial` |
 | Void token | No | No | No | No | Yes | `Planned` | `Partial` (relay endpoint exists; auth missing) |
-| Pick update | No | No | Yes | No | Yes | `Implemented` (shared-shell relay-local path live-validated on `codex-4-picker-dispatch`) | `Partial` (auth/trust pending; cloud sync endpoint parity pending) |
-| Dispatch release | No | No | No | Yes | Yes | `Implemented` (shared-shell relay-local path live-validated on `codex-4-picker-dispatch`) | `Partial` (auth/trust pending; cloud sync endpoint parity pending) |
+| Pick update | No | No | Yes | No | Yes | `Implemented` (shared-shell relay path live-validated on `codex-4-picker-dispatch` / `codex-4.1-picked-dispatch-relay`) | `Partial` (auth/trust pending; cloud parity now verified for fresh events) |
+| Dispatch release | No | No | No | Yes | Yes | `Implemented` (shared-shell relay path live-validated on `codex-4-picker-dispatch` / `codex-4.1-picked-dispatch-relay`) | `Partial` (auth/trust pending; cloud parity now verified for fresh events) |
 | Override exceptions | No | No | No | Limited | Yes | `Planned` | `Planned` |
 
 ## Current Implementation Notes by Role
@@ -233,7 +233,7 @@ What is missing:
 - Server-side role enforcement for payment/submit actions (Phase 3).
 
 ### Picker (`cline-Picker`)
-Status: `Partial` (core local-first workflow proven on `codex-4-picker-dispatch`)
+Status: `Partial` (core local-first workflow + cloud parity for fresh events proven through `codex-4.1-picked-dispatch-relay`)
 
 What exists:
 - Relay pick queue and pick update APIs (`Implemented` backend foundation).
@@ -251,7 +251,6 @@ What exists:
 What is missing:
 - Picker-focused UX polish/guardrails in shared shell (pick-ticket print/reprint, reason presets, clearer exception prompts).
 - Committed/repeatable Cypress picker spec coverage in branch history (helper spec used in UAT was local-only).
-- Cloud-side picker sync endpoint parity (`update_relay_picking_status`) so relay `PICK_EVENT` outbox rows sync to ERPNext/Frappe.
 - Relay auth/role authorization (Phase 3).
 
 Recommended picker flow (same POS shell, relay-backed):
@@ -263,7 +262,7 @@ Recommended picker flow (same POS shell, relay-backed):
 - Ticket monitor rail remains visible for cross-role context; picker actions may later deep-link from rail row -> pick detail panel.
 
 ### Dispatch (`cline-Dispatch`)
-Status: `Partial` (core local-first workflow proven on `codex-4-picker-dispatch`)
+Status: `Partial` (core local-first workflow + cloud parity for fresh events proven through `codex-4.1-picked-dispatch-relay`)
 
 What exists:
 - Relay dispatch release API and state transitions (`Implemented` backend foundation).
@@ -280,7 +279,6 @@ What exists:
 What is missing:
 - Dispatch hold/reason/override UX refinement and explicit supervisor pathways.
 - Committed/repeatable Cypress dispatch spec coverage in branch history (helper spec used in UAT was local-only).
-- Cloud-side dispatch sync endpoint parity (`release_relay_dispatch`) so relay `RELEASE_EVENT` outbox rows sync to ERPNext/Frappe.
 - Server/relay authorization (Phase 3).
 
 Recommended dispatch flow (same POS shell, relay-backed):
@@ -319,12 +317,15 @@ Recommended supervisor behavior in shared shell:
 
 Status: `Planned` (Phase 3)
 
-Current live UAT note (2026-02-24, `codex-4-picker-dispatch`):
-- Relay-local picker and dispatch transitions are now proven in the shared shell.
-- Cloud parity for fulfillment events is still pending because relay outbox sync for:
-  - `PICK_EVENT` -> `update_relay_picking_status`
-  - `RELEASE_EVENT` -> `release_relay_dispatch`
-  currently returns `500` from the dev backend.
+Current live UAT note (2026-02-25, `codex-4.1-picked-dispatch-relay`):
+- Relay-local picker and dispatch transitions are proven in the shared shell.
+- Fresh relay outbox fulfillment events now sync to cloud:
+  - `PICK_EVENT` -> `update_relay_picking_status` (`done`)
+  - `RELEASE_EVENT` -> `release_relay_dispatch` (`done`)
+- Cloud `POS Relay Workflow State` proof captured for tested invoice (`ACC-SINV-2026-00260`):
+  - `picking_status = Picked`
+  - `dispatch_status = Released`
+- Historical pre-fix outbox rows may still remain queued with old `500`/`417` errors and should be treated as legacy artifacts.
 
 ## Phase Mapping for Missing Items
 - Phase 1:

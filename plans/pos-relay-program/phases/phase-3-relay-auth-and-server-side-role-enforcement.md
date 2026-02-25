@@ -44,7 +44,7 @@ This phase is especially important because the recommended UX direction is a **s
 - Live relay-enabled SA/Cashier behavior is validated, which provides concrete action paths to lock down in this phase (`TOKEN_CREATED`, `SESSION_OPEN`, `SALE_COMMITTED`).
 - Shared-shell Picker/Dispatch/Supervisor fulfillment workspace is now implemented on `codex-4-picker-dispatch` and live-validated locally (OptiPlex relay + dev site) while calling relay pick/release endpoints from the same POS shell (`/relay/pick/update`, `/relay/dispatch/release`), increasing the urgency of relay auth/authorization before wider rollout.
 - Picker line-wise fulfillment payloads are now persisted in relay local line payloads (`payload.picker`) and included in relay outbox `PICK_EVENT` payloads (`Implemented` local-first behavior, live UAT verified), but role trust remains client-provided until this phase is completed.
-- Live dev-site/OptiPlex UAT now confirms picker and dispatch actions execute locally through the relay and create/queue outbox events (`PICK_EVENT`, `RELEASE_EVENT`) from the shared shell, but cloud-side endpoints for those events currently return `500`, which increases operational pressure to complete both cloud endpoint parity and this phase's auth/authorization controls before rollout.
+- Live dev-site/OptiPlex UAT now confirms picker and dispatch actions execute through the relay and sync fresh outbox fulfillment events (`PICK_EVENT`, `RELEASE_EVENT`) to the cloud after the `codex-4.1-picked-dispatch-relay` parity fix. This increases operational pressure to complete this phase's auth/authorization controls before wider rollout because the fulfillment path is now more end-to-end complete.
 
 ## Target Trust Model (Recommended)
 - Keep one POS Awesome UI shell for all roles.
@@ -71,10 +71,8 @@ This phase is especially important because the recommended UX direction is a **s
 - [ ] Update `01-role-based-workflow-spec.md` and `03-offline-edge-relay-and-windows-service-spec.md` with final trust model.
 
 Implementation note (current dev-site state, not a substitute for this phase):
-- Picker/dispatch relay outbox cloud-sync handlers currently fail with `500` for:
-  - `posawesome.posawesome.api.posapp.update_relay_picking_status`
-  - `posawesome.posawesome.api.posapp.release_relay_dispatch`
-- Fixing those endpoints restores cloud parity for fulfillment events, but Phase 3 is still required to ensure only authorized roles can invoke them.
+- Picker/dispatch relay outbox cloud-sync parity for fresh events is now working on `codex-4.1-picked-dispatch-relay` (`update_relay_picking_status`, `release_relay_dispatch`), including relay-provided `pos_profile` fallback handling for relay-created Sales Invoices with blank `pos_profile`.
+- Phase 3 is still required to ensure only authorized roles can invoke picker/dispatch/cashier mutating actions and to prevent spoofed role payloads in the shared-shell UI model.
 
 ## Minimum Relay Authorization Matrix (Phase 3 baseline)
 - `SA` (and optionally `Supervisor`):
@@ -100,7 +98,7 @@ Implementation note (current dev-site state, not a substitute for this phase):
 - [ ] Manual verification that bypassing UI controls cannot invoke forbidden actions.
 - [ ] Negative tests from shared-shell UI contexts (e.g. Picker browser attempts cashier submit, Dispatch browser attempts pick update with forged role payload).
 - [ ] Add negative tests covering the new shared-shell fulfillment workspace (e.g. forged picker/dispatch payloads from `FulfillmentWorkspace.vue` context).
-- [ ] Add negative tests specifically for cloud fulfillment sync endpoints once they are fixed (`update_relay_picking_status`, `release_relay_dispatch`) to ensure role spoofing is rejected after endpoint parity work lands.
+- [ ] Add negative tests specifically for cloud fulfillment sync endpoints (`update_relay_picking_status`, `release_relay_dispatch`) to ensure role spoofing is rejected after the `codex-4.1-picked-dispatch-relay` endpoint parity fix.
 
 ## Known Risks
 - Breaking active store devices if auth rollout is not coordinated.

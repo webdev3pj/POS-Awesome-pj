@@ -23,6 +23,57 @@ Note:
 
 ---
 
+## 2026-02-25 - Picker/Dispatch cloud parity fixed and live-validated; OptiPlex relay autostart hardened
+- Branch: `codex-4.1-picked-dispatch-relay`
+- Summary: Fixed relay/cloud fulfillment sync parity for picker/dispatch by enriching relay outbox fulfillment payloads (`sales_invoice`, `pos_profile`) and allowing cloud fulfillment endpoints to resolve POS Profile when relay-created Sales Invoices have blank `pos_profile`. Also added/validated OptiPlex relay+Caddy autostart scripts and a boot-time scheduled task (`SYSTEM`), then re-ran headed Cypress watch-mode picker/dispatch flow and verified cloud relay workflow state updates.
+- What changed:
+  - Relay sync worker (`relay/relay/sync_worker.py`):
+    - enriches `PICK_EVENT` / `RELEASE_EVENT` payloads from `local_sale_ref` using relay local sale data (`cloud_invoice_name`, `pos_profile_id`)
+    - normalizes relay pick statuses to cloud endpoint statuses (`PICK_IN_PROGRESS` -> `In Progress`, `PICKED_READY_FOR_RELEASE` -> `Picked`, etc.)
+    - includes `pos_profile` in fulfillment cloud payloads
+  - Cloud backend fulfillment endpoints (`posawesome/posawesome/api/posapp.py`):
+    - `update_relay_picking_status(...)`
+    - `release_relay_dispatch(...)`
+    - both now accept relay-provided `pos_profile`/`pos_profile_id` and resolve a fallback POS Profile when the target Sales Invoice has blank `pos_profile`
+  - OptiPlex relay operations hardening:
+    - added `relay/windows_autostart/*.ps1` autostart scripts (relay + Caddy stack)
+    - added `ONSTART` scheduled task install path (`POSRelayStack_Autostart_OnStart`) and verified boot-task success after startup-script health-check fixes
+    - updated Caddy startup script to support explicit Caddy appdata paths for consistent cert store/trust under `SYSTEM`
+- What was verified:
+  - Boot/startup operations on OptiPlex:
+    - relay HTTP health and LAN HTTPS health both return `ok: true` after startup task run
+    - admin PowerShell confirmed `POSRelayStack_Autostart_OnStart` `LastTaskResult = 0` after final script patch
+  - Headed Cypress watch-mode (Chrome) on live dev site (after redeploy + relay restart):
+    - `admin_set_cline_picker_only_role.cy.js` ✅
+    - `picker_workflow_frontend_watch.cy.js` ✅
+    - `admin_set_cline_dispatch_only_role.cy.js` ✅ (one login/OTP flake on first run; passed on rerun)
+    - `dispatch_workflow_frontend_watch.cy.js` ✅
+  - Relay local + cloud parity proof for tested sale `LSR-PJ7 -20260224190636-3B0FD9`:
+    - relay transaction detail shows local picker and dispatch events
+    - relay outbox rows for fresh fulfillment events are `done`:
+      - `PICK_EVENT` (`In Progress`) -> `done`
+      - `PICK_EVENT` (`Picked`) -> `done`
+      - `RELEASE_EVENT` -> `done`
+    - cloud-side `POS Relay Workflow State` row for `ACC-SINV-2026-00260` shows:
+      - `pos_profile = PJ7 CASHIER`
+      - `token_status = Paid`
+      - `picking_status = Picked`
+      - `dispatch_status = Released`
+      - `released_by = cline@pjjamaica.com`
+  - Relay health snapshot after validation:
+    - `/health` outbox counters showed `done=22`, `queued=15`, `total=37`
+    - remaining queued rows are historical backlog from older test runs (not from the new picker/dispatch validation)
+- What remains:
+  - Phase 3 relay auth + server-side role enforcement (highest priority remaining engineering work)
+  - Commit/push local Cypress picker/dispatch helper specs and demo specs if they should become branch-owned test assets (currently local-only)
+  - Clean up/classify historical queued outbox rows from earlier pre-fix test runs for cleaner dashboards/UAT demos
+  - Rollout/ops hardening on shop PCs (cert trust rollout + support checklist execution)
+- Links:
+  - `uat/2026-02-25-optiplex-picker-dispatch-cloud-sync-and-autostart-validation.md`
+  - `03-offline-edge-relay-and-windows-service-spec.md`
+  - `phases/phase-2-cashier-picker-dispatch-ui-and-enforcement.md`
+  - `phases/phase-3-relay-auth-and-server-side-role-enforcement.md`
+
 ## 2026-02-24 - Picker/Dispatch shared-shell fulfillment workspace deployed and live-validated (relay local-first path proven; cloud sync endpoints pending)
 - Branch: `codex-4-picker-dispatch`
 - Summary: Deployed `codex-4-picker-dispatch` (`224e842`) to the dev site and live-tested the new shared-shell Picker/Dispatch fulfillment workspace in headed Cypress on the OptiPlex. Picker line-wise `picked_qty` edits (including decimals) now persist in local relay line payloads with UOM/conversion metadata, and Dispatch release updates relay sale status locally; cloud sync of picker/dispatch events is still failing on missing/unstable cloud endpoints (`500`).

@@ -4,10 +4,10 @@
 - This is the handoff document for a brand-new Codex session on the OptiPlex with no prior chat context.
 - It includes the exact branch, baseline commit, what is already working, what still needs to be built, and the exact order to work in.
 - It also explains how to handle secrets safely: copy local `.env` and relay config files, but do not commit them.
-- Main target (updated): build on the now-working relay-enabled SA + Cashier flow and the newly validated local-first Picker/Dispatch fulfillment flow (fix cloud sync parity, add auth hardening, finalize rollout support), or rerun demos/UAT after new changes.
+- Main target (updated): build on the now-working relay-enabled SA + Cashier flow and the now cloud-parity-validated Picker/Dispatch fulfillment flow (add auth hardening, finalize rollout support, and keep UAT repeatable), or rerun demos/UAT after new changes.
 
 ## Current Branch / Baseline
-- Working branch (current): `codex-4-picker-dispatch`
+- Working branch (current): `codex-4.1-picked-dispatch-relay`
 - GitHub baseline commit for this handoff: `424c79a`
 - Baseline commit message: `docs(relay): clarify frappe cloud local-lan relay constraints`
 
@@ -18,7 +18,9 @@
 - `44880b9` - docs normalization (current vs historical labeling)
 - `1c47d36` - cashier relay token derivation fix for SO -> SI path (critical relay commit fix)
 - `5522d5f` - cashier payment modes render correctly in SO -> SI payment screen
-- `224e842` - shared-shell picker/dispatch fulfillment workspace + relay line-wise picker payload persistence (current branch milestone)
+- `224e842` - shared-shell picker/dispatch fulfillment workspace + relay line-wise picker payload persistence
+- `cdc7038` - relay/cloud fulfillment sync parity fix + OptiPlex relay autostart scripts (`codex-4.1-picked-dispatch-relay`)
+- `5d39f02` - ignore relay autostart runtime logs
 
 ## What Is Already Working (Verified)
 - SA flow on live dev site:
@@ -54,16 +56,20 @@
   - Picker marks sale `PICKED_READY_FOR_RELEASE`
   - Dispatch releases the same sale and relay sets `dispatch_status = RELEASED`
   - Released sale drops out of relay pick queue
+- Picker/Dispatch cloud parity is now live-validated on `codex-4.1-picked-dispatch-relay` (OptiPlex + dev site):
+  - relay outbox fresh `PICK_EVENT` rows sync to `done`
+  - relay outbox fresh `RELEASE_EVENT` rows sync to `done`
+  - cloud `POS Relay Workflow State` row reflects `picking_status = Picked`, `dispatch_status = Released`
+- OptiPlex relay auto-start is now configured and verified:
+  - Windows boot task `POSRelayStack_Autostart_OnStart` starts relay + Caddy LAN HTTPS stack
+  - admin verification confirmed task `LastTaskResult = 0`
 
 ## What Is Not Finished (Next Build Targets)
-- Cloud backend parity for relay fulfillment sync endpoints:
-  - `update_relay_picking_status` (`PICK_EVENT`) currently returns `500`
-  - `release_relay_dispatch` (`RELEASE_EVENT`) currently returns `500`
 - Phase 3 relay auth for mutating endpoints
 - Server-side relay role authorization (do not trust browser localStorage role)
 - Commit/push picker/dispatch Cypress helper specs (used locally for UAT but not yet committed)
 - Shop-PC certificate trust rollout on non-OptiPlex devices (SA/Cashier/Picker/Dispatch PCs)
-- Cleanup/classification of one historical legacy queued outbox failure row (older smoke-test artifact)
+- Cleanup/classification of historical queued outbox failure rows (older pre-fix smoke/UAT artifacts)
 
 ## Non-Negotiable Security Rule (Read First)
 - Do **not** put passwords, OTP URIs, API keys, or relay secrets into Git commits/docs.
@@ -122,7 +128,7 @@ plans/pos-relay-program/runbooks/optiplex-edge-relay-next-session.md
 Then open:
 plans/pos-relay-program/runbooks/optiplex-fresh-codex-zero-context-handoff.md
 
-Work only on branch codex-4-picker-dispatch (unless explicitly told to hotfix an older branch).
+Work only on branch codex-4.1-picked-dispatch-relay (unless explicitly told to hotfix an older branch).
 Baseline GitHub commit for this handoff is 424c79a (historical relay LAN-only baseline reference).
 
 Current verified status:
@@ -134,13 +140,16 @@ Current verified status:
 - Shared-shell Picker/Dispatch local-first flow has been proven live against the OptiPlex relay
   - picker line-wise qty persistence (`payload.picker`)
   - dispatch release local relay state
-  - cloud fulfillment sync endpoints still return 500 in dev backend
+- Shared-shell Picker/Dispatch cloud parity has been proven live against the dev backend
+  - fresh `PICK_EVENT` and `RELEASE_EVENT` relay outbox rows sync to `done`
+  - cloud workflow state updates to `Picked` / `Released`
+- OptiPlex relay + Caddy auto-start on boot is configured via `POSRelayStack_Autostart_OnStart`
 
 Choose one session target (based on task):
 1) Start and verify local Edge Relay on this OptiPlex
 2) If validating a new change: rerun Cypress in watch mode (Chrome) for SA + Cashier + relay fallback tests
 3) If business demo is needed: run the relay demo sequence (includes relay UI pauses)
-4) Work next milestone items: fix picker/dispatch cloud sync endpoints, then relay auth/server-side role enforcement
+4) Work next milestone items: relay auth/server-side role enforcement, then rollout hardening / committed Cypress helper coverage
 5) Update docs/UAT and push changes
 
 Security:
@@ -172,10 +181,10 @@ Set/verify on the dev site:
 - Shared-shell Picker/Dispatch fulfillment workspace deployed and relay-local UAT validated (line-wise pick persistence + dispatch release)
 
 ### Next priorities
-1. Fix cloud backend fulfillment relay sync endpoints (`update_relay_picking_status`, `release_relay_dispatch`)
-2. Relay auth and server-side role enforcement (Phase 3)
-3. Commit/reuse picker/dispatch Cypress specs for repeatable UAT
-4. Rollout/ops hardening (shop PC trust rollout, support checklists, historical queue cleanup)
+1. Relay auth and server-side role enforcement (Phase 3)
+2. Commit/reuse picker/dispatch Cypress specs for repeatable UAT
+3. Rollout/ops hardening (shop PC trust rollout, support checklists, historical queue cleanup)
+4. Expand fulfillment UAT coverage for supervisor/exception paths
 
 ## Cypress Run Order (Watch Mode, Chrome)
 Run from repo root:
