@@ -5,6 +5,7 @@ from json import dumps
 from .storage import (
     get_next_queued_outbox_event,
     get_next_queued_event,
+    get_latest_local_sale,
     mark_outbox_done,
     mark_outbox_failed,
     mark_outbox_processing,
@@ -47,6 +48,40 @@ def _build_headers(config):
     return headers
 
 
+RELAY_TO_CLOUD_PICK_STATUS = {
+    "PAID_PENDING_PICK": "Not Started",
+    "PICK_IN_PROGRESS": "In Progress",
+    "PICK_EXCEPTION": "Exception",
+    "PICKED_READY_FOR_RELEASE": "Picked",
+}
+
+
+def _normalize_cloud_pick_status(value):
+    status = (value or "").strip()
+    if not status:
+        return ""
+    return RELAY_TO_CLOUD_PICK_STATUS.get(status, status)
+
+
+def _enrich_fulfillment_payload(payload, local_ref=None):
+    enriched = dict(payload or {})
+    sales_invoice = (enriched.get("sales_invoice") or enriched.get("cloud_invoice_name") or "").strip()
+    pos_profile = (enriched.get("pos_profile") or enriched.get("pos_profile_id") or "").strip()
+    if not sales_invoice and local_ref:
+        local_sale = get_latest_local_sale(local_ref)
+        if local_sale:
+            sales_invoice = (local_sale.get("cloud_invoice_name") or "").strip()
+            pos_profile = pos_profile or (local_sale.get("pos_profile_id") or "").strip()
+            if sales_invoice:
+                enriched["cloud_invoice_name"] = sales_invoice
+                # Some cloud handlers still expect this key specifically.
+                enriched["sales_invoice"] = sales_invoice
+            if pos_profile:
+                enriched["pos_profile_id"] = pos_profile
+                enriched["pos_profile"] = pos_profile
+    return enriched
+
+
 def _build_request_payload(event_type, payload):
     if event_type == "invoice_submit":
         # submit_invoice expects serialized JSON strings for invoice and data
@@ -62,17 +97,20 @@ def _build_request_payload(event_type, payload):
         }
 
     if event_type == "PICK_EVENT":
+        cloud_pick_status = _normalize_cloud_pick_status(
+            payload.get("picking_status") or payload.get("pick_status")
+        )
         return {
             "sales_invoice": payload.get("sales_invoice") or payload.get("cloud_invoice_name"),
-            "picking_status": payload.get("picking_status")
-            or payload.get("pick_status")
-            or "In Progress",
+            "pos_profile": payload.get("pos_profile") or payload.get("pos_profile_id") or "",
+            "picking_status": cloud_pick_status or "In Progress",
             "exceptions_note": payload.get("notes") or payload.get("exceptions_note") or "",
         }
 
     if event_type == "RELEASE_EVENT":
         return {
             "sales_invoice": payload.get("sales_invoice") or payload.get("cloud_invoice_name"),
+            "pos_profile": payload.get("pos_profile") or payload.get("pos_profile_id") or "",
             "allow_exception_release": 1 if payload.get("allow_partial") else 0,
         }
 
@@ -90,6 +128,7 @@ def _build_request_payload(event_type, payload):
 def _build_outbox_request(outbox_event):
     event_type = outbox_event.get("event_type")
     payload = outbox_event.get("payload") or {}
+    local_ref = outbox_event.get("local_ref")
     endpoint = OUTBOX_ENDPOINTS.get(event_type)
     if endpoint is None:
         # No-op event type intentionally acknowledged as done
@@ -99,6 +138,13 @@ def _build_outbox_request(outbox_event):
             "payload": payload,
             "method": "noop",
         }
+
+    if event_type in ("PICK_EVENT", "RELEASE_EVENT"):
+        payload = _enrich_fulfillment_payload(payload, local_ref=local_ref)
+        if not (payload.get("sales_invoice") or payload.get("cloud_invoice_name")):
+            raise RuntimeError(
+                f"{event_type} waiting for cloud Sales Invoice for local sale {local_ref or '(missing local_ref)'}"
+            )
 
     request_payload = _build_request_payload(event_type, payload)
     if event_type in ("SALE_COMMITTED", "PICK_EVENT", "RELEASE_EVENT"):

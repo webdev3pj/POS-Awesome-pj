@@ -578,6 +578,29 @@ def _is_relay_workflow_enabled(pos_profile):
     ) == 1
 
 
+def _resolve_relay_workflow_pos_profile(invoice_doc, *candidates):
+    invoice_profile = cstr((invoice_doc.get("pos_profile") if invoice_doc else "") or "").strip()
+    if invoice_profile:
+        return invoice_profile
+
+    for candidate in candidates:
+        value = cstr(candidate or "").strip()
+        if value:
+            return value
+
+    if invoice_doc and _relay_workflow_doctype_exists():
+        try:
+            state_name = frappe.db.exists("POS Relay Workflow State", {"sales_invoice": invoice_doc.name})
+            if state_name:
+                return cstr(
+                    frappe.db.get_value("POS Relay Workflow State", state_name, "pos_profile") or ""
+                ).strip()
+        except Exception:
+            pass
+
+    return ""
+
+
 def _relay_workflow_meta():
     if not _relay_workflow_doctype_exists():
         return None
@@ -1454,7 +1477,7 @@ def get_relay_workflow_monitor_board(
 
 
 @frappe.whitelist()
-def update_relay_picking_status(sales_invoice, picking_status, exceptions_note=None):
+def update_relay_picking_status(sales_invoice, picking_status, exceptions_note=None, pos_profile=None, pos_profile_id=None):
     if picking_status not in RELAY_PICKING_STATUSES:
         frappe.throw(_("Invalid picking status: {0}").format(picking_status))
 
@@ -1462,10 +1485,16 @@ def update_relay_picking_status(sales_invoice, picking_status, exceptions_note=N
         frappe.throw(_("Relay workflow state DocType is missing. Please run migration."))
 
     invoice_doc = frappe.get_doc("Sales Invoice", sales_invoice)
-    if not _is_relay_workflow_enabled(invoice_doc.pos_profile):
+    effective_pos_profile = _resolve_relay_workflow_pos_profile(
+        invoice_doc, pos_profile, pos_profile_id
+    )
+    if effective_pos_profile and not cstr(invoice_doc.get("pos_profile") or "").strip():
+        invoice_doc.pos_profile = effective_pos_profile
+
+    if not _is_relay_workflow_enabled(effective_pos_profile):
         frappe.throw(
             _("Relay workflow is not enabled for POS Profile {0}").format(
-                invoice_doc.pos_profile
+                effective_pos_profile or invoice_doc.pos_profile
             )
         )
 
@@ -1488,15 +1517,21 @@ def update_relay_picking_status(sales_invoice, picking_status, exceptions_note=N
 
 
 @frappe.whitelist()
-def release_relay_dispatch(sales_invoice, allow_exception_release=0):
+def release_relay_dispatch(sales_invoice, allow_exception_release=0, pos_profile=None, pos_profile_id=None):
     if not _relay_workflow_doctype_exists():
         frappe.throw(_("Relay workflow state DocType is missing. Please run migration."))
 
     invoice_doc = frappe.get_doc("Sales Invoice", sales_invoice)
-    if not _is_relay_workflow_enabled(invoice_doc.pos_profile):
+    effective_pos_profile = _resolve_relay_workflow_pos_profile(
+        invoice_doc, pos_profile, pos_profile_id
+    )
+    if effective_pos_profile and not cstr(invoice_doc.get("pos_profile") or "").strip():
+        invoice_doc.pos_profile = effective_pos_profile
+
+    if not _is_relay_workflow_enabled(effective_pos_profile):
         frappe.throw(
             _("Relay workflow is not enabled for POS Profile {0}").format(
-                invoice_doc.pos_profile
+                effective_pos_profile or invoice_doc.pos_profile
             )
         )
 

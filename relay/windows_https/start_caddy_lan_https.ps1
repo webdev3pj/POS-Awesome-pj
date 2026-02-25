@@ -2,6 +2,8 @@ param(
     [string]$LanIp = "192.168.50.168",
     [int]$RelayPort = 8787,
     [string]$CaddyExe = "caddy",
+    [string]$CaddyAppData = "",
+    [string]$CaddyLocalAppData = "",
     [switch]$TrustRoot,
     [switch]$Background
 )
@@ -16,6 +18,13 @@ New-Item -ItemType Directory -Force -Path $logsDir | Out-Null
 
 if (-not (Get-Command $CaddyExe -ErrorAction SilentlyContinue)) {
     throw "Caddy executable '$CaddyExe' not found. Run .\install_caddy.ps1 first."
+}
+
+if (-not [string]::IsNullOrWhiteSpace($CaddyAppData)) {
+    $env:APPDATA = $CaddyAppData
+}
+if (-not [string]::IsNullOrWhiteSpace($CaddyLocalAppData)) {
+    $env:LOCALAPPDATA = $CaddyLocalAppData
 }
 
 $configPath = Join-Path $runDir "Caddyfile.active"
