@@ -15,7 +15,9 @@
 
 ## Document Currency
 - This is a current planning doc (Phase 3 is not complete).
-- `codex-4.1-picked-dispatch-relay` now includes a Phase 3 baseline implementation (`0b8f772`) plus a frontend role-fallback fix (`6767d0f`) needed after live deploy testing.
+- `codex-4.1-picked-dispatch-relay` now includes a Phase 3 baseline implementation (`0b8f772`) plus frontend follow-up fixes from live deploy testing:
+  - `6767d0f` (relay role fallback for empty local role)
+  - `ce5f84d` / `6cf64aa` (navbar relay-status polling/profile-registration race fixes so UI relay chips reflect actual fulfillment relay usage)
 - This doc now tracks a mixed state: baseline auth/authorization is implemented in code, while full live regression/negative coverage and rollout hardening remain open.
 - For the latest relay runtime verification, use:
   - `../uat/2026-02-23-local-edge-relay-smoke.md`
@@ -110,7 +112,8 @@ Implementation note (current dev-site state, not a substitute for this phase):
 
 Current validation status note (2026-02-26):
 - `cashier_workflow_frontend_watch.cy.js` and `phase3_security_relay_role_guards_watch.cy.js` both passed on the deployed dev site after `6767d0f`.
-- Full multi-spec rerun is still in progress; local (uncommitted) Cypress helper/spec hardening was added to reduce fulfillment UI race flakes and to assert UI relay chips/banners against actual relay/API state before publishing final UAT/docs.
+- Fulfillment rerun (Picker/Dispatch/Supervisor) with strict UI-vs-actual relay assertions is now passing on the deployed dev site after navbar relay-status fixes `ce5f84d` + `6cf64aa`.
+- Remaining recommended rerun for Phase 3 signoff is the full SA/Cashier + fallback + security spec slice on the latest deployed build under the same strict timeout policy.
 
 ## Known Risks
 - Breaking active store devices if auth rollout is not coordinated.

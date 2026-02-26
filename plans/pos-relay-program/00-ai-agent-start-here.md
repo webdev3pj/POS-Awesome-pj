@@ -48,6 +48,9 @@ Key business rules currently agreed:
   - `5d39f02` (`chore(relay): ignore autostart runtime logs`)
   - `0b8f772` (`feat(security): add relay role guards and fulfillment helper specs`)
   - `6767d0f` (`fix(relay): fallback role from frappe when local role is missing`)
+  - `ce5f84d` (`fix(pos): avoid navbar relay status race on fast boot`)
+  - `6cf64aa` (`fix(pos): recover navbar relay poll if profile event is missed`)
+  - `df1ac0c` (`feat(relay): add offline token and monitor fallback paths`) (pushed; live validation pending)
 - Inherited validated work:
   - `kilo-codex-v3`: SA Sales Order token flow, no-cash SA session, monitor rail foundation
   - `codex-2-cashier`: cashier `Select S.O` filtering (naming series + age), cashier live E2E coverage, token-disabled regression coverage
@@ -68,8 +71,12 @@ Key business rules currently agreed:
     - server-side role enforcement on key workflow APIs
     - committed fulfillment/security Cypress helper specs
   - `6767d0f` fixed a live regression where cashier relay submit could send an empty role (relay rejected with `RELAY_ROLE_REQUIRED`)
+  - fulfillment-role relay status chip sync (`Picker`/`Dispatch`/`Supervisor`) is now live-validated after navbar race/recovery fixes (`ce5f84d`, `6cf64aa`):
+    - UI `Relay Online (LAN)` chip matches actual relay API usage in the fulfillment workspace
+    - strict Cypress assertions now check UI relay/cloud chips and actual relay `/health` together in relay-dependent specs
+  - offline continuity fallback code is pushed in `df1ac0c` (relay token search + relay workflow monitor fallback + SA/cashier relay token/SO fallback paths), but host relay restart + live UAT for these new endpoints is still pending
   - OptiPlex relay+Caddy auto-start is now implemented and verified using a Windows boot scheduled task (`POSRelayStack_Autostart_OnStart`, `SYSTEM`) with relay LAN HTTPS health checks passing
-- Priority implementation/verification target: finish Phase 3 live validation rerun on the deployed baseline guards (`0b8f772`, `6767d0f`), then rollout hardening and shop-PC trust rollout.
+- Priority implementation/verification target: finish the remaining full Phase 3 regression/security rerun slice on the deployed baseline guards (`0b8f772`, `6767d0f`) under the strict timeout/UI-vs-actual policy, validate `df1ac0c` offline continuity fallbacks, then move to dispatch monitoring/timing-first UX and relay phase timing instrumentation.
 - Frappe Cloud topology note: raw private LAN relay URLs are still not cloud-backend reachable; in LAN-only mode this is expected and treated as diagnostic-only while browser-LAN HTTPS health is the submit gate.
 
 ## What Is Already Implemented (Branch-Accurate)
@@ -155,7 +162,7 @@ Key business rules currently agreed:
 - SA relay-first/offline token creation until online-first path is stable.
 
 ## Immediate Next Recommended Task
-Finish the live dev-site Phase 3 rerun (strict Cypress timeouts + UI-vs-actual relay assertions), then publish updated UAT/docs and continue rollout hardening / local staging fast-loop work.
+Finish the remaining Phase 3 regression/security rerun slice (SA/Cashier + fallback + relay-guard spec), then validate `df1ac0c` offline continuity fallback behavior (prefer cloud site first, local `pj.local:8080` for true cloud-off simulation), and move into dispatch monitoring/timing-first UX work.
 
 Why this is next:
 - SA/Cashier relay-first flow is now proven on the dev site and local OptiPlex relay.
@@ -173,7 +180,7 @@ If a new session starts on the OptiPlex relay machine and does not have this con
 - Restart the local relay process if relay Python code changed (for example `relay/relay/storage.py`)
 - Copy the local-only `.env` (Cypress secrets) to the repo root if Cypress will run on the OptiPlex
 - Relay-enabled SA/Cashier demo is already proven; rerun only if revalidating after new changes
-- Next target: complete Phase 3 live validation rerun + docs/UAT refresh, then continue rollout docs/checklists (and local staging fast-loop work)
+- Next target: finish the remaining Phase 3 regression/security rerun slice and validate `df1ac0c` offline continuity fallbacks, then start dispatch monitoring/timing UX + relay timing instrumentation work
 - Use strict per-spec Cypress timeouts and clean up orphan Cypress processes if a run hangs before starting the next spec
 
 ## Decision Register

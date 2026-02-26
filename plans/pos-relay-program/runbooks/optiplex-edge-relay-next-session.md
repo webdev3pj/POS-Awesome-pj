@@ -27,6 +27,8 @@ Provide a zero-context startup guide for a new AI coding agent session on the Op
   - `codex-4.1-picked-dispatch-relay` fixes picker/dispatch cloud fulfillment sync parity and OptiPlex relay autostart (boot task) and has been live-validated on OptiPlex/dev site
   - `0b8f772` adds Phase 3 baseline relay/client-key + server-side role guards and commits helper/security Cypress specs
   - `6767d0f` fixes a live cashier regression where relay submit could send an empty role (relay rejected with `RELAY_ROLE_REQUIRED`)
+  - `ce5f84d` + `6cf64aa` fix fulfillment-role navbar relay-status chip races so picker/dispatch/supervisor top-bar relay chips match actual relay usage
+  - `df1ac0c` adds offline continuity fallback paths (relay token search + relay workflow monitor fallback + SA/cashier relay token/SO fallback); host relay restart + live validation still pending
   - local relay HTTP smoke (`/health`, `/relay/session/open`, `/relay/token/create`, `/relay/commit-invoice`) passed
   - headed Cypress relay demo proof completed:
     - SA token/SO `SAL-ORD-PJ7-2026-00009`
@@ -190,8 +192,9 @@ Fallback (not preferred for this workflow):
   - picker line-wise pick updates persist to relay line payloads (`payload.picker`) with UOM/conversion metadata
   - dispatch release updates relay local sale and dispatch events
 - Next recommended work:
-  - Finish the current Phase 3 live validation rerun on deployed `0b8f772` + `6767d0f` (strict Cypress timeouts + UI-vs-actual relay assertions)
-  - Expand picker/dispatch UAT coverage (exception paths, supervisor overrides, hold/reason paths)
+  - Finish the remaining Phase 3 regression/security rerun slice (SA/Cashier + fallback + relay-guard spec) on the latest deployed build using strict Cypress timeouts + UI-vs-actual relay assertions
+  - Live-validate `df1ac0c` offline continuity fallback behavior (cloud site first, then `pj.local:8080` for true cloud-off simulation)
+  - Start dispatch monitoring/timing-first UX and relay phase timing instrumentation (business optimization focus)
   - Simplify picker default UX path (order-level actions first) while keeping line-item editing available for exceptions/wire/UOM cases
   - shop-PC certificate trust rollout and support docs cleanup
 

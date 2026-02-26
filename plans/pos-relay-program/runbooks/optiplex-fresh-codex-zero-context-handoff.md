@@ -23,6 +23,9 @@
 - `5d39f02` - ignore relay autostart runtime logs
 - `0b8f772` - Phase 3 baseline relay/client-key + server-side role guards + committed helper/security Cypress specs
 - `6767d0f` - frontend relay role fallback fix (prevents empty-role relay submit regression)
+- `ce5f84d` - navbar relay-status fast-boot race fix (missed `register_pos_profile`)
+- `6cf64aa` - navbar relay poll recovery if profile event is missed (self-recovers via `check_opening_shift`)
+- `df1ac0c` - offline continuity relay token/monitor fallback paths (pushed; validation pending)
 
 ## What Is Already Working (Verified)
 - SA flow on live dev site:
@@ -68,10 +71,13 @@
 - OptiPlex relay auto-start is now configured and verified:
   - Windows boot task `POSRelayStack_Autostart_OnStart` starts relay + Caddy LAN HTTPS stack
   - admin verification confirmed task `LastTaskResult = 0`
+- Fulfillment-role relay/cloud top-bar status chips are now live-rerun validated against actual relay API behavior on the dev site after navbar relay-status sync fixes (`ce5f84d`, `6cf64aa`)
 
 ## What Is Not Finished (Next Build Targets)
-- Complete live rerun/negative validation for the new Phase 3 baseline relay/client-key and server-side role guards on the current deployed build
+- Complete the remaining full live rerun/negative validation for the new Phase 3 baseline relay/client-key and server-side role guards on the current deployed build (SA/Cashier + fallback + security spec slice)
+- Live-validate `df1ac0c` offline continuity fallback behavior (relay token/monitor/SO fallback paths), including a local `pj.local:8080` true cloud-off exercise
 - Finalize remaining Phase 3 hardening (audit/reason enforcement coverage, stricter auth rollout policy)
+- Start dispatch monitoring/timing-first UX and relay timing instrumentation (phase-duration visibility / optimization data)
 - Shop-PC certificate trust rollout on non-OptiPlex devices (SA/Cashier/Picker/Dispatch PCs)
 - Cleanup/classification of historical queued outbox failure rows (older pre-fix smoke/UAT artifacts)
 

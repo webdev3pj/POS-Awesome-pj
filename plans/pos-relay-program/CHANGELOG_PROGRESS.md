@@ -23,6 +23,51 @@ Note:
 
 ---
 
+## 2026-02-26 - Fulfillment cloud rerun passed with strict UI-vs-actual relay assertions; navbar relay-chip sync race fixed
+- Branch: `codex-4.1-picked-dispatch-relay`
+- Summary: Completed the targeted live dev-site fulfillment rerun (Picker/Dispatch/Supervisor) using strict Cypress timeouts and explicit assertions that the UI relay/cloud chips match actual relay behavior. Found and fixed a real navbar relay-status synchronization race that made the picker/dispatch UI show only `Cloud Online` while relay APIs were actively in use. Also pushed offline continuity relay/token/monitor fallback code (`df1ac0c`) but did not yet finish its live validation.
+- What changed:
+  - Pushed `ce5f84d` (`fix(pos): avoid navbar relay status race on fast boot`)
+    - moved navbar event-bus registration out of `nextTick` to avoid missing the initial `register_pos_profile` emit
+  - Pushed `6cf64aa` (`fix(pos): recover navbar relay poll if profile event is missed`)
+    - added navbar self-recovery path via `check_opening_shift` if the POS profile registration event is missed
+    - ensures relay polling starts and the `Relay Online (LAN)` chip reflects actual relay use in fulfillment roles
+  - Pushed earlier in this session: `df1ac0c` (`feat(relay): add offline token and monitor fallback paths`)
+    - relay endpoints: `/relay/tokens/search`, `/relay/workflow/monitor-board`
+    - SA token creation fallback to relay
+    - `WorkflowTicketRail` relay-first monitor fallback
+    - cashier `Select S.O` relay token search/load fallback
+    - note: host relay restart + live UAT still pending for this commit
+- What was verified:
+  - Live dev-site headed Cypress (Chrome), one spec at a time, strict per-spec timeouts:
+    - `admin_set_cline_picker_only_role.cy.js` ✅
+    - `picker_workflow_frontend_watch.cy.js` ✅ (after `6cf64aa` deploy)
+    - `admin_set_cline_dispatch_only_role.cy.js` ✅
+    - `dispatch_workflow_frontend_watch.cy.js` ✅
+    - `admin_set_cline_supervisor_only_role.cy.js` ✅
+    - `supervisor_fulfillment_exception_watch.cy.js` ✅
+  - UI-vs-actual relay sync proof:
+    - picker/dispatch/supervisor screens now show relay/cloud status chips consistent with active relay API usage (no false `Cloud-only` fulfillment state)
+  - Relay evidence (fresh rows from this rerun):
+    - picker/dispatch target sale `LSR-PJ7 -20260226045846-70265E` (`ACC-SINV-2026-00279`)
+    - supervisor exception target sale `LSR-PJ7 -20260226022457-7123CC` (`ACC-SINV-2026-00277`)
+    - fresh `PICK_EVENT` / `RELEASE_EVENT` outbox rows for both paths are `done`
+    - relay line `payload.picker` shows `picked_qty`, `picked_stock_qty`, UOM, conversion factor, and partial/exception transitions
+  - Relay health snapshot after rerun:
+    - `/health` -> `ok: true`
+    - outbox counts: `done=45`, `queued=0`, `failed=0`, `total=45`
+    - legacy `/queue` remains `failed=1` historical artifact
+- What remains:
+  - Run the remaining full Phase 3 regression/security rerun slice on the current deploy (SA/Cashier + fallback + `phase3_security_relay_role_guards_watch.cy.js`) under the same strict timeout policy if a full signoff pass is needed
+  - Live-validate `df1ac0c` offline continuity fallbacks (relay monitor/token/SO fallback), including local staging `pj.local:8080` for true cloud-off simulation
+  - Move into the next product milestone: Dispatch monitoring/timing-first UX and relay phase timing instrumentation
+- Links:
+  - `uat/2026-02-26-fulfillment-phase3-ui-vs-actual-relay-rerun.md`
+  - `00-ai-agent-start-here.md`
+  - `phases/phase-2-cashier-picker-dispatch-ui-and-enforcement.md`
+  - `phases/phase-3-relay-auth-and-server-side-role-enforcement.md`
+  - `runbooks/optiplex-edge-relay-next-session.md`
+
 ## 2026-02-26 - Phase 3 baseline hardening deployed; live dev-site validation in progress with stricter Cypress discipline
 - Branch: `codex-4.1-picked-dispatch-relay`
 - Summary: Pushed and deployed Phase 3 baseline relay/client-key and server-side role hardening (`0b8f772`), fixed a live cashier regression where relay calls could send an empty role (`6767d0f`), and began rerunning live dev-site headed Cypress validation. Added local (uncommitted) Cypress helper/spec hardening so tests assert both UI relay status chips/banners and actual relay/API behavior. Updated docs to record a stricter OptiPlex Cypress execution policy (hard timeouts + orphan cleanup) and picker UX simplification direction.

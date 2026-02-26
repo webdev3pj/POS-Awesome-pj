@@ -18,7 +18,7 @@
 - Cashier filtering, LAN-only relay status semantics, cloud fallback UX, and relay-first cashier SO-load/payment-path coverage are implemented and verified on `codex-3-edge-relay`.
 - `codex-4-picker-dispatch` introduced a shared-shell Picker/Dispatch/Supervisor fulfillment workspace wired to relay pick/release APIs and was live-validated on the dev site/OptiPlex relay for local-first picker/dispatch state updates.
 - `codex-4.1-picked-dispatch-relay` completes live cloud parity validation for fresh picker/dispatch relay outbox events (`PICK_EVENT`, `RELEASE_EVENT`) on the dev site.
-- `codex-4.1-picked-dispatch-relay` also adds committed fulfillment/security Cypress helper specs and Phase 3 baseline guard code; current Phase 2 retesting is focused on repeatability and UI-vs-actual-state assertions.
+- `codex-4.1-picked-dispatch-relay` also adds committed fulfillment/security Cypress helper specs and Phase 3 baseline guard code; fulfillment-role retesting now includes strict UI-vs-actual-state assertions (relay/cloud chips/banners vs relay APIs) and has been rerun successfully after navbar relay-status sync fixes (`ce5f84d`, `6cf64aa`).
 - Remaining tasks in this file are primarily Picker/Dispatch/Supervisor UX polish (especially simplification), visibility-matrix cleanup across shared components, and repeatable Cypress coverage/reruns.
 - Use `../CHANGELOG_PROGRESS.md` and the cashier UAT doc for the latest verified cashier status.
 
@@ -96,7 +96,7 @@ Complete the operator-facing role UX so each role sees the right screens/actions
 - [ ] Harden `Payments.vue` role gating beyond SA only (picker/dispatch/supervisor UX rules).
 - [ ] Implement/complete picker workflow UI for pick queue and pick status actions (within the shared POS shell). `Partial`: shared-shell relay-backed picker workflow is deployed and locally UAT-validated on `codex-4-picker-dispatch`; remaining work is UX polish/simplification (pick ticket print/reprint, clearer default order-level path, line notes/reason presets, supervisor exception paths) and repeatable committed test reruns.
 - [ ] Implement/complete dispatch workflow UI for release actions and hold/reason states (within the shared POS shell). `Partial`: relay-backed release action and queue filtering are deployed and locally UAT-validated on `codex-4-picker-dispatch`; remaining work is hold/reason/override refinements and committed test coverage.
-- [ ] Add supervisor UI affordances for exception review/override (without weakening default restrictions).
+- [ ] Add supervisor UI affordances for exception review/override (without weakening default restrictions). `Partial`: shared-shell supervisor fulfillment exception/override workflow exists and is now live-rerun validated on the dev site; UX polish and explicit reason/hold flows remain.
 - [ ] Decide whether the ticket monitor rail remains read-only in Phase 2 or gains role-specific row actions (open details, quick filters, transition shortcuts).
 - [ ] Design and implement role-specific default views/panels in the shared POS shell (SA/Cashier/Picker/Dispatch/Supervisor) without duplicating app routes unnecessarily. `Partial`: Picker/Dispatch/Supervisor now route to shared fulfillment panel in `Pos.vue`; SA/Cashier/UI-polish work remains.
 - [x] Wire picker/dispatch UI actions to relay-backed endpoints (`/relay/pick-queue`, `/relay/pick/update`, `/relay/dispatch/release`) so offline relay remains the operational source. Live-validated on OptiPlex/dev-site (`codex-4-picker-dispatch`) for local relay state changes; cloud sync parity for fresh events is now verified on `codex-4.1-picked-dispatch-relay`.
@@ -106,7 +106,7 @@ Complete the operator-facing role UX so each role sees the right screens/actions
 ## Tests and Verification
 - [ ] Role-by-role UI visibility walkthrough using test users.
 - [ ] Cypress assertions for hidden/disabled controls by role.
-- [ ] Add/standardize Cypress assertions that UI relay/cloud status chips/banners match actual relay/API state in each relay-dependent workflow spec.
+- [x] Add/standardize Cypress assertions that UI relay/cloud status chips/banners match actual relay/API state in each relay-dependent workflow spec. Local helper/spec hardening exists (currently uncommitted at the time of this note); live rerun caught and validated fixes for a real navbar relay-chip sync race (`ce5f84d`, `6cf64aa`).
 - [ ] Enforce strict per-spec Cypress timeout + orphan-process cleanup discipline in runbooks and repeatable test scripts (OptiPlex operational rule).
 - [x] Regression checks for cashier SO selection filtering (POS Profile series + age) on live dev site.
 - [x] Smoke regression: cashier POS/payment screen still works when `custom_have_token = 0`.
@@ -116,7 +116,7 @@ Complete the operator-facing role UX so each role sees the right screens/actions
 - [x] Dispatch UI workflow Cypress coverage (release path reflected in relay/UI) exists and is committed on `codex-4.1-picked-dispatch-relay`; hold/reason variants remain untested and current rerun/flake-hardening validation is in progress.
 - [x] Manual/headed UAT on OptiPlex/dev site for shared-shell picker/dispatch workspace (`codex-4-picker-dispatch`) including line-wise picked quantity persistence and UOM/conversion-factor display. Follow-on `codex-4.1-picked-dispatch-relay` validation confirmed cloud parity for fresh fulfillment events.
 - [x] Cloud parity validation for picker/dispatch events (`PICK_EVENT` / `RELEASE_EVENT` sync completion and cloud-state update confirmation) on `codex-4.1-picked-dispatch-relay` using headed Cypress watch mode + relay/cloud API evidence.
-- [ ] Supervisor exception/override Cypress coverage live validation on the current deployed Phase 3 build (`supervisor_fulfillment_exception_watch.cy.js` is now committed; rerun + UAT evidence pending).
+- [x] Supervisor exception/override Cypress coverage live validation on the current deployed Phase 3 build (`supervisor_fulfillment_exception_watch.cy.js`) completed in headed watch mode with relay/UI/API evidence (2026-02-26 rerun).
 
 ## Known Risks
 - UI-only blocks can create false sense of security until Phase 3 auth lands.
