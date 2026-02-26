@@ -835,48 +835,48 @@ export default {
     },
   },
   created: function () {
-    this.$nextTick(function () {
+    // Register event-bus listeners synchronously to avoid missing the initial
+    // `register_pos_profile` emit during fast POS boot / role-switch flows.
+    this.sync_current_role();
+    this.start_cloud_poll();
+    window.addEventListener('online', this.on_online_status_change);
+    window.addEventListener('offline', this.on_online_status_change);
+    evntBus.$on('show_mesage', (data) => {
+      this.show_mesage(data);
+    });
+    evntBus.$on('set_company', (data) => {
+      this.company = data.name;
+      this.company_img = data.company_logo
+        ? data.company_logo
+        : this.company_img;
+    });
+    evntBus.$on('register_pos_profile', (data) => {
       this.sync_current_role();
-      this.start_cloud_poll();
-      window.addEventListener('online', this.on_online_status_change);
-      window.addEventListener('offline', this.on_online_status_change);
-      evntBus.$on('show_mesage', (data) => {
-        this.show_mesage(data);
-      });
-      evntBus.$on('set_company', (data) => {
-        this.company = data.name;
-        this.company_img = data.company_logo
-          ? data.company_logo
-          : this.company_img;
-      });
-      evntBus.$on('register_pos_profile', (data) => {
-        this.sync_current_role();
-        this.pos_profile = data.pos_profile;
-        const payments = { text: 'Payments', icon: 'mdi-cash-register' };
-        if (
-          this.pos_profile.posa_use_pos_awesome_payments &&
-          this.items.length !== 2
-        ) {
-          this.items.push(payments);
-        }
-        this.start_relay_poll(this.pos_profile.name);
-      });
-      evntBus.$on('check_relay_connectivity', () => {
-        this.fetch_relay_status(this.pos_profile && this.pos_profile.name, false);
-      });
-      evntBus.$on('set_last_invoice', (data) => {
-        this.last_invoice = data;
-      });
-      evntBus.$on('freeze', (data) => {
-        this.freeze = true;
-        this.freezeTitle = data.title;
-        this.freezeMsg = data.msg;
-      });
-      evntBus.$on('unfreeze', () => {
-        this.freeze = false;
-        this.freezTitle = '';
-        this.freezeMsg = '';
-      });
+      this.pos_profile = data.pos_profile;
+      const payments = { text: 'Payments', icon: 'mdi-cash-register' };
+      if (
+        this.pos_profile.posa_use_pos_awesome_payments &&
+        this.items.length !== 2
+      ) {
+        this.items.push(payments);
+      }
+      this.start_relay_poll(this.pos_profile.name);
+    });
+    evntBus.$on('check_relay_connectivity', () => {
+      this.fetch_relay_status(this.pos_profile && this.pos_profile.name, false);
+    });
+    evntBus.$on('set_last_invoice', (data) => {
+      this.last_invoice = data;
+    });
+    evntBus.$on('freeze', (data) => {
+      this.freeze = true;
+      this.freezeTitle = data.title;
+      this.freezeMsg = data.msg;
+    });
+    evntBus.$on('unfreeze', () => {
+      this.freeze = false;
+      this.freezTitle = '';
+      this.freezeMsg = '';
     });
   },
   beforeDestroy() {
