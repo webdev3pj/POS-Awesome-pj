@@ -1477,6 +1477,299 @@ def get_pick_queue(pos_profile_id=None, limit=100):
         return [dict(r) for r in cur.fetchall()]
 
 
+def list_relay_tokens(pos_profile_id=None, search=None, statuses=None, limit=100):
+    query = """
+        SELECT token_id, pos_profile_id, cashier_user_id, customer_id, customer_name,
+               status, expires_at, void_reason, voided_by, consumed_sale_ref,
+               consumed_at, created_at, updated_at
+        FROM relay_tokens
+        WHERE 1 = 1
+    """
+    params = []
+
+    if pos_profile_id:
+        query += " AND pos_profile_id = ?"
+        params.append(pos_profile_id)
+
+    statuses = [str(s).strip() for s in (statuses or []) if str(s).strip()]
+    if statuses:
+        query += " AND status IN ({})".format(",".join(["?"] * len(statuses)))
+        params.extend(statuses)
+
+    if search:
+        like = f"%{str(search).strip()}%"
+        query += """
+            AND (
+                token_id LIKE ?
+                OR customer_id LIKE ?
+                OR customer_name LIKE ?
+                OR consumed_sale_ref LIKE ?
+            )
+        """
+        params.extend([like, like, like, like])
+
+    query += " ORDER BY created_at DESC LIMIT ?"
+    params.append(int(limit))
+
+    with get_db() as conn:
+        token_rows = [dict(r) for r in conn.execute(query, tuple(params)).fetchall()]
+
+        token_ids = [row["token_id"] for row in token_rows]
+        line_map = {}
+        if token_ids:
+            placeholders = ",".join(["?"] * len(token_ids))
+            line_rows = conn.execute(
+                f"""
+                SELECT id, token_id, item_code, item_name, qty, uom, rate, amount, payload, created_at
+                FROM relay_token_lines
+                WHERE token_id IN ({placeholders})
+                ORDER BY id ASC
+                """,
+                tuple(token_ids),
+            ).fetchall()
+            for line in line_rows:
+                d = dict(line)
+                d["payload"] = _loads(d.get("payload"))
+                line_map.setdefault(d["token_id"], []).append(d)
+
+    rows = []
+    for row in token_rows:
+        items = line_map.get(row["token_id"], [])
+        total = 0.0
+        for item in items:
+            try:
+                total += float(item.get("amount") or (float(item.get("qty") or 0) * float(item.get("rate") or 0)))
+            except Exception:
+                pass
+        row["items"] = items
+        row["grand_total"] = total
+        rows.append(row)
+
+    return rows
+
+
+def get_relay_monitor_board(
+    pos_profile_id=None,
+    business_date=None,
+    mine_only=False,
+    user_id=None,
+    include_released=False,
+    limit=200,
+):
+    target_date = str(business_date or "").strip()
+    user_id = str(user_id or "").strip()
+    include_released = bool(include_released)
+
+    with get_db() as conn:
+        # Load token rows first so we can map SA/taken-time even after payment.
+        token_query = """
+            SELECT token_id, pos_profile_id, cashier_user_id, customer_id, customer_name,
+                   status, consumed_sale_ref, created_at, updated_at
+            FROM relay_tokens
+            WHERE 1 = 1
+        """
+        token_params = []
+        if pos_profile_id:
+            token_query += " AND pos_profile_id = ?"
+            token_params.append(pos_profile_id)
+        token_query += " ORDER BY created_at DESC LIMIT ?"
+        token_params.append(max(1, int(limit) * 3))
+        token_rows = [dict(r) for r in conn.execute(token_query, tuple(token_params)).fetchall()]
+        token_map = {r["token_id"]: r for r in token_rows}
+
+        sale_query = """
+            SELECT local_sale_ref, token_id, pos_profile_id, cashier_user_id, cashier_session_id,
+                   device_id, sale_status, pick_status, dispatch_status, paid, total, customer_id, customer_name,
+                   cloud_invoice_name, cloud_sync_status, released_by, released_at, created_at, updated_at
+            FROM relay_local_sales
+            WHERE 1 = 1
+        """
+        sale_params = []
+        if pos_profile_id:
+            sale_query += " AND pos_profile_id = ?"
+            sale_params.append(pos_profile_id)
+        if not include_released:
+            sale_query += " AND dispatch_status != 'RELEASED'"
+        sale_query += " ORDER BY created_at DESC LIMIT ?"
+        sale_params.append(max(1, int(limit) * 3))
+        sale_rows = [dict(r) for r in conn.execute(sale_query, tuple(sale_params)).fetchall()]
+
+        sale_refs = [r["local_sale_ref"] for r in sale_rows]
+        pick_events_by_sale = {}
+        if sale_refs:
+            placeholders = ",".join(["?"] * len(sale_refs))
+            pick_rows = conn.execute(
+                f"""
+                SELECT local_sale_ref, event_type, created_at
+                FROM relay_pick_events
+                WHERE local_sale_ref IN ({placeholders})
+                ORDER BY id ASC
+                """,
+                tuple(sale_refs),
+            ).fetchall()
+            for p in pick_rows:
+                pick_events_by_sale.setdefault(p["local_sale_ref"], []).append(dict(p))
+
+    def _date_of(value):
+        raw = str(value or "")
+        if not raw:
+            return ""
+        if "T" in raw:
+            return raw.split("T", 1)[0]
+        if " " in raw:
+            return raw.split(" ", 1)[0]
+        return raw[:10]
+
+    def _cloud_style_pick_status(local_pick_status):
+        mapping = {
+            "PAID_PENDING_PICK": "Not Started",
+            "PICK_IN_PROGRESS": "In Progress",
+            "PICK_EXCEPTION": "Exception",
+            "PICKED_READY_FOR_RELEASE": "Picked",
+        }
+        return mapping.get(str(local_pick_status or "").strip().upper(), "")
+
+    def _display_status(token_status, pick_status, dispatch_status):
+        dispatch_status = str(dispatch_status or "").strip()
+        pick_status = str(pick_status or "").strip()
+        token_status = str(token_status or "").strip()
+        if dispatch_status == "Released":
+            return "Dispatched"
+        if dispatch_status == "On Hold" or pick_status == "Exception":
+            return "On Hold"
+        if token_status != "Paid":
+            return "Unpaid"
+        if pick_status == "In Progress":
+            return "Picking"
+        if pick_status == "Picked":
+            return "Picked"
+        return "Paid"
+
+    rows = []
+    status_counts = {}
+    used_token_ids = set()
+
+    for sale in sale_rows:
+        token = token_map.get((sale.get("token_id") or "").strip()) if sale.get("token_id") else None
+        token_id = (sale.get("token_id") or (token or {}).get("token_id") or "").strip()
+        used_token_ids.add(token_id) if token_id else None
+
+        order_taken_at = (token or {}).get("created_at") or sale.get("created_at")
+        paid_at = sale.get("created_at")
+        pick_events = pick_events_by_sale.get(sale.get("local_sale_ref"), [])
+        pick_started_at = ""
+        picked_at = ""
+        for evt in pick_events:
+            event_type = str(evt.get("event_type") or "").strip().upper()
+            if event_type == "PICK_IN_PROGRESS" and not pick_started_at:
+                pick_started_at = evt.get("created_at") or ""
+            if event_type == "PICKED_READY_FOR_RELEASE" and not picked_at:
+                picked_at = evt.get("created_at") or ""
+
+        token_status = "Paid" if int(sale.get("paid") or 0) == 1 else "Unpaid"
+        pick_status = _cloud_style_pick_status(sale.get("pick_status"))
+        dispatch_status = "Released" if str(sale.get("dispatch_status") or "").upper() == "RELEASED" else "Pending"
+        display_status = _display_status(token_status, pick_status, dispatch_status)
+
+        row = {
+            "workflow_state": f"relay-sale:{sale.get('local_sale_ref')}",
+            "sales_order": token_id or "",
+            "sales_invoice": sale.get("cloud_invoice_name") or "",
+            "token_id": token_id or "",
+            "customer_name": sale.get("customer_name") or (token or {}).get("customer_name") or "",
+            "grand_total": sale.get("total"),
+            "currency": "",
+            "sales_associate_user": (token or {}).get("cashier_user_id") or "",
+            "sales_associate_name": (token or {}).get("cashier_user_id") or "",
+            "business_date": _date_of(order_taken_at) or _date_of(sale.get("created_at")),
+            "pos_opening_shift": "",
+            "token_status": token_status,
+            "picking_status": pick_status,
+            "dispatch_status": dispatch_status,
+            "display_status": display_status,
+            "order_taken_at": order_taken_at,
+            "paid_at": paid_at,
+            "pick_started_at": pick_started_at,
+            "picked_at": picked_at,
+            "released_at": sale.get("released_at") or "",
+            "status_changed_at": sale.get("updated_at") or sale.get("created_at"),
+        }
+
+        if target_date and row["business_date"] and row["business_date"] != target_date:
+            continue
+        if mine_only and user_id and row.get("sales_associate_user") != user_id:
+            continue
+
+        rows.append(row)
+        status_counts[display_status] = status_counts.get(display_status, 0) + 1
+
+    # Add still-open unpaid tokens that do not yet have a local sale.
+    for token in token_rows:
+        token_id = str(token.get("token_id") or "").strip()
+        if not token_id:
+            continue
+        if token_id in used_token_ids:
+            continue
+        status = str(token.get("status") or "").strip().upper()
+        if status not in ("TOKEN_OPEN", "TOKEN_EXPIRED"):
+            continue
+
+        token_status = "Unpaid"
+        display_status = "Unpaid"
+        row = {
+            "workflow_state": f"relay-token:{token_id}",
+            "sales_order": token_id,
+            "sales_invoice": "",
+            "token_id": token_id,
+            "customer_name": token.get("customer_name") or token.get("customer_id") or "",
+            "grand_total": None,
+            "currency": "",
+            "sales_associate_user": token.get("cashier_user_id") or "",
+            "sales_associate_name": token.get("cashier_user_id") or "",
+            "business_date": _date_of(token.get("created_at")),
+            "pos_opening_shift": "",
+            "token_status": token_status,
+            "picking_status": "",
+            "dispatch_status": "Pending",
+            "display_status": display_status,
+            "order_taken_at": token.get("created_at"),
+            "paid_at": "",
+            "pick_started_at": "",
+            "picked_at": "",
+            "released_at": "",
+            "status_changed_at": token.get("updated_at") or token.get("created_at"),
+        }
+
+        if target_date and row["business_date"] and row["business_date"] != target_date:
+            continue
+        if mine_only and user_id and row.get("sales_associate_user") != user_id:
+            continue
+        rows.append(row)
+        status_counts[display_status] = status_counts.get(display_status, 0) + 1
+
+    rows.sort(key=lambda r: str(r.get("status_changed_at") or r.get("order_taken_at") or ""))
+    rows = rows[: max(1, int(limit))]
+    visible_status_counts = {}
+    for row in rows:
+        key = str(row.get("display_status") or "").strip()
+        if not key:
+            continue
+        visible_status_counts[key] = visible_status_counts.get(key, 0) + 1
+
+    return {
+        "summary": {
+            "pending_count": len(rows),
+            "status_counts": visible_status_counts,
+            "server_time": _now_iso(),
+            "scope_mode": "business_date",
+            "business_date": target_date or "",
+            "pos_profile": pos_profile_id or "",
+            "source": "relay_local",
+        },
+        "rows": rows,
+    }
+
+
 def set_local_sale_cloud_synced(local_sale_ref, cloud_invoice_name=None):
     now = _now_iso()
     with get_db() as conn:

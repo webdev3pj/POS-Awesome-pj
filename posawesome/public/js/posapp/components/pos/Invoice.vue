@@ -1070,6 +1070,191 @@ export default {
         });
       });
     },
+    build_relay_local_token_meta(relayToken, tokenPayload = {}) {
+      const token = relayToken || {};
+      const sourceItems = Array.isArray(token.items) && token.items.length ? token.items : tokenPayload.items || [];
+      const grandTotal = sourceItems.reduce((sum, row) => {
+        const qty = flt((row && row.qty) || 0);
+        const rate = flt((row && row.rate) || 0);
+        return sum + flt((row && row.amount) || qty * rate);
+      }, 0);
+      const tokenId = String(token.token_id || "").trim();
+      return {
+        local_only: 1,
+        token_id: tokenId,
+        token_last4: tokenId ? tokenId.slice(-4) : "",
+        sales_order_name: tokenId,
+        customer: tokenPayload.customer || token.customer_id || this.customer,
+        customer_name:
+          (this.customer_info && this.customer_info.customer_name) ||
+          token.customer_name ||
+          tokenPayload.customer ||
+          this.customer,
+        grand_total: grandTotal,
+        currency: this.pos_profile.currency,
+        order_taken_at: token.created_at || token.updated_at || new Date().toISOString(),
+        sales_associate_user: frappe.session.user,
+        sales_associate_name: frappe.session.user_fullname || frappe.session.user,
+        sales_order: {
+          customer: token.customer_id || tokenPayload.customer || this.customer,
+          customer_name:
+            (this.customer_info && this.customer_info.customer_name) ||
+            token.customer_name ||
+            tokenPayload.customer ||
+            this.customer,
+          items: sourceItems.map((row) => {
+            const payload = row && row.payload && typeof row.payload === "object" ? row.payload : {};
+            return {
+              item_code: row.item_code || payload.item_code,
+              item_name: row.item_name || payload.item_name || "",
+              qty: flt((row && row.qty) || payload.qty || 0),
+              uom: row.uom || payload.uom || "",
+              rate: flt((row && row.rate) || payload.rate || 0),
+              amount: flt((row && row.amount) || payload.amount || 0),
+            };
+          }),
+        },
+      };
+    },
+    async create_sales_order_token_relay_local(tokenPayload) {
+      const relayBaseUrl = this.get_relay_base_url();
+      if (!relayBaseUrl) {
+        throw new Error(__("Relay URL is not configured for offline Sales Order tokens."));
+      }
+      const items = (this.items || []).map((item) => ({
+        item_code: item.item_code,
+        item_name: item.item_name || item.item_code,
+        qty: flt(item.qty),
+        uom: item.uom,
+        rate: flt(item.rate),
+        amount: flt(item.qty) * flt(item.rate),
+        conversion_factor: flt(
+          typeof item.conversion_factor === "undefined" ? 1 : item.conversion_factor || 1
+        ),
+        serial_no: item.serial_no || "",
+        batch_no: item.batch_no || "",
+        discount_percentage: flt(item.discount_percentage || 0),
+        discount_amount: flt(item.discount_amount || 0),
+        price_list_rate: flt(item.price_list_rate || item.rate || 0),
+        posa_notes: item.posa_notes || "",
+        posa_delivery_date: item.posa_delivery_date || "",
+        posa_row_id: item.posa_row_id,
+      }));
+      const relayPayload = {
+        pos_profile_id: this.pos_profile.name,
+        cashier_user_id: frappe.session.user,
+        customer_id: this.customer,
+        customer_name:
+          (this.customer_info && this.customer_info.customer_name) || this.customer,
+        source_doctype: "Sales Order",
+        source_name: "",
+        role: this.current_role || this.get_current_role() || "",
+        items: items,
+      };
+
+      const resp = await fetch(`${relayBaseUrl}/relay/token/create`, {
+        method: "POST",
+        headers: this.get_relay_client_headers({ "Content-Type": "application/json" }),
+        body: JSON.stringify(relayPayload),
+      });
+      let body = {};
+      try {
+        body = (await resp.json()) || {};
+      } catch (e) {
+        body = {};
+      }
+      if (!resp.ok || !body.ok || !body.token) {
+        throw new Error(body.message || __("Unable to create Sales Order token on local relay."));
+      }
+      const meta = this.build_relay_local_token_meta(body.token, tokenPayload || {});
+      meta.outbox_event_id = body.outbox_event_id || null;
+      meta.created_locally_on_relay = 1;
+      return meta;
+    },
+    normalize_relay_token_to_order_doc(row = {}) {
+      const createdAt = String(row.created_at || "").trim();
+      const transactionDate = createdAt
+        ? createdAt.replace("T", " ").slice(0, 10)
+        : frappe.datetime.nowdate();
+      const items = (row.items || []).map((line, idx) => {
+        const payload = line && line.payload && typeof line.payload === "object" ? line.payload : {};
+        const qty = flt(line.qty || payload.qty || 0);
+        const rate = flt(line.rate || payload.rate || 0);
+        return {
+          item_code: line.item_code || payload.item_code,
+          item_name: line.item_name || payload.item_name || line.item_code || "",
+          qty: qty,
+          rate: rate,
+          amount: flt(line.amount || payload.amount || qty * rate),
+          uom: line.uom || payload.uom || "",
+          conversion_factor: flt(
+            typeof payload.conversion_factor === "undefined" ? 1 : payload.conversion_factor || 1
+          ),
+          serial_no: payload.serial_no || "",
+          batch_no: payload.batch_no || "",
+          discount_percentage: flt(payload.discount_percentage || 0),
+          discount_amount: flt(payload.discount_amount || 0),
+          price_list_rate: flt(payload.price_list_rate || rate),
+          posa_notes: payload.posa_notes || "",
+          posa_delivery_date: payload.posa_delivery_date || "",
+          posa_offers: payload.posa_offers || [],
+          posa_offer_applied: !!payload.posa_offer_applied,
+          posa_is_offer: !!payload.posa_is_offer,
+          posa_is_replace: !!payload.posa_is_replace,
+          is_free_item: !!payload.is_free_item,
+          posa_row_id: payload.posa_row_id || `${row.token_id || "TOKEN"}-${idx + 1}`,
+          sales_order: row.token_id || "",
+          sales_order_name: row.token_id || "",
+        };
+      });
+      return {
+        name: row.token_id || "",
+        doctype: "Sales Order",
+        relay_offline_order: 1,
+        relay_token_status: row.status || "TOKEN_OPEN",
+        token_id: row.token_id || "",
+        sales_order: row.token_id || "",
+        sales_order_name: row.token_id || "",
+        customer: row.customer_id || row.customer_name || "",
+        customer_name: row.customer_name || row.customer_id || "",
+        company: this.pos_profile.company,
+        currency: this.pos_profile.currency,
+        pos_profile: this.pos_profile.name,
+        posting_date: transactionDate,
+        transaction_date: transactionDate,
+        grand_total: flt(row.grand_total || 0),
+        discount_amount: 0,
+        additional_discount_percentage: 0,
+        posa_offers: [],
+        posa_coupons: [],
+        items: items,
+      };
+    },
+    async fetch_open_orders_from_relay(searchText = "") {
+      const base = this.get_relay_base_url();
+      if (!base) {
+        throw new Error(__("Relay URL is not configured."));
+      }
+      const params = new URLSearchParams();
+      params.set("pos_profile_id", this.pos_profile.name || "");
+      params.set("limit", "100");
+      params.set("statuses_csv", "TOKEN_OPEN");
+      if (searchText) params.set("search", searchText);
+      const resp = await fetch(`${base}/relay/tokens/search?${params.toString()}`, {
+        method: "GET",
+        headers: this.get_relay_client_headers({ Accept: "application/json" }),
+      });
+      let body = {};
+      try {
+        body = (await resp.json()) || {};
+      } catch (e) {
+        body = {};
+      }
+      if (!resp.ok || body.ok === false) {
+        throw new Error(body.message || __("Unable to load Sales Orders from relay."));
+      }
+      return (body.rows || []).map((row) => this.normalize_relay_token_to_order_doc(row));
+    },
     escape_html(value) {
       return String(value == null ? "" : value)
         .replace(/&/g, "&amp;")
@@ -1249,7 +1434,9 @@ export default {
             fieldname: "relay_note",
             fieldtype: "HTML",
             options: `<div style="text-align:center;color:#1e88e5;padding-top:0.25rem;"><small>${frappe._(
-              "Sales Order token created. Relay token sync is best-effort."
+              meta.local_only
+                ? "Sales Order token created on local relay (offline mode). It will sync to cloud later."
+                : "Sales Order token created. Relay token sync is best-effort."
             )}</small></div>`,
           },
         ],
@@ -1328,17 +1515,31 @@ export default {
 
       try {
         const payload = this.get_sales_order_token_payload();
-        const result = await this.create_sales_order_token(payload);
+        let result = null;
+        let usedRelayOfflineFallback = false;
+        try {
+          result = await this.create_sales_order_token(payload);
+        } catch (cloudErr) {
+          if (!this.relayWorkflowEnabled() || !this.get_relay_base_url()) {
+            throw cloudErr;
+          }
+          result = await this.create_sales_order_token_relay_local(payload);
+          usedRelayOfflineFallback = true;
+        }
         this.show_sales_order_token_dialog(result);
-        this.sync_relay_token_for_sales_order(result);
+        if (!usedRelayOfflineFallback) {
+          this.sync_relay_token_for_sales_order(result);
+        }
         evntBus.$emit("workflow_monitor_refresh_requested");
         this.reset_after_token_save();
         evntBus.$emit("show_mesage", {
           text: __(
-            "Sales Order token created: {0}",
+            usedRelayOfflineFallback
+              ? "Sales Order token created on local relay (offline): {0}"
+              : "Sales Order token created: {0}",
             [result.sales_order_name || result.token_id || ""]
           ),
-          color: "success",
+          color: usedRelayOfflineFallback ? "warning" : "success",
         });
         frappe.utils.play_sound("submit");
         return result;
@@ -1726,7 +1927,9 @@ export default {
         }
         this.invoice_doc = data;
         this.items = data.items;
-        this.update_items_details(this.items);
+        if (!data.relay_offline_order) {
+          this.update_items_details(this.items);
+        }
         this.posa_offers = data.posa_offers || [];
         this.items.forEach((item) => {
           if (!item.posa_row_id) item.posa_row_id = this.makeid(20);
@@ -1842,7 +2045,34 @@ export default {
 
     async get_invoice_from_order_doc() {
       let doc = {};
-      if (this.invoice_doc.doctype == "Sales Order") {
+      if (this.invoice_doc && this.invoice_doc.relay_offline_order) {
+        const tokenId = String(
+          this.invoice_doc.token_id ||
+            this.invoice_doc.sales_order ||
+            this.invoice_doc.sales_order_name ||
+            this.invoice_doc.name ||
+            ""
+        ).trim();
+        doc = {
+          ...this.invoice_doc,
+          name: "",
+          doctype: "Sales Invoice",
+          docstatus: 0,
+          is_pos: 1,
+          update_stock: 1,
+          customer: this.customer,
+          customer_name:
+            (this.customer_info && this.customer_info.customer_name) ||
+            this.invoice_doc.customer_name ||
+            this.customer,
+          company: this.pos_profile.company,
+          pos_profile: this.pos_profile.name,
+          currency: this.pos_profile.currency,
+          token_id: tokenId,
+          sales_order: tokenId,
+          sales_order_name: tokenId,
+        };
+      } else if (this.invoice_doc.doctype == "Sales Order") {
         await frappe.call({
           method:
             "posawesome.posawesome.api.posapp.create_sales_invoice_from_order",
@@ -1897,6 +2127,22 @@ export default {
           newItems.push(updatedItem);
         }
       });
+      const tokenId = String(
+        (this.invoice_doc &&
+          (this.invoice_doc.token_id ||
+            this.invoice_doc.sales_order ||
+            this.invoice_doc.sales_order_name ||
+            this.invoice_doc.name)) ||
+          ""
+      ).trim();
+      if (this.invoice_doc && this.invoice_doc.relay_offline_order && tokenId) {
+        newItems.forEach((item) => {
+          item.sales_order = item.sales_order || tokenId;
+        });
+        doc.token_id = doc.token_id || tokenId;
+        doc.sales_order = doc.sales_order || tokenId;
+        doc.sales_order_name = doc.sales_order_name || tokenId;
+      }
       doc.items = newItems;
       doc.update_stock = 1;
       doc.is_pos = 1;
@@ -2051,6 +2297,9 @@ export default {
 
     async process_invoice_from_order() {
       const doc = await this.get_invoice_from_order_doc();
+      if (this.invoice_doc && this.invoice_doc.relay_offline_order) {
+        return doc;
+      }
       var up_invoice;
       if (doc.name) {
         up_invoice = await this.update_invoice_from_order(doc);
@@ -2308,10 +2557,56 @@ export default {
           currency: this.pos_profile.currency,
           pos_profile: this.pos_profile.name,
         },
-        async: false,
-        callback: function (r) {
-          if (r.message) {
-            evntBus.$emit("open_orders", r.message);
+        async: true,
+        callback: async function (r) {
+          if (r && !r.exc && r.message) {
+            const cloudRows = Array.isArray(r.message) ? r.message : [];
+            if (cloudRows.length > 0 || !vm.relayWorkflowEnabled() || !vm.get_relay_base_url()) {
+              evntBus.$emit("open_orders", r.message);
+              return;
+            }
+          }
+          if (!vm.relayWorkflowEnabled() || !vm.get_relay_base_url()) {
+            evntBus.$emit("show_mesage", {
+              text: __("Unable to load Sales Orders."),
+              color: "error",
+            });
+            return;
+          }
+          try {
+            const relayRows = await vm.fetch_open_orders_from_relay("");
+            evntBus.$emit("open_orders", relayRows);
+            evntBus.$emit("show_mesage", {
+              text: __("Loaded Sales Orders from local relay (cloud unavailable)."),
+              color: "warning",
+            });
+          } catch (e) {
+            evntBus.$emit("show_mesage", {
+              text: (e && e.message) || __("Unable to load Sales Orders from relay."),
+              color: "error",
+            });
+          }
+        },
+        error: async function () {
+          if (!vm.relayWorkflowEnabled() || !vm.get_relay_base_url()) {
+            evntBus.$emit("show_mesage", {
+              text: __("Unable to load Sales Orders."),
+              color: "error",
+            });
+            return;
+          }
+          try {
+            const relayRows = await vm.fetch_open_orders_from_relay("");
+            evntBus.$emit("open_orders", relayRows);
+            evntBus.$emit("show_mesage", {
+              text: __("Loaded Sales Orders from local relay (cloud unavailable)."),
+              color: "warning",
+            });
+          } catch (e) {
+            evntBus.$emit("show_mesage", {
+              text: (e && e.message) || __("Unable to load Sales Orders from relay."),
+              color: "error",
+            });
           }
         },
       });

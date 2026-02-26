@@ -12,10 +12,12 @@ from .storage import (
     enqueue_event,
     enqueue_outbox_event,
     get_local_sale_detail,
+    get_relay_monitor_board,
     get_pick_queue,
     get_token,
     init_db,
     list_local_sales,
+    list_relay_tokens,
     list_outbox,
     list_queue,
     cleanup_outbox_rows,
@@ -516,6 +518,34 @@ def create_app():
             return jsonify({"ok": False, "code": "TOKEN_NOT_FOUND"}), 404
         return jsonify({"ok": True, "token": token})
 
+    @app.route("/relay/tokens/search", methods=["GET"])
+    def relay_tokens_search_v2():
+        auth_err = _require_relay_client_auth()
+        if auth_err:
+            return auth_err
+
+        pos_profile_id = (request.args.get("pos_profile_id") or "").strip() or None
+        search = (request.args.get("q") or request.args.get("search") or "").strip() or None
+        limit = int(request.args.get("limit") or 100)
+        limit = max(1, min(500, limit))
+
+        raw_statuses = []
+        raw_statuses.extend(request.args.getlist("status"))
+        raw_statuses.extend(request.args.getlist("statuses"))
+        if not raw_statuses:
+            csv = (request.args.get("statuses_csv") or request.args.get("statuses") or "").strip()
+            if csv:
+                raw_statuses.extend(csv.split(","))
+        statuses = [str(s).strip() for s in raw_statuses if str(s).strip()]
+
+        rows = list_relay_tokens(
+            pos_profile_id=pos_profile_id,
+            search=search,
+            statuses=statuses,
+            limit=limit,
+        )
+        return jsonify({"ok": True, "rows": rows, "count": len(rows)})
+
     @app.route("/relay/token/<token_id>/void", methods=["POST", "OPTIONS"])
     def relay_token_void_v2(token_id):
         if request.method == "OPTIONS":
@@ -794,6 +824,35 @@ def create_app():
         limit = int(request.args.get("limit") or 100)
         rows = get_pick_queue(pos_profile_id=pos_profile_id, limit=limit)
         return jsonify({"ok": True, "rows": rows, "count": len(rows)})
+
+    @app.route("/relay/workflow/monitor-board", methods=["GET"])
+    def relay_workflow_monitor_board_v2():
+        auth_err = _require_relay_client_auth()
+        if auth_err:
+            return auth_err
+
+        pos_profile_id = (request.args.get("pos_profile") or request.args.get("pos_profile_id") or "").strip() or None
+        business_date = (request.args.get("business_date") or "").strip() or None
+        mine_only = str(request.args.get("mine_only") or "").strip().lower() in ("1", "true", "yes", "on")
+        include_released = str(request.args.get("include_released") or "").strip().lower() in (
+            "1",
+            "true",
+            "yes",
+            "on",
+        )
+        user_id = (request.args.get("user_id") or "").strip() or None
+        limit = int(request.args.get("limit_page_length") or request.args.get("limit") or 200)
+        limit = max(1, min(500, limit))
+
+        board = get_relay_monitor_board(
+            pos_profile_id=pos_profile_id,
+            business_date=business_date,
+            mine_only=mine_only,
+            user_id=user_id,
+            include_released=include_released,
+            limit=limit,
+        )
+        return jsonify({"ok": True, **board})
 
     @app.route("/relay/pick/update", methods=["POST", "OPTIONS"])
     def relay_pick_update_v2():

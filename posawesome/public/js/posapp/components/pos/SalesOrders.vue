@@ -124,32 +124,192 @@ export default {
     close_dialog() {
       this.draftsDialog = false;
     },
+    get_relay_base_url() {
+      return String((this.pos_profile && this.pos_profile.custom_edge_relay_url) || "")
+        .trim()
+        .replace(/\/$/, "");
+    },
+    get_relay_client_headers(extra = {}) {
+      const headers = { ...extra };
+      try {
+        const relayKey = (localStorage.getItem("posa_relay_client_key") || "").trim();
+        if (relayKey) headers["X-Relay-Client-Key"] = relayKey;
+      } catch (e) {}
+      return headers;
+    },
+    relay_order_fallback_enabled() {
+      return (
+        parseInt((this.pos_profile && this.pos_profile.custom_have_token) || 0, 10) === 1 &&
+        !!this.get_relay_base_url()
+      );
+    },
+    normalize_relay_token_row(row = {}) {
+      const createdAt = String(row.created_at || "").trim();
+      const transaction_date = createdAt
+        ? createdAt.replace("T", " ").slice(0, 10)
+        : frappe.datetime.nowdate();
+      const items = (row.items || []).map((line, idx) => {
+        const payload = line && line.payload && typeof line.payload === "object" ? line.payload : {};
+        const qty = flt(line.qty || payload.qty || 0);
+        const rate = flt(line.rate || payload.rate || 0);
+        return {
+          item_code: line.item_code || payload.item_code,
+          item_name: line.item_name || payload.item_name || line.item_code || "",
+          qty: qty,
+          rate: rate,
+          amount: flt(line.amount || payload.amount || qty * rate),
+          uom: line.uom || payload.uom || payload.stock_uom || "",
+          conversion_factor: flt(
+            typeof payload.conversion_factor === "undefined" ? 1 : payload.conversion_factor || 1
+          ),
+          serial_no: payload.serial_no || "",
+          batch_no: payload.batch_no || "",
+          discount_percentage: flt(payload.discount_percentage || 0),
+          discount_amount: flt(payload.discount_amount || 0),
+          price_list_rate: flt(payload.price_list_rate || rate),
+          posa_notes: payload.posa_notes || "",
+          posa_delivery_date: payload.posa_delivery_date || "",
+          posa_offers: payload.posa_offers || [],
+          posa_offer_applied: !!payload.posa_offer_applied,
+          posa_is_offer: !!payload.posa_is_offer,
+          posa_is_replace: !!payload.posa_is_replace,
+          is_free_item: !!payload.is_free_item,
+          posa_row_id: payload.posa_row_id || `${row.token_id || "TOKEN"}-${idx + 1}`,
+          sales_order: row.token_id || "",
+          sales_order_name: row.token_id || "",
+        };
+      });
+
+      return {
+        name: row.token_id || "",
+        doctype: "Sales Order",
+        relay_offline_order: 1,
+        relay_token_status: row.status || "TOKEN_OPEN",
+        token_id: row.token_id || "",
+        sales_order: row.token_id || "",
+        sales_order_name: row.token_id || "",
+        customer: row.customer_id || row.customer_name || "",
+        customer_name: row.customer_name || row.customer_id || "",
+        company: (this.pos_profile && this.pos_profile.company) || "",
+        currency: (this.pos_profile && this.pos_profile.currency) || "",
+        pos_profile: (this.pos_profile && this.pos_profile.name) || "",
+        posting_date: transaction_date,
+        transaction_date: transaction_date,
+        grand_total: flt(row.grand_total || 0),
+        items: items,
+        discount_amount: 0,
+        additional_discount_percentage: 0,
+        posa_offers: [],
+        posa_coupons: [],
+      };
+    },
+    async search_orders_via_relay() {
+      const base = this.get_relay_base_url();
+      if (!base) {
+        throw new Error(__("Relay URL is not configured."));
+      }
+      const params = new URLSearchParams();
+      params.set("pos_profile_id", (this.pos_profile && this.pos_profile.name) || "");
+      params.set("limit", "100");
+      params.set("statuses_csv", "TOKEN_OPEN");
+      if (this.order_name) params.set("search", this.order_name);
+      const resp = await fetch(`${base}/relay/tokens/search?${params.toString()}`, {
+        method: "GET",
+        headers: this.get_relay_client_headers({ Accept: "application/json" }),
+      });
+      let payload = {};
+      try {
+        payload = (await resp.json()) || {};
+      } catch (e) {
+        payload = {};
+      }
+      if (!resp.ok || payload.ok === false) {
+        throw new Error(payload.message || __("Unable to search relay orders."));
+      }
+      this.dialog_data = (payload.rows || []).map((row) => this.normalize_relay_token_row(row));
+      return true;
+    },
+    search_orders() {
+      const vm = this;
+      return new Promise((resolve) => {
+        let cloudFailed = false;
+        frappe.call({
+          method: "posawesome.posawesome.api.posapp.search_orders",
+          args: {
+            order_name: vm.order_name,
+            company: this.pos_profile.company,
+            currency: this.pos_profile.currency,
+            pos_profile: this.pos_profile.name,
+          },
+          async: true,
+          callback: async function (r) {
+            if (r && r.exc) {
+              cloudFailed = true;
+            } else if (r && r.message) {
+              const cloudRows = Array.isArray(r.message) ? r.message : [];
+              if (cloudRows.length > 0 || !vm.relay_order_fallback_enabled()) {
+                vm.dialog_data = r.message;
+                resolve(true);
+                return;
+              }
+              cloudFailed = true;
+            } else {
+              cloudFailed = true;
+            }
+            if (!cloudFailed) {
+              resolve(true);
+              return;
+            }
+            if (!vm.relay_order_fallback_enabled()) {
+              resolve(false);
+              return;
+            }
+            try {
+              await vm.search_orders_via_relay();
+              evntBus.$emit("show_mesage", {
+                text: __("Loaded Sales Orders from local relay (cloud unavailable)."),
+                color: "warning",
+              });
+            } catch (e) {
+              evntBus.$emit("show_mesage", {
+                text: (e && e.message) || __("Unable to search Sales Orders."),
+                color: "error",
+              });
+            }
+            resolve(true);
+          },
+          error: async function () {
+            if (vm.relay_order_fallback_enabled()) {
+              try {
+                await vm.search_orders_via_relay();
+                evntBus.$emit("show_mesage", {
+                  text: __("Loaded Sales Orders from local relay (cloud unavailable)."),
+                  color: "warning",
+                });
+              } catch (e) {
+                evntBus.$emit("show_mesage", {
+                  text: (e && e.message) || __("Unable to search Sales Orders."),
+                  color: "error",
+                });
+              }
+            }
+            resolve(true);
+          },
+        });
+      });
+    },
 
     clearSelected() {
       this.selected = [];
     },
 
-    search_orders() {
-      const vm = this;
-      frappe.call({
-        method: "posawesome.posawesome.api.posapp.search_orders",
-        args: {
-          order_name: vm.order_name,
-          company: this.pos_profile.company,
-          currency: this.pos_profile.currency,
-          pos_profile: this.pos_profile.name,
-        },
-        async: false,
-        callback: function (r) {
-          if (r.message) {
-            vm.dialog_data = r.message;
-          }
-        },
-      });
-    },
-
     async submit_dialog() {
       if (this.selected.length > 0) {
+        if (this.selected[0].relay_offline_order) {
+          evntBus.$emit("load_order", this.selected[0]);
+          this.draftsDialog = false;
+          return;
+        }
         var invoice_doc_for_load = {};
         await frappe.call({
           method:

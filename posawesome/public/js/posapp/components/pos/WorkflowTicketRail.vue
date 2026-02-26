@@ -247,6 +247,22 @@ export default {
       if (typeof value === 'string') return value;
       return (value.name || '').toString();
     },
+    getRelayBaseUrl() {
+      const profile = this.pos_profile && typeof this.pos_profile === 'object' ? this.pos_profile : {};
+      return String(profile.custom_edge_relay_url || '').trim().replace(/\/$/, '');
+    },
+    getRelayClientHeaders(extra = {}) {
+      const headers = { ...extra };
+      try {
+        const relayKey = (localStorage.getItem('posa_relay_client_key') || '').trim();
+        if (relayKey) headers['X-Relay-Client-Key'] = relayKey;
+      } catch (e) {}
+      return headers;
+    },
+    relayFallbackEnabled() {
+      const profile = this.pos_profile && typeof this.pos_profile === 'object' ? this.pos_profile : {};
+      return parseInt(profile.custom_have_token || 0, 10) === 1 && !!this.getRelayBaseUrl();
+    },
     toggleExpanded(forceValue) {
       if (typeof forceValue === 'boolean') {
         this.expanded = forceValue;
@@ -322,6 +338,38 @@ export default {
         });
       });
     },
+    async requestRelayApi(args) {
+      const base = this.getRelayBaseUrl();
+      if (!base) {
+        throw new Error(__('Relay monitor is not configured.'));
+      }
+      const params = new URLSearchParams();
+      params.set('pos_profile', (args && args.pos_profile) || this.profileName || '');
+      params.set('business_date', (args && args.business_date) || this.scopeBusinessDate || '');
+      params.set('mine_only', args && args.mine_only ? '1' : '0');
+      params.set('include_released', args && args.include_released ? '1' : '0');
+      params.set('limit_page_length', String((args && args.limit_page_length) || 200));
+      try {
+        if (typeof frappe !== 'undefined' && frappe.session && frappe.session.user) {
+          params.set('user_id', frappe.session.user);
+        }
+      } catch (e) {}
+
+      const resp = await fetch(`${base}/relay/workflow/monitor-board?${params.toString()}`, {
+        method: 'GET',
+        headers: this.getRelayClientHeaders({ Accept: 'application/json' }),
+      });
+      let payload = {};
+      try {
+        payload = (await resp.json()) || {};
+      } catch (e) {
+        payload = {};
+      }
+      if (!resp.ok || payload.ok === false) {
+        throw new Error(payload.message || __('Unable to load workflow monitor from relay.'));
+      }
+      return payload;
+    },
     async fetchBoard(silent) {
       if (!this.profileName) {
         this.rows = [];
@@ -335,7 +383,7 @@ export default {
       }
 
       try {
-        const payload = await this.requestApi({
+        const requestArgs = {
           pos_profile: this.profileName,
           business_date: this.scopeBusinessDate,
           scope_mode: 'business_date',
@@ -343,7 +391,18 @@ export default {
           mine_only: this.mineOnly ? 1 : 0,
           include_released: 0,
           limit_page_length: 200,
-        });
+        };
+        let payload = null;
+        const relayEnabled = this.relayFallbackEnabled();
+        if (relayEnabled) {
+          try {
+            payload = await this.requestRelayApi(requestArgs);
+          } catch (relayErr) {
+            payload = await this.requestApi(requestArgs);
+          }
+        } else {
+          payload = await this.requestApi(requestArgs);
+        }
 
         this.summary = payload.summary || {
           pending_count: 0,
