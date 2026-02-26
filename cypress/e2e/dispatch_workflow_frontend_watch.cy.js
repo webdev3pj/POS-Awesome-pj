@@ -269,15 +269,20 @@ describe("Dispatch workflow (watch mode)", () => {
       expect(targetLocalSaleRef, "dispatch targetLocalSaleRef resolved").to.be.a("string").and.not.be.empty;
       cy.get("body").should("contain.text", "Avg Wait (Ready)");
       cy.get("body").should("contain.text", "Oldest Open");
+      cy.get("body").should("contain.text", "Over SLA");
       cy.contains(".v-list-item", targetLocalSaleRef, { timeout: 60000 }).click({ force: true });
       assertRelayUiAndActual({ relayBase, expectRelayOnline: true, expectCloudOnline: true });
       assertFulfillmentDetailSynced(targetLocalSaleRef);
       cy.get("body", { timeout: 60000 }).should("contain.text", targetLocalSaleRef);
       cy.get("body").should("contain.text", "Dispatch + Sync");
       cy.get("body").should("contain.text", "Phase Timeline (Dispatch Monitor)");
+      cy.get("body").should("contain.text", "Current Phase");
+      cy.get("body").should("contain.text", "Current Phase Age");
+      cy.get("body").should("contain.text", "SLA");
       cy.get("body").should(($body) => {
         const text = ($body.text() || "").replace(/\s+/g, " ");
         expect(/Paid -> Released \(Total\)|Open Age/i.test(text), "dispatch timing summary visible").to.eq(true);
+        expect(/SLA:\s*(OK|Watch|High)/i.test(text), "dispatch SLA label visible").to.eq(true);
       });
       cy.contains(".v-btn", "Release Goods", { timeout: 30000 }).should("be.visible");
 

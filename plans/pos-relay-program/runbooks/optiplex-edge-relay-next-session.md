@@ -18,7 +18,7 @@ Provide a zero-context startup guide for a new AI coding agent session on the Op
 
 ## Branch and Starting Point
 - Repo: `POS-Awesome-pj`
-- Branch to use (current): `codex-4.1-picked-dispatch-relay`
+- Branch to use (current): `codes-4.3-dispatch`
 - GitHub baseline commit for this handoff/runbook: `424c79a`
 - Current relay-focused branch status:
   - SA + Cashier browser flows are already validated in cloud/non-relay-missing scenarios on `codex-2-cashier`
@@ -28,7 +28,13 @@ Provide a zero-context startup guide for a new AI coding agent session on the Op
   - `0b8f772` adds Phase 3 baseline relay/client-key + server-side role guards and commits helper/security Cypress specs
   - `6767d0f` fixes a live cashier regression where relay submit could send an empty role (relay rejected with `RELAY_ROLE_REQUIRED`)
   - `ce5f84d` + `6cf64aa` fix fulfillment-role navbar relay-status chip races so picker/dispatch/supervisor top-bar relay chips match actual relay usage
-  - `df1ac0c` adds offline continuity fallback paths (relay token search + relay workflow monitor fallback + SA/cashier relay token/SO fallback); host relay restart + live validation still pending
+  - `df1ac0c` adds offline continuity fallback paths (relay token search + relay workflow monitor fallback + SA/cashier relay token/SO fallback); explicit cloud-off proof still pending
+  - `d73fd42` (`codex-4.2-dispatch`) adds dispatch monitoring timers/phase timeline UX
+  - `codes-4.3-dispatch` restores and validates local Docker staging (`pj.local:8080`) as a pre-cloud deploy loop:
+    - local deploy compatibility fixes for current repo layout
+    - separate local-staging Cypress suite under `cypress/e2e/local_staging/`
+    - local SA->Cashier->Picker->Dispatch + supervisor + local relay-guard specs passing on `pj.local`
+    - dispatch monitor SLA sorting/timing/detail-panel polish validated locally
   - local relay HTTP smoke (`/health`, `/relay/session/open`, `/relay/token/create`, `/relay/commit-invoice`) passed
   - headed Cypress relay demo proof completed:
     - SA token/SO `SAL-ORD-PJ7-2026-00009`
@@ -49,6 +55,8 @@ Provide a zero-context startup guide for a new AI coding agent session on the Op
 5. `plans/pos-relay-program/uat/2026-02-24-optiplex-picker-dispatch-shared-shell-relay-local-first.md`
 6. `plans/pos-relay-program/runbooks/optiplex-fresh-codex-zero-context-handoff.md`
 7. `relay/README.md`
+8. `plans/pos-relay-program/uat/2026-02-26-local-staging-sa-cashier-picker-dispatch-and-dispatch-monitor.md`
+9. `cypress/e2e/local_staging/README.md`
 
 ## Local-Only Secrets Pack (Required Before Cypress)
 ### Repo root `.env` (copy from main machine, do not commit)
@@ -192,11 +200,23 @@ Fallback (not preferred for this workflow):
   - picker line-wise pick updates persist to relay line payloads (`payload.picker`) with UOM/conversion metadata
   - dispatch release updates relay local sale and dispatch events
 - Next recommended work:
+  - Deploy `codes-4.3-dispatch` to cloud dev site and rerun dispatch/supervisor on cloud before continuing feature work
   - Finish the remaining Phase 3 regression/security rerun slice (SA/Cashier + fallback + relay-guard spec) on the latest deployed build using strict Cypress timeouts + UI-vs-actual relay assertions
   - Live-validate `df1ac0c` offline continuity fallback behavior (cloud site first, then `pj.local:8080` for true cloud-off simulation)
   - Start dispatch monitoring/timing-first UX and relay phase timing instrumentation (business optimization focus)
   - Simplify picker default UX path (order-level actions first) while keeping line-item editing available for exceptions/wire/UOM cases
   - shop-PC certificate trust rollout and support docs cleanup
+
+## Local staging pre-cloud loop (now available)
+- Local Docker staging site on this OptiPlex: `http://pj.local:8080`
+- Local staging deploy script (repo root):
+```powershell
+powershell -ExecutionPolicy Bypass -File .\scripts\local-staging\deploy_posawesome_to_pj_local.ps1
+```
+- Local-staging Cypress specs are separated and labeled under:
+  - `cypress/e2e/local_staging/`
+- Use the same strict Cypress discipline (one spec at a time, hard timeout, post-spec scan) with:
+  - `CYPRESS_baseUrl=http://pj.local:8080/`
 
 ## Next Session Test Sequence (Recommended)
 ### 1. Start relay locally and verify `/health`

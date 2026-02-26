@@ -114,6 +114,7 @@ Current validation status note (2026-02-26):
 - `cashier_workflow_frontend_watch.cy.js` and `phase3_security_relay_role_guards_watch.cy.js` both passed on the deployed dev site after `6767d0f`.
 - Fulfillment rerun (Picker/Dispatch/Supervisor) with strict UI-vs-actual relay assertions is now passing on the deployed dev site after navbar relay-status fixes `ce5f84d` + `6cf64aa`.
 - Remaining recommended rerun for Phase 3 signoff is the full SA/Cashier + fallback + security spec slice on the latest deployed build under the same strict timeout policy.
+- Local-staging parity note (`codes-4.3-dispatch`): `cypress/e2e/local_staging/local_staging_phase3_security_relay_role_guards_watch.cy.js` now runs against `pj.local:8080` as a pre-cloud deploy smoke and passed during the 2026-02-26 local SA->Dispatch rerun after local Docker deploy/runtime fixes.
 
 ## Known Risks
 - Breaking active store devices if auth rollout is not coordinated.

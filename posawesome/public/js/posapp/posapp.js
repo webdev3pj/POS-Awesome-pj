@@ -4,14 +4,42 @@ frappe.provide('frappe.PosApp');
 
 
 frappe.PosApp.posapp = class {
-    constructor({ parent }) {
-        this.$parent = $(document);
-        this.page = parent.page;
+    constructor(ctx) {
+        this.$doc = $(document);
+        // Frappe page contexts are inconsistent across versions/custom shells.
+        // Accept either `{ parent: {...} }`, `{ page: {...} }`, or the page object itself.
+        const root = (ctx && ctx.parent) ? ctx.parent : ctx;
+        this.page = (root && root.page) ? root.page : root;
         this.make_body();
-
     }
+
+    resolve_mount_el() {
+        const pageMain = this.page && this.page.main ? $(this.page.main) : $();
+        if (pageMain && pageMain.length) return pageMain.first();
+
+        const fallbackSelectors = [
+            '.page-container .main-section',
+            '.layout-main-section .main-section',
+            '.layout-main-section-wrapper .main-section',
+            '.main-section',
+        ];
+
+        for (const selector of fallbackSelectors) {
+            const $el = this.$doc.find(selector);
+            if ($el && $el.length) return $el.first();
+        }
+
+        return $();
+    }
+
     make_body () {
-        this.$el = this.$parent.find('.main-section');
+        this.$el = this.resolve_mount_el();
+        if (!this.$el || !this.$el.length || !this.$el[0]) {
+            // Leave a clear runtime signal instead of crashing on local shells.
+            // Cypress/runtime capture hooks read this and fail fast with context.
+            console.error(new Error('POSAwesome mount target not found (.main-section)'));
+            return;
+        }
         this.vue = new Vue({
             vuetify: new Vuetify(
                 {

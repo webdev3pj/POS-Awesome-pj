@@ -23,6 +23,60 @@ Note:
 
 ---
 
+## 2026-02-26 - Local staging (`pj.local`) SA->Dispatch suite restored and validated; dispatch monitor adds SLA sorting/timeline polish
+- Branch: `codes-4.3-dispatch`
+- Summary: Fixed the local Docker staging deploy/runtime mismatches so `pj.local:8080/app/posapp` renders the real POS UI again and local SA/Cashier/Picker/Dispatch/Supervisor flows pass under Cypress. Also improved dispatch monitoring UX (SLA emphasis, queue sorting, richer phase timing) and added stronger browser runtime error capture so local module/script regressions fail fast with artifacts instead of looking like generic UI assertion failures.
+- What changed:
+  - Local staging deploy compatibility hardening (`scripts/local-staging/deploy_posawesome_to_pj_local.ps1`):
+    - copy real Vuetify runtime/CSS into legacy local asset paths (instead of a no-op shim)
+    - add nested root-module compatibility shims so local Docker image can import `posawesome.overrides` and other root-level modules from the current repo layout
+    - preserve local parity build/sync flow across backend + frontend containers
+  - Local POS runtime compatibility (`posawesome/public/js/posapp/posapp.js`, `posawesome/posawesome/page/posapp/posapp.js`):
+    - handle alternate/local desk page loader contexts (`this.page` missing)
+    - resolve/fallback mount target more safely for local desk shells
+    - emit clear console/runtime errors when mount target is missing (caught by Cypress runtime capture)
+  - Cypress local-staging reliability and diagnostics:
+    - separate local-staging suite under `cypress/e2e/local_staging/` (clearly labeled)
+    - local parity smoke strengthened with local Frappe route/page API debug snapshots
+    - browser runtime/console/resource error capture persisted to `cypress/tmp/browser_runtime_events/...`
+    - severe local runtime/module errors fail local specs early (`Module POSAwesome not found`, module/script syntax/import failures)
+  - Dispatch monitor UX improvements (`FulfillmentWorkspace.vue`) + assertions:
+    - queue auto-sorted by workflow/SLA urgency
+    - `Over SLA` summary card
+    - per-row SLA chips + current-phase labels
+    - stronger phase timing extraction and richer detail timeline snapshot cards (`Current Phase`, `Current Phase Age`, `Open Age`, `SLA`)
+- What was verified:
+  - Local staging deploy to `pj.local:8080` completed and app shell renders real POS UI
+  - Headed Cypress (Chrome), strict timeout + post-spec scan, one spec at a time on `pj.local:8080`:
+    - `local_staging_parity_smoke_watch.cy.js` ✅
+    - `admin_set_cline_sa_only_role.cy.js` ✅
+    - `local_staging_sa_workflow_frontend_watch.cy.js` ✅
+    - `admin_set_cline_cashier_only_role.cy.js` ✅
+    - `local_staging_cashier_workflow_frontend_watch.cy.js` ✅ (local `posawesome.overrides` import 500 fixed)
+    - `admin_set_cline_picker_only_role.cy.js` ✅
+    - `local_staging_picker_workflow_frontend_watch.cy.js` ✅
+    - `admin_set_cline_dispatch_only_role.cy.js` ✅
+    - `local_staging_dispatch_workflow_frontend_watch.cy.js` ✅
+    - `admin_set_cline_supervisor_only_role.cy.js` ✅
+    - `local_staging_supervisor_fulfillment_exception_watch.cy.js` ✅
+    - `local_staging_phase3_security_relay_role_guards_watch.cy.js` ✅
+  - Fresh local SA->Cashier->Picker->Dispatch chain evidence on one local sale:
+    - SA token/SO: `SAL-ORD-PJ7-2026-00005`
+    - relay local sale: `LSR-PJ7 -20260226223509-4BBF19`
+    - relay transaction detail after dispatch: `pick_status=PICKED_READY_FOR_RELEASE`, `dispatch_status=RELEASED`, `source_env=local_staging`
+  - Relay health after cleanup:
+    - `/health` -> `ok: true`
+    - outbox counts `queued=0`, `failed=0`
+    - legacy `/queue` counts `0/0/0/0`
+  - Browser runtime capture successfully surfaced local module/runtime failures during debugging (e.g., `Module POSAwesome not found`, `Vuetify is not defined`) and enabled targeted fixes
+- What remains:
+  - Deploy `codes-4.3-dispatch` to cloud dev site and rerun dispatch/supervisor specs against `devpjjamaica`
+  - Validate offline continuity (`df1ac0c`) on local staging with explicit cloud-unavailable simulation (SA token + left rail + cashier SO relay fallback)
+  - Continue dispatch monitor work: SLA thresholds tuning, timeline analytics persistence/reporting
+- Links:
+  - `cypress/e2e/local_staging/README.md`
+  - `uat/2026-02-26-local-staging-sa-cashier-picker-dispatch-and-dispatch-monitor.md`
+
 ## 2026-02-26 - Fulfillment cloud rerun passed with strict UI-vs-actual relay assertions; navbar relay-chip sync race fixed
 - Branch: `codex-4.1-picked-dispatch-relay`
 - Summary: Completed the targeted live dev-site fulfillment rerun (Picker/Dispatch/Supervisor) using strict Cypress timeouts and explicit assertions that the UI relay/cloud chips match actual relay behavior. Found and fixed a real navbar relay-status synchronization race that made the picker/dispatch UI show only `Cloud Online` while relay APIs were actively in use. Also pushed offline continuity relay/token/monitor fallback code (`df1ac0c`) but did not yet finish its live validation.

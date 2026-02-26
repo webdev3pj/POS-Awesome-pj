@@ -1,3 +1,4 @@
+const fs = require("fs");
 const path = require("path");
 const crypto = require("crypto");
 const dotenv = require("dotenv");
@@ -132,6 +133,32 @@ module.exports = defineConfig({
             throw new Error("Missing otpauth URI. Set CYPRESS_totpUri in .env");
           }
           return generateTotpFromUri(uri);
+        },
+        saveBrowserRuntimeEvents({ spec, testTitle, events }) {
+          const safeSpec = String(spec || "unknown")
+            .replace(/[\\/]/g, "__")
+            .replace(/[^a-zA-Z0-9._-]/g, "_");
+          const safeTitle = String(testTitle || "unknown")
+            .slice(0, 160)
+            .replace(/[^a-zA-Z0-9._ -]/g, "_")
+            .replace(/\s+/g, "_");
+          const outDir = path.resolve(__dirname, "cypress", "tmp", "browser_runtime_events");
+          fs.mkdirSync(outDir, { recursive: true });
+          const outPath = path.join(outDir, `${safeSpec}__${safeTitle}.json`);
+          fs.writeFileSync(
+            outPath,
+            JSON.stringify(
+              {
+                spec: spec || "",
+                testTitle: testTitle || "",
+                capturedAt: new Date().toISOString(),
+                events: Array.isArray(events) ? events : [],
+              },
+              null,
+              2
+            )
+          );
+          return outPath;
         },
       });
 

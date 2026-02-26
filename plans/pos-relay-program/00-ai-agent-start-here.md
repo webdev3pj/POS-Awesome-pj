@@ -3,7 +3,7 @@
 ## TL;DR (Business Owner)
 - This branch family is building a role-based store workflow: SA creates orders/tokens, cashier takes payment, then picker and dispatch complete fulfillment.
 - SA/Cashier relay-first flow and Picker/Dispatch relay-first flow are now live-tested on the dev site + OptiPlex relay, including cloud parity for picker/dispatch fulfillment status sync.
-- The current focus has moved to relay hardening (auth/authorization), committed test coverage cleanup, and rollout/operations cleanup (shop PCs + docs/UAT).
+- The current focus has moved to relay hardening (auth/authorization), local-staging parity/offline continuity validation, and dispatch monitoring/timing UX.
 - SA must not open/close cash shifts; cashier owns money-related opening/closing.
 - The ticket sidebar monitor is now planned to use `POS Profile + business date` (not only opening shift), so SA orders appear even before a cashier opens shift.
 - Sales Order series per POS Profile is implemented and used for cashier `Select S.O` filtering (for `PJ7 CASHIER`, tested with `SAL-ORD-PJ7-.YYYY.-`).
@@ -20,13 +20,15 @@
 - `CHANGELOG_PROGRESS.md`
 
 ## Document Currency (Current vs Historical)
-- This is the primary handoff doc for the current branch family and is currently aligned to `codex-4.1-picked-dispatch-relay` (with inherited relay work from `codex-3-edge-relay` and `codex-4-picker-dispatch`).
+- This is the primary handoff doc for the current branch family and is currently aligned to `codes-4.3-dispatch` (with inherited relay work from `codex-3-edge-relay`, `codex-4-picker-dispatch`, `codex-4.1-picked-dispatch-relay`, and `codex-4.2-dispatch`).
 - Branch progression matters:
   - `kilo-codex-v3` = baseline planning + SA/monitor rollout
   - `codex-2-cashier` = cashier filtering + cashier live UAT
   - `codex-3-edge-relay` = relay-focused validation and OptiPlex runbook execution
   - `codex-4-picker-dispatch` = shared-shell Picker/Dispatch fulfillment workspace + relay line-level pick persistence + local relay UAT
   - `codex-4.1-picked-dispatch-relay` = picker/dispatch cloud sync parity fix + OptiPlex relay autostart hardening + live cloud parity validation
+  - `codex-4.2-dispatch` = first dispatch monitoring/timer UI slice (queue cards + phase timeline)
+  - `codes-4.3-dispatch` = local staging (`pj.local`) parity/deploy hardening + local SA->Dispatch Cypress suite + dispatch SLA sorting/timing polish
 - Historical UAT docs remain branch/date-specific on purpose; do not rewrite them as generic current-state docs.
 
 ## Mission and Business Rules
@@ -40,7 +42,7 @@ Key business rules currently agreed:
 - SA-stage `sales_partner` capture is deferred and tracked as backlog.
 
 ## Current Branch and Status Snapshot
-- Current working branch: `codex-4.1-picked-dispatch-relay`
+- Current working branch: `codes-4.3-dispatch`
 - GitHub handoff baseline for the next OptiPlex session: `424c79a` (`docs(relay): clarify frappe cloud local-lan relay constraints`)
 - Current picker/dispatch shared-shell implementation commit: `224e842` (`feat(relay): add shared picker dispatch fulfillment workspace`)
 - Current picker/dispatch cloud-parity + OptiPlex autostart fix branch commits:
@@ -51,6 +53,16 @@ Key business rules currently agreed:
   - `ce5f84d` (`fix(pos): avoid navbar relay status race on fast boot`)
   - `6cf64aa` (`fix(pos): recover navbar relay poll if profile event is missed`)
   - `df1ac0c` (`feat(relay): add offline token and monitor fallback paths`) (pushed; live validation pending)
+  - `d73fd42` (`feat(dispatch): add monitoring timers and phase timeline`) on `codex-4.2-dispatch`
+- Current `codes-4.3-dispatch` local-validation + dispatch-monitor work (this branch):
+  - local staging deploy compatibility fixes for `pj.local` (legacy local asset paths + nested package root-module shims)
+  - separate/local-labeled Cypress wrappers under `cypress/e2e/local_staging/`
+  - browser runtime/console capture persisted for Cypress local staging specs (fails fast on severe local module/script runtime errors)
+  - local staging `pj.local` SA->Cashier->Picker->Dispatch + supervisor + local Phase 3 guard suite rerun passing
+  - dispatch monitor UX polish:
+    - SLA chips / `Over SLA` summary
+    - workflow-priority queue sorting
+    - stronger phase timing extraction and detail timeline monitor cards
 - Inherited validated work:
   - `kilo-codex-v3`: SA Sales Order token flow, no-cash SA session, monitor rail foundation
   - `codex-2-cashier`: cashier `Select S.O` filtering (naming series + age), cashier live E2E coverage, token-disabled regression coverage
@@ -74,9 +86,9 @@ Key business rules currently agreed:
   - fulfillment-role relay status chip sync (`Picker`/`Dispatch`/`Supervisor`) is now live-validated after navbar race/recovery fixes (`ce5f84d`, `6cf64aa`):
     - UI `Relay Online (LAN)` chip matches actual relay API usage in the fulfillment workspace
     - strict Cypress assertions now check UI relay/cloud chips and actual relay `/health` together in relay-dependent specs
-  - offline continuity fallback code is pushed in `df1ac0c` (relay token search + relay workflow monitor fallback + SA/cashier relay token/SO fallback paths), but host relay restart + live UAT for these new endpoints is still pending
+  - offline continuity fallback code is pushed in `df1ac0c` (relay token search + relay workflow monitor fallback + SA/cashier relay token/SO fallback paths); full explicit cloud-off continuity proof remains pending
   - OptiPlex relay+Caddy auto-start is now implemented and verified using a Windows boot scheduled task (`POSRelayStack_Autostart_OnStart`, `SYSTEM`) with relay LAN HTTPS health checks passing
-- Priority implementation/verification target: finish the remaining full Phase 3 regression/security rerun slice on the deployed baseline guards (`0b8f772`, `6767d0f`) under the strict timeout/UI-vs-actual policy, validate `df1ac0c` offline continuity fallbacks, then move to dispatch monitoring/timing-first UX and relay phase timing instrumentation.
+- Priority implementation/verification target: deploy `codes-4.3-dispatch` to cloud dev site and rerun dispatch/supervisor on cloud, then finish the remaining Phase 3 regression/security rerun slice and validate `df1ac0c` offline continuity fallbacks (cloud-site fallback behavior + local-staging cloud-off simulation).
 - Frappe Cloud topology note: raw private LAN relay URLs are still not cloud-backend reachable; in LAN-only mode this is expected and treated as diagnostic-only while browser-LAN HTTPS health is the submit gate.
 
 ## What Is Already Implemented (Branch-Accurate)
