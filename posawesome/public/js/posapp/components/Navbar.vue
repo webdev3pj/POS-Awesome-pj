@@ -465,6 +465,33 @@ export default {
       this.snackColor = data.color;
       this.snackText = data.text;
     },
+    apply_pos_profile_registration(data) {
+      if (!data || !data.pos_profile) return;
+      this.sync_current_role();
+      this.pos_profile = data.pos_profile;
+      const payments = { text: 'Payments', icon: 'mdi-cash-register' };
+      if (
+        this.pos_profile.posa_use_pos_awesome_payments &&
+        this.items.length !== 2
+      ) {
+        this.items.push(payments);
+      }
+      this.start_relay_poll(this.pos_profile.name);
+    },
+    recover_pos_profile_if_missed() {
+      if (this.pos_profile && this.pos_profile.name) return;
+      frappe.call({
+        method: 'posawesome.posawesome.api.posapp.check_opening_shift',
+        args: { user: frappe.session.user },
+        async: true,
+        callback: (r) => {
+          const msg = r && r.message;
+          if (!msg || !msg.pos_profile) return;
+          if (this.pos_profile && this.pos_profile.name) return;
+          this.apply_pos_profile_registration(msg);
+        },
+      });
+    },
     emit_cloud_status_changed() {
       evntBus.$emit('cloud_status_changed', { ...(this.cloud_status || {}) });
     },
@@ -851,16 +878,7 @@ export default {
         : this.company_img;
     });
     evntBus.$on('register_pos_profile', (data) => {
-      this.sync_current_role();
-      this.pos_profile = data.pos_profile;
-      const payments = { text: 'Payments', icon: 'mdi-cash-register' };
-      if (
-        this.pos_profile.posa_use_pos_awesome_payments &&
-        this.items.length !== 2
-      ) {
-        this.items.push(payments);
-      }
-      this.start_relay_poll(this.pos_profile.name);
+      this.apply_pos_profile_registration(data);
     });
     evntBus.$on('check_relay_connectivity', () => {
       this.fetch_relay_status(this.pos_profile && this.pos_profile.name, false);
@@ -878,6 +896,11 @@ export default {
       this.freezTitle = '';
       this.freezeMsg = '';
     });
+    // If the navbar was created after POS emitted `register_pos_profile`, recover
+    // the active profile from the opening shift session and start relay polling.
+    setTimeout(() => {
+      this.recover_pos_profile_if_missed();
+    }, 250);
   },
   beforeDestroy() {
     this.stop_relay_poll();
