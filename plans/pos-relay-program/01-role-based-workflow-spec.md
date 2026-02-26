@@ -59,7 +59,7 @@ This document is the authoritative reference for:
 
 ### Security note
 - Browser role (`pos_current_role`) is UI state only.
-- Final authorization must be server-side and relay-side (`Planned`, Phase 3).
+- Final authorization must be server-side and relay-side (`Partial` on `codex-4.1-picked-dispatch-relay`; Phase 3 baseline guards are implemented, full hardening/coverage remains).
 
 ## Workflow Overview by Role
 ### Sales Associate (SA)
@@ -250,13 +250,16 @@ What exists:
 
 What is missing:
 - Picker-focused UX polish/guardrails in shared shell (pick-ticket print/reprint, reason presets, clearer exception prompts).
-- Committed/repeatable Cypress picker spec coverage in branch history (helper spec used in UAT was local-only).
+- Simplify the default picker UI path (current line-wise workspace is functional but can feel too busy); keep line list and editable `picked_qty`, but make order-level actions the primary path.
+- Committed/repeatable Cypress picker spec coverage in branch history (helper spec used in UAT was local-only; committed coverage exists now on `codex-4.1-picked-dispatch-relay`, live rerun/standardization still in progress).
 - Relay auth/role authorization (Phase 3).
 
 Recommended picker flow (same POS shell, relay-backed):
 - Default picker landing panel shows a relay-backed pick queue (paid, not yet released, pick-pending/in-progress/exception).
 - Picker opens an order detail panel (read-only customer/order/payment summary, editable pick actions only).
-- Picker updates line-wise picked quantities/status (defaulting to ordered qty) and records exceptions through relay endpoints without mutating the billed invoice.
+- Normal case (fast path): picker reviews the line list, leaves default `picked_qty = ordered qty`, and uses order-level actions (`Start/Save`, `Mark Picked Ready`).
+- Line-wise edits are available when needed (exceptions, shortages, wire/length quantities, measurement corrections) and do not mutate the billed invoice lines.
+- Picker records exceptions through relay endpoints without changing the billed invoice; exception handling routes to supervisor/cashier flow as needed.
 - Picker UI respects order UOM and conversion factor (shows picked qty in order UOM plus computed stock qty equivalent; important for wire/length items).
 - Relay updates local sale / line state immediately for offline continuity and queues sync events.
 - Ticket monitor rail remains visible for cross-role context; picker actions may later deep-link from rail row -> pick detail panel.
@@ -278,12 +281,13 @@ What exists:
 
 What is missing:
 - Dispatch hold/reason/override UX refinement and explicit supervisor pathways.
-- Committed/repeatable Cypress dispatch spec coverage in branch history (helper spec used in UAT was local-only).
+- Committed/repeatable Cypress dispatch spec coverage exists on `codex-4.1-picked-dispatch-relay`; live rerun/standardization and hold/reason variants are still pending.
 - Server/relay authorization (Phase 3).
 
 Recommended dispatch flow (same POS shell, relay-backed):
 - Default dispatch landing panel shows release-ready orders (picked/paid, not released) and held/exception items requiring resolution.
-- Dispatch confirms release with an explicit action (and reason if hold/override path is used).
+- Normal case (fast path): dispatch confirms release with one explicit action after verifying picked/paid status.
+- Edge case: hold/reason/override path is used when pick is partial/exception or supervisor approval is required.
 - Relay records dispatch release event locally and updates local sale release status immediately.
 - Sync to cloud happens through relay outbox/event sync without blocking the local release action when offline policy allows.
 
@@ -315,7 +319,7 @@ Recommended supervisor behavior in shared shell:
 - Log role/user/device on all mutating workflow transitions.
 - Preserve offline-first behavior for authorized role actions by writing local state/events first, then syncing via outbox.
 
-Status: `Planned` (Phase 3)
+Status: `Partial` (Phase 3 baseline implemented on `codex-4.1-picked-dispatch-relay`; hardening/coverage still pending)
 
 Current live UAT note (2026-02-25, `codex-4.1-picked-dispatch-relay`):
 - Relay-local picker and dispatch transitions are proven in the shared shell.

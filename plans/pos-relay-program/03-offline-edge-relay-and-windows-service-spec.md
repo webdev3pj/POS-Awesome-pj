@@ -46,6 +46,11 @@
   - relay sync worker enriches fulfillment outbox events with `sales_invoice` + `pos_profile` and normalizes picker statuses for cloud endpoint parity
   - fresh relay outbox `PICK_EVENT` / `RELEASE_EVENT` rows sync to cloud (`done`) and update cloud `POS Relay Workflow State` to `Picked` / `Released`
   - OptiPlex relay+Caddy auto-start is hardened and verified via Windows boot task `POSRelayStack_Autostart_OnStart` (runs as `SYSTEM`)
+- Current implemented state on `codex-4.1-picked-dispatch-relay` (Phase 3 baseline hardening, deployed validation in progress on 2026-02-26):
+  - relay mutating endpoints now have baseline role guards
+  - optional relay client auth header plumbing (`X-Relay-Client-Key`) exists
+  - server-side role checks for key workflow APIs are implemented
+  - full live regression/negative coverage and rollout hardening are still pending
 
 ## Purpose
 Define the offline continuity design and operations model for the Edge Relay, including:

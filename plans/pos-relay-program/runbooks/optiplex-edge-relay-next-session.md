@@ -25,6 +25,8 @@ Provide a zero-context startup guide for a new AI coding agent session on the Op
   - `codex-3-edge-relay` now includes relay-focused hardening (LAN-only mode + cloud fallback), OptiPlex LAN HTTPS setup, and live relay-enabled SA/Cashier validation
   - `codex-4-picker-dispatch` adds shared-shell Picker/Dispatch/Supervisor fulfillment workspace + relay line-wise picker payload persistence and has been live-validated locally on OptiPlex/dev site for picker/dispatch state changes
   - `codex-4.1-picked-dispatch-relay` fixes picker/dispatch cloud fulfillment sync parity and OptiPlex relay autostart (boot task) and has been live-validated on OptiPlex/dev site
+  - `0b8f772` adds Phase 3 baseline relay/client-key + server-side role guards and commits helper/security Cypress specs
+  - `6767d0f` fixes a live cashier regression where relay submit could send an empty role (relay rejected with `RELAY_ROLE_REQUIRED`)
   - local relay HTTP smoke (`/health`, `/relay/session/open`, `/relay/token/create`, `/relay/commit-invoice`) passed
   - headed Cypress relay demo proof completed:
     - SA token/SO `SAL-ORD-PJ7-2026-00009`
@@ -188,9 +190,9 @@ Fallback (not preferred for this workflow):
   - picker line-wise pick updates persist to relay line payloads (`payload.picker`) with UOM/conversion metadata
   - dispatch release updates relay local sale and dispatch events
 - Next recommended work:
-  - Phase 3 relay auth + server-side role enforcement
-  - Commit/push picker/dispatch Cypress helper specs if they should be retained for repeatable validation
+  - Finish the current Phase 3 live validation rerun on deployed `0b8f772` + `6767d0f` (strict Cypress timeouts + UI-vs-actual relay assertions)
   - Expand picker/dispatch UAT coverage (exception paths, supervisor overrides, hold/reason paths)
+  - Simplify picker default UX path (order-level actions first) while keeping line-item editing available for exceptions/wire/UOM cases
   - shop-PC certificate trust rollout and support docs cleanup
 
 ## Next Session Test Sequence (Recommended)
@@ -198,12 +200,26 @@ Fallback (not preferred for this workflow):
 Do this before opening POS.
 
 ### 2. Run Cypress in watch mode (Chrome)
-From repo root:
+Preferred on OptiPlex (visible Chrome, one spec at a time):
+```powershell
+Set-Location 'I:\vscode repos\POS-Awesome-pj'
+& 'C:\Program Files\nodejs\node.exe' scripts\cypress-gui-watch.cjs --once --browser chrome --spec cypress/e2e/<spec>.cy.js
+```
+
+Alternative (manual Cypress runner UI):
 ```powershell
 Set-Location 'I:\vscode repos\POS-Awesome-pj'
 npm.cmd run e2e:open
 ```
 Choose `Chrome`.
+
+### 2A. Cypress execution discipline on OptiPlex (required)
+- Run one spec at a time with a strict command timeout (do not leave runs hanging).
+- Check in between runs and confirm the prior Cypress process has exited.
+- If a run hangs, kill only Cypress-related orphan `node.exe` and Cypress-launched Chrome processes before retrying.
+- For relay-dependent specs, verify both:
+  - UI state (`Relay Online (LAN)` / relay-down banners / cloud chip)
+  - actual relay/API state (`/health`, `/api/outbox`, `/api/transactions`, target `LSR-*`)
 
 ### 3. Core relay regression specs (SA/Cashier + fallback)
 1. `cypress/e2e/admin_configure_pj7_cashier_profile.cy.js`
@@ -214,7 +230,12 @@ Choose `Chrome`.
 6. `cypress/e2e/cashier_relay_down_cloud_fallback_watch.cy.js`
 7. `cypress/e2e/cashier_token_disabled_profile_smoke.cy.js` (regression)
 
-### 4. Picker/Dispatch validation sequence (after deploying `codex-4-picker-dispatch`)
+Relay UI/API sync checks expected during these runs:
+- `sa_workflow_frontend_watch.cy.js`: SA UI state aligns with token creation + relay outbox `TOKEN_CREATED` evidence
+- `cashier_workflow_frontend_watch.cy.js`: relay UI chip/banner state aligns with relay `/health`, `SESSION_OPEN`, `SALE_COMMITTED`, and local sale/outbox evidence
+- `cashier_relay_down_cloud_fallback_watch.cy.js`: relay-down UI state is intentional and must match the relay-down simulation
+
+### 4. Picker/Dispatch validation sequence (after deploying fulfillment/auth changes on `codex-4.1-picked-dispatch-relay`)
 Run in headed mode (manual + Cypress helpers as available). Current status: local relay persistence and cloud parity for fresh fulfillment events are validated; use this sequence after UI/auth/backend changes:
 1. Set `cline` role to `Picker` and open POS
 2. Confirm shared-shell fulfillment panel loads (not cashier cart/payment layout)

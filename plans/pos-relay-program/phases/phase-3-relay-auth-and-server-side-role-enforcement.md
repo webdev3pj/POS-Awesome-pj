@@ -15,7 +15,8 @@
 
 ## Document Currency
 - This is a current planning doc (Phase 3 is not complete).
-- Most items here remain design/implementation tasks, not verified behavior.
+- `codex-4.1-picked-dispatch-relay` now includes a Phase 3 baseline implementation (`0b8f772`) plus a frontend role-fallback fix (`6767d0f`) needed after live deploy testing.
+- This doc now tracks a mixed state: baseline auth/authorization is implemented in code, while full live regression/negative coverage and rollout hardening remain open.
 - For the latest relay runtime verification, use:
   - `../uat/2026-02-23-local-edge-relay-smoke.md`
   - `../uat/2026-02-24-optiplex-lan-https-relay-sa-cashier-e2e-demo.md`
@@ -41,6 +42,12 @@ This phase is especially important because the recommended UX direction is a **s
 ## Completed So Far
 - Relay stores session role field and action payload metadata (`Partial` foundation).
 - Browser/pos role derivation exists (`UI only`, not trusted authorization).
+- Phase 3 baseline relay hardening is implemented in branch code on `codex-4.1-picked-dispatch-relay` (`0b8f772`):
+  - relay mutating-endpoint role guards (cashier/picker/dispatch/supervisor paths)
+  - optional relay client-key auth plumbing (`X-Relay-Client-Key`)
+  - server-side role enforcement on key POS/relay workflow APIs in `posapp.py`
+  - committed Cypress security/fulfillment helper specs for repeatable validation
+- Live dev-site testing exposed and fixed a real integration regression (`6767d0f`): cashier relay submit could send an empty role when local role state was missing; frontend now falls back to Frappe-derived role before relay calls.
 - Live relay-enabled SA/Cashier behavior is validated, which provides concrete action paths to lock down in this phase (`TOKEN_CREATED`, `SESSION_OPEN`, `SALE_COMMITTED`).
 - Shared-shell Picker/Dispatch/Supervisor fulfillment workspace is now implemented on `codex-4-picker-dispatch` and live-validated locally (OptiPlex relay + dev site) while calling relay pick/release endpoints from the same POS shell (`/relay/pick/update`, `/relay/dispatch/release`), increasing the urgency of relay auth/authorization before wider rollout.
 - Picker line-wise fulfillment payloads are now persisted in relay local line payloads (`payload.picker`) and included in relay outbox `PICK_EVENT` payloads (`Implemented` local-first behavior, live UAT verified), but role trust remains client-provided until this phase is completed.
@@ -61,10 +68,10 @@ This phase is especially important because the recommended UX direction is a **s
 
 ## Implementation Tasks
 - [ ] Define trusted relay identity model (device token, signed payload, or equivalent).
-- [ ] Implement relay auth middleware/check for mutating `/relay/*` endpoints.
-- [ ] Implement per-endpoint role authorization rules (SA/Cashier/Picker/Dispatch/Supervisor).
+- [ ] Implement relay auth middleware/check for mutating `/relay/*` endpoints. `Partial`: baseline guard + optional client-key plumbing implemented on `codex-4.1-picked-dispatch-relay`; rollout policy and stronger trust model still pending.
+- [ ] Implement per-endpoint role authorization rules (SA/Cashier/Picker/Dispatch/Supervisor). `Partial`: baseline role guards implemented; full validation matrix and edge-case coverage still pending.
 - [ ] Standardize error responses (`NOT_AUTHORIZED`, `AUTH_REQUIRED`, role mismatch).
-- [ ] Add server-side role validation in ERPNext/Frappe APIs where role-bound actions occur.
+- [ ] Add server-side role validation in ERPNext/Frappe APIs where role-bound actions occur. `Partial`: key workflow APIs updated; complete coverage/audit review still pending.
 - [ ] Log role/user/device identifiers on token, commit, pick, release actions.
 - [ ] Log override reason + approver identity for supervisor-only exception paths.
 - [ ] Add tests for spoofed role payload attempts and missing auth.
@@ -99,6 +106,11 @@ Implementation note (current dev-site state, not a substitute for this phase):
 - [ ] Negative tests from shared-shell UI contexts (e.g. Picker browser attempts cashier submit, Dispatch browser attempts pick update with forged role payload).
 - [ ] Add negative tests covering the new shared-shell fulfillment workspace (e.g. forged picker/dispatch payloads from `FulfillmentWorkspace.vue` context).
 - [ ] Add negative tests specifically for cloud fulfillment sync endpoints (`update_relay_picking_status`, `release_relay_dispatch`) to ensure role spoofing is rejected after the `codex-4.1-picked-dispatch-relay` endpoint parity fix.
+- [ ] Complete live dev-site rerun on deployed `0b8f772` + `6767d0f` using strict per-spec Cypress timeouts and UI-vs-actual relay status assertions in relay-dependent specs.
+
+Current validation status note (2026-02-26):
+- `cashier_workflow_frontend_watch.cy.js` and `phase3_security_relay_role_guards_watch.cy.js` both passed on the deployed dev site after `6767d0f`.
+- Full multi-spec rerun is still in progress; local (uncommitted) Cypress helper/spec hardening was added to reduce fulfillment UI race flakes and to assert UI relay chips/banners against actual relay/API state before publishing final UAT/docs.
 
 ## Known Risks
 - Breaking active store devices if auth rollout is not coordinated.

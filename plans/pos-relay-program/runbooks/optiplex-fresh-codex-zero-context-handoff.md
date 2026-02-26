@@ -21,6 +21,8 @@
 - `224e842` - shared-shell picker/dispatch fulfillment workspace + relay line-wise picker payload persistence
 - `cdc7038` - relay/cloud fulfillment sync parity fix + OptiPlex relay autostart scripts (`codex-4.1-picked-dispatch-relay`)
 - `5d39f02` - ignore relay autostart runtime logs
+- `0b8f772` - Phase 3 baseline relay/client-key + server-side role guards + committed helper/security Cypress specs
+- `6767d0f` - frontend relay role fallback fix (prevents empty-role relay submit regression)
 
 ## What Is Already Working (Verified)
 - SA flow on live dev site:
@@ -41,6 +43,9 @@
   - cashier flow
   - relay-down/cloud-fallback flow
   - token-disabled regression
+  - picker/dispatch helper flows
+  - supervisor fulfillment exception flow
+  - Phase 3 relay role-guard/security smoke
 - Relay local acceptance tests and local HTTP smoke were run successfully.
 - LAN-only relay mode (browser-LAN relay status as submit gate) is implemented.
 - Cashier relay-down -> cloud fallback prompt (cloud-up case) is implemented and validated.
@@ -65,9 +70,8 @@
   - admin verification confirmed task `LastTaskResult = 0`
 
 ## What Is Not Finished (Next Build Targets)
-- Phase 3 relay auth for mutating endpoints
-- Server-side relay role authorization (do not trust browser localStorage role)
-- Commit/push picker/dispatch Cypress helper specs (used locally for UAT but not yet committed)
+- Complete live rerun/negative validation for the new Phase 3 baseline relay/client-key and server-side role guards on the current deployed build
+- Finalize remaining Phase 3 hardening (audit/reason enforcement coverage, stricter auth rollout policy)
 - Shop-PC certificate trust rollout on non-OptiPlex devices (SA/Cashier/Picker/Dispatch PCs)
 - Cleanup/classification of historical queued outbox failure rows (older pre-fix smoke/UAT artifacts)
 
@@ -144,12 +148,13 @@ Current verified status:
   - fresh `PICK_EVENT` and `RELEASE_EVENT` relay outbox rows sync to `done`
   - cloud workflow state updates to `Picked` / `Released`
 - OptiPlex relay + Caddy auto-start on boot is configured via `POSRelayStack_Autostart_OnStart`
+- Phase 3 baseline guards are implemented in branch code (`0b8f772`) and a follow-up frontend fix (`6767d0f`) prevents empty-role relay submit failures
 
 Choose one session target (based on task):
 1) Start and verify local Edge Relay on this OptiPlex
 2) If validating a new change: rerun Cypress in watch mode (Chrome) for SA + Cashier + relay fallback tests
 3) If business demo is needed: run the relay demo sequence (includes relay UI pauses)
-4) Work next milestone items: relay auth/server-side role enforcement, then rollout hardening / committed Cypress helper coverage
+4) Work next milestone items: finish Phase 3 live validation/hardening reruns, then rollout hardening
 5) Update docs/UAT and push changes
 
 Security:
@@ -181,17 +186,28 @@ Set/verify on the dev site:
 - Shared-shell Picker/Dispatch fulfillment workspace deployed and relay-local UAT validated (line-wise pick persistence + dispatch release)
 
 ### Next priorities
-1. Relay auth and server-side role enforcement (Phase 3)
-2. Commit/reuse picker/dispatch Cypress specs for repeatable UAT
-3. Rollout/ops hardening (shop PC trust rollout, support checklists, historical queue cleanup)
-4. Expand fulfillment UAT coverage for supervisor/exception paths
+1. Finish Phase 3 live validation rerun on deployed `0b8f772` + `6767d0f` (strict Cypress timeouts + UI-vs-actual relay assertions)
+2. Rollout/ops hardening (shop PC trust rollout, support checklists, historical queue cleanup)
+3. Expand fulfillment UAT coverage for supervisor/exception paths
+4. Simplify picker default UX path while keeping line-item editing for exceptions/wire/UOM cases
 
 ## Cypress Run Order (Watch Mode, Chrome)
-Run from repo root:
+Preferred on OptiPlex (visible Chrome, strict timeout, one spec at a time):
+```powershell
+Set-Location 'I:\vscode repos\POS-Awesome-pj'
+& 'C:\Program Files\nodejs\node.exe' scripts\cypress-gui-watch.cjs --once --browser chrome --spec cypress/e2e/<spec>.cy.js
+```
+
+Alternative (manual Cypress runner UI):
 ```powershell
 Set-Location 'I:\vscode repos\POS-Awesome-pj'
 npm.cmd run e2e:open
 ```
+
+Operational rule:
+- Use strict per-spec command timeouts.
+- If a run hangs, clean up orphan Cypress `node.exe`/Cypress Chrome processes before the next spec.
+- During relay-dependent specs, verify UI relay/cloud chips/banners match actual relay `/health` + relay API evidence.
 
 Spec order (core regression):
 1. `cypress/e2e/admin_configure_pj7_cashier_profile.cy.js`

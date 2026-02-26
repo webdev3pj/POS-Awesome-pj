@@ -18,7 +18,8 @@
 - Cashier filtering, LAN-only relay status semantics, cloud fallback UX, and relay-first cashier SO-load/payment-path coverage are implemented and verified on `codex-3-edge-relay`.
 - `codex-4-picker-dispatch` introduced a shared-shell Picker/Dispatch/Supervisor fulfillment workspace wired to relay pick/release APIs and was live-validated on the dev site/OptiPlex relay for local-first picker/dispatch state updates.
 - `codex-4.1-picked-dispatch-relay` completes live cloud parity validation for fresh picker/dispatch relay outbox events (`PICK_EVENT`, `RELEASE_EVENT`) on the dev site.
-- Remaining tasks in this file are primarily Picker/Dispatch/Supervisor UX polish, visibility-matrix cleanup across shared components, and committed/repeatable Cypress coverage.
+- `codex-4.1-picked-dispatch-relay` also adds committed fulfillment/security Cypress helper specs and Phase 3 baseline guard code; current Phase 2 retesting is focused on repeatability and UI-vs-actual-state assertions.
+- Remaining tasks in this file are primarily Picker/Dispatch/Supervisor UX polish (especially simplification), visibility-matrix cleanup across shared components, and repeatable Cypress coverage/reruns.
 - Use `../CHANGELOG_PROGRESS.md` and the cashier UAT doc for the latest verified cashier status.
 
 ## Purpose
@@ -78,31 +79,44 @@ Complete the operator-facing role UX so each role sees the right screens/actions
   - Supervisor: read-all + override/exception tools with explicit audit prompts
 - All operator state transitions should sync through the offline relay first when relay-backed flows are used (pick/release events recorded locally and synced via relay outbox).
 
+### Picker simplification direction (business feedback, 2026-02-26)
+- Keep the line-item list visible (required for accuracy and wire/UOM handling).
+- Keep line-wise `picked_qty` editing available.
+- Default every line `picked_qty` to ordered qty.
+- Make the normal picker path mostly order-level buttons:
+  - `Start/Save Picking`
+  - `Mark Picked Ready`
+  - `Flag Exception`
+- Treat line edits as exception/measurement handling, not the primary path for every order.
+- Do not mutate the billed invoice lines; picker edits update relay fulfillment data only.
+
 ## Implementation Tasks
 - [ ] Add read-only current role display in `Navbar.vue`.
 - [ ] Implement per-role visibility matrix in `Invoice.vue` (Held, Select SO, Return, Save/New, PAY, draft print behavior).
 - [ ] Harden `Payments.vue` role gating beyond SA only (picker/dispatch/supervisor UX rules).
-- [ ] Implement/complete picker workflow UI for pick queue and pick status actions (within the shared POS shell). `Partial`: shared-shell relay-backed picker workflow is deployed and locally UAT-validated on `codex-4-picker-dispatch`; remaining work is UX polish (pick ticket print/reprint, line notes/reason presets, supervisor exception paths) and committed test coverage.
+- [ ] Implement/complete picker workflow UI for pick queue and pick status actions (within the shared POS shell). `Partial`: shared-shell relay-backed picker workflow is deployed and locally UAT-validated on `codex-4-picker-dispatch`; remaining work is UX polish/simplification (pick ticket print/reprint, clearer default order-level path, line notes/reason presets, supervisor exception paths) and repeatable committed test reruns.
 - [ ] Implement/complete dispatch workflow UI for release actions and hold/reason states (within the shared POS shell). `Partial`: relay-backed release action and queue filtering are deployed and locally UAT-validated on `codex-4-picker-dispatch`; remaining work is hold/reason/override refinements and committed test coverage.
 - [ ] Add supervisor UI affordances for exception review/override (without weakening default restrictions).
 - [ ] Decide whether the ticket monitor rail remains read-only in Phase 2 or gains role-specific row actions (open details, quick filters, transition shortcuts).
 - [ ] Design and implement role-specific default views/panels in the shared POS shell (SA/Cashier/Picker/Dispatch/Supervisor) without duplicating app routes unnecessarily. `Partial`: Picker/Dispatch/Supervisor now route to shared fulfillment panel in `Pos.vue`; SA/Cashier/UI-polish work remains.
-- [x] Wire picker/dispatch UI actions to relay-backed endpoints (`/relay/pick-queue`, `/relay/pick/update`, `/relay/dispatch/release`) so offline relay remains the operational source. Live-validated on OptiPlex/dev-site (`codex-4-picker-dispatch`) for local relay state changes; cloud sync parity is still pending backend endpoint fixes.
+- [x] Wire picker/dispatch UI actions to relay-backed endpoints (`/relay/pick-queue`, `/relay/pick/update`, `/relay/dispatch/release`) so offline relay remains the operational source. Live-validated on OptiPlex/dev-site (`codex-4-picker-dispatch`) for local relay state changes; cloud sync parity for fresh events is now verified on `codex-4.1-picked-dispatch-relay`.
 - [ ] Align labels/messages with role terminology used in `01-role-based-workflow-spec.md`.
 - [ ] Update role spec statuses after implementation.
 
 ## Tests and Verification
 - [ ] Role-by-role UI visibility walkthrough using test users.
 - [ ] Cypress assertions for hidden/disabled controls by role.
+- [ ] Add/standardize Cypress assertions that UI relay/cloud status chips/banners match actual relay/API state in each relay-dependent workflow spec.
+- [ ] Enforce strict per-spec Cypress timeout + orphan-process cleanup discipline in runbooks and repeatable test scripts (OptiPlex operational rule).
 - [x] Regression checks for cashier SO selection filtering (POS Profile series + age) on live dev site.
 - [x] Smoke regression: cashier POS/payment screen still works when `custom_have_token = 0`.
 - [x] Full cashier payment submit success under relay-configured submit environment (relay local sale + cloud sync evidence captured).
 - [x] LAN-only relay mode status/fallback Cypress coverage (relay down + cloud up / cloud down cases).
-- [x] Picker UI workflow Cypress coverage (queue -> pick update -> status changes reflected in relay/UI) via local helper spec in headed watch mode on OptiPlex (`codex-4-picker-dispatch`). Note: helper spec is local-only in current docs-only commit; commit or recreate for branch history.
-- [x] Dispatch UI workflow Cypress coverage (release path reflected in relay/UI) via local helper spec in headed watch mode on OptiPlex (`codex-4-picker-dispatch`). Hold/reason variants remain untested.
-- [x] Manual/headed UAT on OptiPlex/dev site for shared-shell picker/dispatch workspace (`codex-4-picker-dispatch`) including line-wise picked quantity persistence and UOM/conversion-factor display. Cloud sync endpoint parity still pending.
+- [x] Picker UI workflow Cypress coverage (queue -> pick update -> status changes reflected in relay/UI) exists and is committed on `codex-4.1-picked-dispatch-relay`; rerun/flake-hardening validation on current deploy is in progress.
+- [x] Dispatch UI workflow Cypress coverage (release path reflected in relay/UI) exists and is committed on `codex-4.1-picked-dispatch-relay`; hold/reason variants remain untested and current rerun/flake-hardening validation is in progress.
+- [x] Manual/headed UAT on OptiPlex/dev site for shared-shell picker/dispatch workspace (`codex-4-picker-dispatch`) including line-wise picked quantity persistence and UOM/conversion-factor display. Follow-on `codex-4.1-picked-dispatch-relay` validation confirmed cloud parity for fresh fulfillment events.
 - [x] Cloud parity validation for picker/dispatch events (`PICK_EVENT` / `RELEASE_EVENT` sync completion and cloud-state update confirmation) on `codex-4.1-picked-dispatch-relay` using headed Cypress watch mode + relay/cloud API evidence.
-- [ ] Supervisor exception/override Cypress coverage (once supervisor UX is defined).
+- [ ] Supervisor exception/override Cypress coverage live validation on the current deployed Phase 3 build (`supervisor_fulfillment_exception_watch.cy.js` is now committed; rerun + UAT evidence pending).
 
 ## Known Risks
 - UI-only blocks can create false sense of security until Phase 3 auth lands.
@@ -110,6 +124,7 @@ Complete the operator-facing role UX so each role sees the right screens/actions
 - Relay/cloud status semantics can confuse operators if LAN-only mode diagnostics and submit gating are not clearly distinguished in the UI.
 - Fulfillment operators may still misread success if historical queued outbox rows (older pre-fix events) are visible during demos; UI/runbooks should clarify how to identify fresh events by timestamp/local ref and distinguish local status from cloud sync counters.
 - A single-shell role strategy improves training and consistency, but increases the importance of strict backend/relay authorization and comprehensive hidden/disabled control tests.
+- Picker workspace can feel too complex if line-level controls dominate the normal path; Phase 2 UX polish should prioritize a simpler default order-level flow with line edits as needed.
 
 ## Deferred Items
 - Relay/server-side authorization enforcement (Phase 3).

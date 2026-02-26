@@ -23,6 +23,49 @@ Note:
 
 ---
 
+## 2026-02-26 - Phase 3 baseline hardening deployed; live dev-site validation in progress with stricter Cypress discipline
+- Branch: `codex-4.1-picked-dispatch-relay`
+- Summary: Pushed and deployed Phase 3 baseline relay/client-key and server-side role hardening (`0b8f772`), fixed a live cashier regression where relay calls could send an empty role (`6767d0f`), and began rerunning live dev-site headed Cypress validation. Added local (uncommitted) Cypress helper/spec hardening so tests assert both UI relay status chips/banners and actual relay/API behavior. Updated docs to record a stricter OptiPlex Cypress execution policy (hard timeouts + orphan cleanup) and picker UX simplification direction.
+- What changed:
+  - Pushed `0b8f772` (`feat(security): add relay role guards and fulfillment helper specs`) including:
+    - baseline relay mutating-endpoint role guards
+    - optional `X-Relay-Client-Key` auth plumbing
+    - server-side role enforcement on key POS/relay workflow APIs
+    - committed Cypress helper/demo/security/fulfillment specs
+    - shop-PC one-click cert installer scripts
+    - relay outbox demo-noise cleanup tooling
+  - Pushed `6767d0f` (`fix(relay): fallback role from frappe when local role is missing`) after live dev-site cashier submit failed with `RELAY_ROLE_REQUIRED` while relay was online.
+  - Local-only (not yet committed) Cypress hardening added:
+    - `cypress/e2e/_helpers/relay_ui_sync.js`
+    - workflow specs now assert UI relay/cloud status vs actual relay/API state
+    - fulfillment specs wait for selected `LSR-*` detail panel sync before editing lines (reduces picker/dispatch race flakes)
+  - Runbook/process update direction:
+    - run one Cypress spec at a time in headed watch wrapper
+    - enforce strict command timeouts
+    - detect/kill orphan Cypress node/chrome processes before reruns if a run hangs
+  - Business feedback captured:
+    - picker UI is functionally working but feels too complex; simplify default picker path while keeping line list + editable picked qty for exceptions/wire/UOM cases
+- What was verified:
+  - Live dev-site cashier fail-fast regression smoke after `6767d0f`:
+    - cashier relay submit path no longer fails with empty-role regression (`RELAY_ROLE_REQUIRED`)
+    - relay/cashier path resumed working (relay session open + commit path evidence)
+  - `phase3_security_relay_role_guards_watch.cy.js` passed at least once on the deployed dev site (before broader spec-hardening reruns)
+  - Local relay remained healthy during validation work:
+    - `/health` `ok: true`
+    - relay outbox backlog cleaned to `queued = 0` at one checkpoint (legacy `/queue` still may show historical `failed=1`)
+- What remains:
+  - Finish the full live dev-site Phase A rerun with the stricter Cypress discipline (SA/Cashier + fallback + Picker/Dispatch + Supervisor)
+  - Commit/push the local Cypress UI-vs-actual sync hardening (if retained as branch-owned tests)
+  - Publish a fresh UAT report covering Phase 3 guard validation + supervisor exception flow on current deployed commits (`0b8f772`, `6767d0f`)
+  - Continue with local `pj.local:8080` fast-loop workflow after live dev-site validation closes
+- Links:
+  - `00-ai-agent-start-here.md`
+  - `01-role-based-workflow-spec.md`
+  - `phases/phase-2-cashier-picker-dispatch-ui-and-enforcement.md`
+  - `phases/phase-3-relay-auth-and-server-side-role-enforcement.md`
+  - `runbooks/optiplex-edge-relay-next-session.md`
+  - `runbooks/optiplex-fresh-codex-zero-context-handoff.md`
+
 ## 2026-02-25 - Picker/Dispatch cloud parity fixed and live-validated; OptiPlex relay autostart hardened
 - Branch: `codex-4.1-picked-dispatch-relay`
 - Summary: Fixed relay/cloud fulfillment sync parity for picker/dispatch by enriching relay outbox fulfillment payloads (`sales_invoice`, `pos_profile`) and allowing cloud fulfillment endpoints to resolve POS Profile when relay-created Sales Invoices have blank `pos_profile`. Also added/validated OptiPlex relay+Caddy autostart scripts and a boot-time scheduled task (`SYSTEM`), then re-ran headed Cypress watch-mode picker/dispatch flow and verified cloud relay workflow state updates.

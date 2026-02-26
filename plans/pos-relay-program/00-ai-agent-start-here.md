@@ -46,6 +46,8 @@ Key business rules currently agreed:
 - Current picker/dispatch cloud-parity + OptiPlex autostart fix branch commits:
   - `cdc7038` (`fix(relay): sync fulfillment events and add optiplex autostart`)
   - `5d39f02` (`chore(relay): ignore autostart runtime logs`)
+  - `0b8f772` (`feat(security): add relay role guards and fulfillment helper specs`)
+  - `6767d0f` (`fix(relay): fallback role from frappe when local role is missing`)
 - Inherited validated work:
   - `kilo-codex-v3`: SA Sales Order token flow, no-cash SA session, monitor rail foundation
   - `codex-2-cashier`: cashier `Select S.O` filtering (naming series + age), cashier live E2E coverage, token-disabled regression coverage
@@ -60,8 +62,14 @@ Key business rules currently agreed:
   - picker/dispatch cloud sync parity is now live-validated on `codex-4.1-picked-dispatch-relay`:
     - relay outbox `PICK_EVENT` and `RELEASE_EVENT` rows sync to `done`
     - cloud `POS Relay Workflow State` updates to `Picked` / `Released`
+  - Phase 3 baseline hardening is now implemented in branch code (`0b8f772`) and deployed for validation:
+    - relay mutating endpoint role guards
+    - optional `X-Relay-Client-Key` auth plumbing
+    - server-side role enforcement on key workflow APIs
+    - committed fulfillment/security Cypress helper specs
+  - `6767d0f` fixed a live regression where cashier relay submit could send an empty role (relay rejected with `RELAY_ROLE_REQUIRED`)
   - OptiPlex relay+Caddy auto-start is now implemented and verified using a Windows boot scheduled task (`POSRelayStack_Autostart_OnStart`, `SYSTEM`) with relay LAN HTTPS health checks passing
-- Priority implementation/verification target: Phase 3 relay auth/server-side role enforcement, then committed picker/dispatch Cypress coverage cleanup, then rollout hardening and shop-PC trust rollout.
+- Priority implementation/verification target: finish Phase 3 live validation rerun on the deployed baseline guards (`0b8f772`, `6767d0f`), then rollout hardening and shop-PC trust rollout.
 - Frappe Cloud topology note: raw private LAN relay URLs are still not cloud-backend reachable; in LAN-only mode this is expected and treated as diagnostic-only while browser-LAN HTTPS health is the submit gate.
 
 ## What Is Already Implemented (Branch-Accurate)
@@ -99,9 +107,17 @@ Key business rules currently agreed:
   - `conversion_factor`
   - derived `picked_stock_qty`
 - Dispatch release updates relay local sale and dispatch event state locally (`RELEASED`).
-- Cloud sync for picker/dispatch events is currently `Partial`:
-  - `PICK_EVENT` / `RELEASE_EVENT` are correctly queued in relay outbox
-  - dev backend endpoints currently return `500`, so cloud parity is pending backend fixes
+- Cloud sync for picker/dispatch events is working for fresh events on `codex-4.1-picked-dispatch-relay` (`Implemented` parity path, `Partial` rollout cleanup):
+  - fresh `PICK_EVENT` / `RELEASE_EVENT` rows sync to `done`
+  - cloud workflow state updates to `Picked` / `Released`
+  - older pre-fix rows may still remain queued/failed and should be treated as historical artifacts during demos
+- UX feedback (2026-02-26): picker workspace is functionally correct but feels too complex; simplify the default picker path to order-level actions first while keeping the line list visible and line-wise `picked_qty` editing available for exception/wire/UOM cases.
+
+### Phase 3 relay auth / role hardening (`Implemented` baseline / `Partial`)
+- Relay mutating endpoints have baseline role guards in branch code (`0b8f772`).
+- Optional relay client auth header (`X-Relay-Client-Key`) plumbing is implemented.
+- Server-side role checks for key workflow APIs are implemented in `posawesome/posawesome/api/posapp.py`.
+- Remaining work is live regression/negative coverage and rollout hardening (especially supervisor/audit paths and consistent auth error handling).
 
 ### Existing and upgraded Sales Order support (`Implemented`)
 - POS can search and load submitted unbilled Sales Orders.
@@ -112,6 +128,15 @@ Key business rules currently agreed:
 - Cypress is configured with `npm run e2e:open` and `npm run e2e:run`.
 - OTP automation via `otpauth://` and local `.env` exists.
 - Cypress login test, SA flow, cashier flow, role preflight, POS Profile preflight, and token-disabled regression smoke specs exist (see `cypress/e2e/` and UAT docs).
+- Picker/Dispatch/Supervisor helper specs and the Phase 3 relay guard spec are now committed on `codex-4.1-picked-dispatch-relay`.
+
+### Cypress execution discipline on OptiPlex (`Required`)
+- Run one headed Cypress spec at a time (watch wrapper with `--once`) when validating on the OptiPlex.
+- Use a strict command timeout for every spec run.
+- If a run hangs, kill only Cypress-related orphan `node.exe` / Cypress Chrome processes before rerunning.
+- Relay-focused specs should verify both:
+  - UI state (`Relay Online (LAN)` / banners / cloud chip)
+  - actual relay/API behavior (`/health`, `/api/outbox`, `/api/transactions`, targeted `LSR-*`)
 
 ## What Is Broken / Partial / Deferred
 ### Partial
@@ -120,9 +145,9 @@ Key business rules currently agreed:
 - Customer/item offline UI wiring (partially added locally; needs verification and branch alignment).
 - Relay sync parity for non-sale fulfillment events (`PICK_EVENT`, `RELEASE_EVENT`) is now working for fresh picker/dispatch relay outbox events on the dev backend (live-validated on `codex-4.1-picked-dispatch-relay`); historical queued rows from earlier pre-fix runs may still remain.
 
-### Missing (critical)
-- Relay authentication for mutating endpoints.
-- Server-side relay role authorization (do not trust browser localStorage role).
+### Missing (critical / remaining hardening)
+- Complete live regression and negative-test coverage for the new relay/client-key + role-guard baseline across all roles.
+- Strengthen supervisor/audit reason enforcement coverage and finalize stricter auth rollout policy on store devices.
 
 ### Deferred (explicit)
 - SA-stage `sales_partner` capture on Sales Order token creation.
@@ -130,7 +155,7 @@ Key business rules currently agreed:
 - SA relay-first/offline token creation until online-first path is stable.
 
 ## Immediate Next Recommended Task
-Move to Phase 3 relay auth + server-side role enforcement hardening, then commit/standardize picker/dispatch Cypress helper coverage and continue rollout hardening.
+Finish the live dev-site Phase 3 rerun (strict Cypress timeouts + UI-vs-actual relay assertions), then publish updated UAT/docs and continue rollout hardening / local staging fast-loop work.
 
 Why this is next:
 - SA/Cashier relay-first flow is now proven on the dev site and local OptiPlex relay.
@@ -148,7 +173,8 @@ If a new session starts on the OptiPlex relay machine and does not have this con
 - Restart the local relay process if relay Python code changed (for example `relay/relay/storage.py`)
 - Copy the local-only `.env` (Cypress secrets) to the repo root if Cypress will run on the OptiPlex
 - Relay-enabled SA/Cashier demo is already proven; rerun only if revalidating after new changes
-- Next target: Phase 3 auth hardening + commit/standardize picker/dispatch Cypress coverage + rollout docs/checklists
+- Next target: complete Phase 3 live validation rerun + docs/UAT refresh, then continue rollout docs/checklists (and local staging fast-loop work)
+- Use strict per-spec Cypress timeouts and clean up orphan Cypress processes if a run hangs before starting the next spec
 
 ## Decision Register
 ### Accepted
