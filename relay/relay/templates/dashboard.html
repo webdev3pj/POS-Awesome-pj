@@ -87,6 +87,7 @@
           <th>POS / Cashier / Device</th>
           <th>Customer</th>
           <th>Amount</th>
+          <th>Source</th>
           <th>Pick</th>
           <th>Dispatch</th>
           <th>Cloud Sync</th>
@@ -113,6 +114,10 @@
             <div class="mono">{{ tx.customer_id or "-" }}</div>
           </td>
           <td class="nowrap">{{ "%.2f"|format(tx.total or 0) }}</td>
+          <td class="small wrap-anywhere">
+            <div><span class="pill">{{ tx.source_env or "unknown" }}</span></div>
+            <div class="mono">{{ tx.source_origin or "-" }}</div>
+          </td>
           <td><span class="pill">{{ tx.pick_status }}</span></td>
           <td><span class="pill">{{ tx.dispatch_status }}</span></td>
           <td>
@@ -198,6 +203,8 @@
             <div><strong>Cloud Sync:</strong> ${esc(sale.cloud_sync_status || '-')}</div>
             <div><strong>Cloud Invoice:</strong> <span class="mono">${esc(sale.cloud_invoice_name || '-')}</span></div>
             <div><strong>Cloud Error:</strong> ${esc(sale.cloud_sync_error || '')}</div>
+            <div><strong>Source Env:</strong> ${esc(sale.source_env || '-')}</div>
+            <div><strong>Source Origin:</strong> <span class="mono">${esc(sale.source_origin || '-')}</span></div>
           </div>
           <div>
             <h3>Commercial</h3>

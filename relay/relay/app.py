@@ -3,6 +3,7 @@ import hmac
 import hashlib
 import ipaddress
 import threading
+from urllib.parse import urlparse
 from flask import Flask, flash, jsonify, redirect, render_template, request
 
 from .storage import (
@@ -131,6 +132,47 @@ def create_app():
     def _extract_role(payload):
         payload = payload or {}
         return str(payload.get("role") or payload.get("session_role") or "").strip()
+
+    def _request_origin_url():
+        origin = (request.headers.get("Origin") or "").strip()
+        if origin:
+            return origin
+        referer = (request.headers.get("Referer") or "").strip()
+        if not referer:
+            return ""
+        try:
+            parsed = urlparse(referer)
+            if parsed.scheme and parsed.netloc:
+                return f"{parsed.scheme}://{parsed.netloc}"
+        except Exception:
+            pass
+        return ""
+
+    def _classify_source_env(origin_url):
+        origin_url = str(origin_url or "").strip()
+        if not origin_url:
+            return "unknown"
+        try:
+            host = (urlparse(origin_url).netloc or "").lower().strip()
+        except Exception:
+            host = ""
+        if not host:
+            return "unknown"
+        if host == "devpjjamaica.v.frappe.cloud":
+            return "cloud_dev"
+        if host.endswith(".frappe.cloud"):
+            return "cloud_frappe"
+        if host.startswith("pj.local") or host.startswith("localhost") or host.startswith("127.0.0.1"):
+            return "local_staging"
+        return "other"
+
+    def _request_source_meta():
+        origin_url = _request_origin_url()
+        return {
+            "source_origin": origin_url,
+            "source_env": _classify_source_env(origin_url),
+            "source_user_agent": (request.headers.get("User-Agent") or "").strip(),
+        }
 
     def _require_relay_role(payload, allowed_roles, role_field="role"):
         allowed_roles = tuple(str(r).strip() for r in (allowed_roles or []) if str(r).strip())
@@ -433,6 +475,8 @@ def create_app():
         if auth_err:
             return auth_err
         payload = request.get_json(silent=True) or {}
+        if isinstance(payload, dict):
+            payload.setdefault("_relay_source", _request_source_meta())
         event_id = enqueue_event("token_create", payload)
         return jsonify({"ok": True, "event_id": event_id, "status": "queued"})
 
@@ -442,6 +486,8 @@ def create_app():
         if auth_err:
             return auth_err
         payload = request.get_json(silent=True) or {}
+        if isinstance(payload, dict):
+            payload.setdefault("_relay_source", _request_source_meta())
         event_id = enqueue_event("pick_update", payload)
         return jsonify({"ok": True, "event_id": event_id, "status": "queued"})
 
@@ -451,6 +497,8 @@ def create_app():
         if auth_err:
             return auth_err
         payload = request.get_json(silent=True) or {}
+        if isinstance(payload, dict):
+            payload.setdefault("_relay_source", _request_source_meta())
         event_id = enqueue_event("dispatch_release", payload)
         return jsonify({"ok": True, "event_id": event_id, "status": "queued"})
 
@@ -463,6 +511,8 @@ def create_app():
             return auth_err
 
         payload = request.get_json(silent=True) or {}
+        if isinstance(payload, dict):
+            payload.setdefault("_relay_source", _request_source_meta())
         invoice_payload = payload.get("invoice")
         data_payload = payload.get("data")
 
@@ -493,7 +543,8 @@ def create_app():
         if role_err:
             return role_err
         expiry_minutes = int(payload.get("expiry_minutes") or 120)
-        token = create_token(payload, expiry_minutes=expiry_minutes)
+        source_meta = _request_source_meta()
+        token = create_token(payload, expiry_minutes=expiry_minutes, source_meta=source_meta)
 
         outbox_event_id = enqueue_outbox_event(
             "TOKEN_CREATED",
@@ -502,6 +553,7 @@ def create_app():
                 "payload": payload,
             },
             local_ref=token.get("token_id"),
+            source_meta=source_meta,
         )
         return jsonify(
             {
@@ -576,11 +628,13 @@ def create_app():
         role_err = _require_relay_role(payload, RELAY_ROLE_GROUPS["session_cashier"])
         if role_err:
             return role_err
-        session = open_cashier_session(payload)
+        source_meta = _request_source_meta()
+        session = open_cashier_session(payload, source_meta=source_meta)
         outbox_event_id = enqueue_outbox_event(
             "SESSION_OPEN",
             payload,
             local_ref=session.get("session_id"),
+            source_meta=source_meta,
         )
         return jsonify({"ok": True, "session": session, "outbox_event_id": outbox_event_id})
 
@@ -633,10 +687,12 @@ def create_app():
 
         result = close_cashier_session(session_id, close_note=payload.get("close_note"))
         if result.get("ok"):
+            source_meta = _request_source_meta()
             outbox_event_id = enqueue_outbox_event(
                 "SESSION_CLOSE",
                 payload,
                 local_ref=session_id,
+                source_meta=source_meta,
             )
             result["outbox_event_id"] = outbox_event_id
         status_code = 200 if result.get("ok") else 404
@@ -653,11 +709,13 @@ def create_app():
         role_err = _require_relay_role(payload, RELAY_ROLE_GROUPS["fulfillment_any"])
         if role_err:
             return role_err
+        source_meta = _request_source_meta()
         customer = upsert_customer(payload)
         outbox_event_id = enqueue_outbox_event(
             "CUSTOMER_UPSERT",
             payload,
             local_ref=customer.get("customer_id"),
+            source_meta=source_meta,
         )
         return jsonify({"ok": True, "customer": customer, "outbox_event_id": outbox_event_id})
 
@@ -774,7 +832,8 @@ def create_app():
         canonical_str = str(canonical_payload).encode("utf-8")
         payload["request_hash"] = hashlib.sha256(canonical_str).hexdigest()
 
-        commit_result = commit_invoice_atomic(payload)
+        source_meta = _request_source_meta()
+        commit_result = commit_invoice_atomic(payload, source_meta=source_meta)
         if not commit_result.get("ok"):
             code = commit_result.get("code")
             if code == "TOKEN_ALREADY_PAID":
@@ -803,6 +862,7 @@ def create_app():
                 outbox_payload,
                 idempotency_key=idempotency_key,
                 local_ref=local_sale_ref,
+                source_meta=source_meta,
             )
         else:
             outbox_event_id = None
@@ -877,12 +937,15 @@ def create_app():
             picker_user_id=payload.get("picker_user_id"),
             notes=payload.get("notes"),
             payload=payload,
+            source_meta=_request_source_meta(),
         )
         if result.get("ok"):
+            source_meta = _request_source_meta()
             outbox_event_id = enqueue_outbox_event(
                 "PICK_EVENT",
                 payload,
                 local_ref=local_sale_ref,
+                source_meta=source_meta,
             )
             result["outbox_event_id"] = outbox_event_id
         status_code = 200 if result.get("ok") else 409
@@ -910,12 +973,15 @@ def create_app():
             allow_partial=bool(payload.get("allow_partial")),
             notes=payload.get("notes"),
             payload=payload,
+            source_meta=_request_source_meta(),
         )
         if result.get("ok"):
+            source_meta = _request_source_meta()
             outbox_event_id = enqueue_outbox_event(
                 "RELEASE_EVENT",
                 payload,
                 local_ref=local_sale_ref,
+                source_meta=source_meta,
             )
             result["outbox_event_id"] = outbox_event_id
         status_code = 200 if result.get("ok") else 409

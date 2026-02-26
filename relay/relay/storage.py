@@ -46,6 +46,29 @@ def get_db():
         conn.close()
 
 
+def _ensure_column(conn, table_name, column_name, column_type_sql):
+    try:
+        cur = conn.execute(f"PRAGMA table_info({table_name})")
+        existing = {str(r["name"]) for r in cur.fetchall()}
+    except Exception:
+        existing = set()
+    if column_name in existing:
+        return
+    conn.execute(f"ALTER TABLE {table_name} ADD COLUMN {column_name} {column_type_sql}")
+
+
+def _normalize_source_meta(source_meta=None):
+    src = source_meta if isinstance(source_meta, dict) else {}
+    origin = str(src.get("source_origin") or "").strip()[:500]
+    env = str(src.get("source_env") or "").strip()[:100]
+    ua = str(src.get("source_user_agent") or "").strip()[:1000]
+    return {
+        "source_origin": origin,
+        "source_env": env,
+        "source_user_agent": ua,
+    }
+
+
 def init_db():
     with get_db() as conn:
         # Legacy queue table kept for backward compatibility
@@ -73,6 +96,9 @@ def init_db():
                 cashier_user_id TEXT,
                 customer_id TEXT,
                 customer_name TEXT,
+                source_origin TEXT,
+                source_env TEXT,
+                source_user_agent TEXT,
                 status TEXT NOT NULL DEFAULT 'TOKEN_OPEN',
                 expires_at TEXT,
                 void_reason TEXT,
@@ -110,6 +136,9 @@ def init_db():
                 pos_profile_id TEXT NOT NULL,
                 cashier_user_id TEXT NOT NULL,
                 device_id TEXT,
+                source_origin TEXT,
+                source_env TEXT,
+                source_user_agent TEXT,
                 status TEXT NOT NULL DEFAULT 'OPEN',
                 opened_at TEXT NOT NULL,
                 closed_at TEXT,
@@ -143,6 +172,9 @@ def init_db():
                 cloud_invoice_name TEXT,
                 cloud_sync_status TEXT NOT NULL DEFAULT 'SALE_SYNC_PENDING',
                 cloud_sync_error TEXT,
+                source_origin TEXT,
+                source_env TEXT,
+                source_user_agent TEXT,
                 released_by TEXT,
                 released_at TEXT,
                 created_at TEXT NOT NULL,
@@ -197,6 +229,9 @@ def init_db():
                 event_type TEXT NOT NULL,
                 notes TEXT,
                 payload TEXT,
+                source_origin TEXT,
+                source_env TEXT,
+                source_user_agent TEXT,
                 created_at TEXT NOT NULL,
                 FOREIGN KEY(local_sale_ref) REFERENCES relay_local_sales(local_sale_ref)
             )
@@ -212,6 +247,9 @@ def init_db():
                 event_type TEXT NOT NULL,
                 notes TEXT,
                 payload TEXT,
+                source_origin TEXT,
+                source_env TEXT,
+                source_user_agent TEXT,
                 created_at TEXT NOT NULL,
                 FOREIGN KEY(local_sale_ref) REFERENCES relay_local_sales(local_sale_ref)
             )
@@ -256,6 +294,9 @@ def init_db():
                 idempotency_key TEXT,
                 local_ref TEXT,
                 payload TEXT NOT NULL,
+                source_origin TEXT,
+                source_env TEXT,
+                source_user_agent TEXT,
                 status TEXT NOT NULL DEFAULT 'queued',
                 retries INTEGER NOT NULL DEFAULT 0,
                 next_attempt_at TEXT,
@@ -291,6 +332,12 @@ def init_db():
             ON relay_outbox(status, next_attempt_at)
             """
         )
+
+        # Backward-compatible schema upgrades for existing relay DBs.
+        for table_name in ("relay_tokens", "relay_cashier_sessions", "relay_local_sales", "relay_pick_events", "relay_dispatch_events", "relay_outbox"):
+            _ensure_column(conn, table_name, "source_origin", "TEXT")
+            _ensure_column(conn, table_name, "source_env", "TEXT")
+            _ensure_column(conn, table_name, "source_user_agent", "TEXT")
 
 
 def load_config():
@@ -471,12 +518,13 @@ def _generate_local_sale_ref(pos_profile_id=None):
     return f"LSR-{profile_code}-{stamp}-{suffix}"
 
 
-def create_token(payload, expiry_minutes=120):
+def create_token(payload, expiry_minutes=120, source_meta=None):
     now = _now_iso()
     token_id = (payload or {}).get("token_id") or _generate_token_id()
     pos_profile_id = (payload or {}).get("pos_profile_id") or ""
     if not pos_profile_id:
         raise ValueError("pos_profile_id is required")
+    source = _normalize_source_meta(source_meta)
 
     from datetime import datetime as _dt, timedelta
 
@@ -500,6 +548,7 @@ def create_token(payload, expiry_minutes=120):
                     """
                     UPDATE relay_tokens
                     SET pos_profile_id = ?, cashier_user_id = ?, customer_id = ?, customer_name = ?,
+                        source_origin = ?, source_env = ?, source_user_agent = ?,
                         status = 'TOKEN_OPEN', expires_at = ?, updated_at = ?,
                         void_reason = NULL, voided_by = NULL, consumed_sale_ref = NULL, consumed_at = NULL
                     WHERE token_id = ?
@@ -509,6 +558,9 @@ def create_token(payload, expiry_minutes=120):
                         (payload or {}).get("cashier_user_id"),
                         (payload or {}).get("customer_id"),
                         (payload or {}).get("customer_name"),
+                        source["source_origin"],
+                        source["source_env"],
+                        source["source_user_agent"],
                         expires_at,
                         now,
                         token_id,
@@ -528,8 +580,9 @@ def create_token(payload, expiry_minutes=120):
                 """
                 INSERT INTO relay_tokens (
                     token_id, pos_profile_id, cashier_user_id, customer_id, customer_name,
+                    source_origin, source_env, source_user_agent,
                     status, expires_at, created_at, updated_at
-                ) VALUES (?, ?, ?, ?, ?, 'TOKEN_OPEN', ?, ?, ?)
+                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, 'TOKEN_OPEN', ?, ?, ?)
                 """,
                 (
                     token_id,
@@ -537,6 +590,9 @@ def create_token(payload, expiry_minutes=120):
                     (payload or {}).get("cashier_user_id"),
                     (payload or {}).get("customer_id"),
                     (payload or {}).get("customer_name"),
+                    source["source_origin"],
+                    source["source_env"],
+                    source["source_user_agent"],
                     expires_at,
                     now,
                     now,
@@ -571,6 +627,9 @@ def create_token(payload, expiry_minutes=120):
         "status": "TOKEN_OPEN",
         "expires_at": expires_at,
         "items": lines,
+        "source_origin": source["source_origin"],
+        "source_env": source["source_env"],
+        "source_user_agent": source["source_user_agent"],
     }
 
 
@@ -580,6 +639,7 @@ def get_token(token_id):
         row = conn.execute(
             """
             SELECT token_id, pos_profile_id, cashier_user_id, customer_id, customer_name,
+                   source_origin, source_env, source_user_agent,
                    status, expires_at, void_reason, voided_by, consumed_sale_ref,
                    consumed_at, created_at, updated_at
             FROM relay_tokens
@@ -659,7 +719,7 @@ def void_token(token_id, supervisor_user_id=None, reason=None):
         return {"ok": True, "status": "TOKEN_VOID"}
 
 
-def open_cashier_session(payload):
+def open_cashier_session(payload, source_meta=None):
     now = _now_iso()
     session_id = (payload or {}).get("session_id") or _generate_session_id()
     pos_profile_id = (payload or {}).get("pos_profile_id") or ""
@@ -668,16 +728,29 @@ def open_cashier_session(payload):
 
     if not pos_profile_id or not cashier_user_id:
         raise ValueError("pos_profile_id and cashier_user_id are required")
+    source = _normalize_source_meta(source_meta)
 
     with get_db() as conn:
         conn.execute(
             """
             INSERT INTO relay_cashier_sessions (
                 session_id, pos_profile_id, cashier_user_id, device_id,
+                source_origin, source_env, source_user_agent,
                 status, opened_at, created_at, updated_at
-            ) VALUES (?, ?, ?, ?, 'OPEN', ?, ?, ?)
+            ) VALUES (?, ?, ?, ?, ?, ?, ?, 'OPEN', ?, ?, ?)
             """,
-            (session_id, pos_profile_id, cashier_user_id, device_id, now, now, now),
+            (
+                session_id,
+                pos_profile_id,
+                cashier_user_id,
+                device_id,
+                source["source_origin"],
+                source["source_env"],
+                source["source_user_agent"],
+                now,
+                now,
+                now,
+            ),
         )
 
     return {
@@ -687,6 +760,9 @@ def open_cashier_session(payload):
         "pos_profile_id": pos_profile_id,
         "cashier_user_id": cashier_user_id,
         "device_id": device_id,
+        "source_origin": source["source_origin"],
+        "source_env": source["source_env"],
+        "source_user_agent": source["source_user_agent"],
     }
 
 
@@ -838,17 +914,19 @@ def search_items_cache(query=None, limit=50):
         return rows
 
 
-def enqueue_outbox_event(event_type, payload, idempotency_key=None, local_ref=None):
+def enqueue_outbox_event(event_type, payload, idempotency_key=None, local_ref=None, source_meta=None):
     now = _now_iso()
     event_id = uuid.uuid4().hex
+    source = _normalize_source_meta(source_meta)
     with get_db() as conn:
         conn.execute(
             """
             INSERT INTO relay_outbox (
                 event_id, event_type, idempotency_key, local_ref, payload,
+                source_origin, source_env, source_user_agent,
                 status, retries, next_attempt_at, last_error, cloud_ref,
                 created_at, updated_at
-            ) VALUES (?, ?, ?, ?, ?, 'queued', 0, ?, NULL, NULL, ?, ?)
+            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, 'queued', 0, ?, NULL, NULL, ?, ?)
             """,
             (
                 event_id,
@@ -856,6 +934,9 @@ def enqueue_outbox_event(event_type, payload, idempotency_key=None, local_ref=No
                 idempotency_key,
                 local_ref,
                 _dumps(payload),
+                source["source_origin"],
+                source["source_env"],
+                source["source_user_agent"],
                 now,
                 now,
                 now,
@@ -869,6 +950,7 @@ def list_outbox(limit=200):
         cur = conn.execute(
             """
             SELECT event_id, event_type, idempotency_key, local_ref, payload,
+                   source_origin, source_env, source_user_agent,
                    status, retries, next_attempt_at, last_error, cloud_ref,
                    created_at, updated_at
             FROM relay_outbox
@@ -922,6 +1004,7 @@ def cleanup_outbox_rows(
         cur = conn.execute(
             f"""
             SELECT event_id, event_type, idempotency_key, local_ref, payload,
+                   source_origin, source_env, source_user_agent,
                    status, retries, next_attempt_at, last_error, cloud_ref,
                    created_at, updated_at
             FROM relay_outbox
@@ -990,6 +1073,7 @@ def get_next_queued_outbox_event(now_iso=None):
         row = conn.execute(
             """
             SELECT event_id, event_type, idempotency_key, local_ref, payload,
+                   source_origin, source_env, source_user_agent,
                    status, retries, next_attempt_at, last_error, cloud_ref,
                    created_at, updated_at
             FROM relay_outbox
@@ -1060,9 +1144,10 @@ def mark_outbox_failed(event_id, error, retry_later=True):
         )
 
 
-def commit_invoice_atomic(payload):
+def commit_invoice_atomic(payload, source_meta=None):
     now = _now_iso()
     payload = payload or {}
+    source = _normalize_source_meta(source_meta)
     token_id = payload.get("token_id")
     idempotency_key = (payload.get("idempotency_key") or "").strip()
     pos_profile_id = (payload.get("pos_profile_id") or "").strip()
@@ -1135,9 +1220,9 @@ def commit_invoice_atomic(payload):
                 sale_status, pick_status, dispatch_status, paid,
                 total, net_total, customer_id, customer_name,
                 invoice_payload, data_payload,
-                cloud_sync_status, created_at, updated_at
+                cloud_sync_status, source_origin, source_env, source_user_agent, created_at, updated_at
             ) VALUES (?, ?, ?, ?, ?, ?, ?, 'SALE_COMMITTED_LOCAL', 'PAID_PENDING_PICK', 'PENDING', 1,
-                      ?, ?, ?, ?, ?, ?, 'SALE_SYNC_PENDING', ?, ?)
+                      ?, ?, ?, ?, ?, ?, 'SALE_SYNC_PENDING', ?, ?, ?, ?, ?)
             """,
             (
                 local_sale_ref,
@@ -1153,6 +1238,9 @@ def commit_invoice_atomic(payload):
                 customer_name,
                 _dumps(invoice_payload),
                 _dumps(data_payload),
+                source["source_origin"],
+                source["source_env"],
+                source["source_user_agent"],
                 now,
                 now,
             ),
@@ -1241,8 +1329,9 @@ def commit_invoice_atomic(payload):
     }
 
 
-def update_pick_status(local_sale_ref, picking_status, picker_user_id=None, notes=None, payload=None):
+def update_pick_status(local_sale_ref, picking_status, picker_user_id=None, notes=None, payload=None, source_meta=None):
     now = _now_iso()
+    source = _normalize_source_meta(source_meta)
     allowed = {
         "PAID_PENDING_PICK",
         "PICK_IN_PROGRESS",
@@ -1377,8 +1466,9 @@ def update_pick_status(local_sale_ref, picking_status, picker_user_id=None, note
         conn.execute(
             """
             INSERT INTO relay_pick_events (
-                local_sale_ref, picker_user_id, event_type, notes, payload, created_at
-            ) VALUES (?, ?, ?, ?, ?, ?)
+                local_sale_ref, picker_user_id, event_type, notes, payload,
+                source_origin, source_env, source_user_agent, created_at
+            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
             """,
             (
                 local_sale_ref,
@@ -1386,6 +1476,9 @@ def update_pick_status(local_sale_ref, picking_status, picker_user_id=None, note
                 picking_status,
                 notes or "",
                 _dumps(payload),
+                source["source_origin"],
+                source["source_env"],
+                source["source_user_agent"],
                 now,
             ),
         )
@@ -1393,8 +1486,9 @@ def update_pick_status(local_sale_ref, picking_status, picker_user_id=None, note
     return {"ok": True, "local_sale_ref": local_sale_ref, "pick_status": picking_status}
 
 
-def release_sale(local_sale_ref, dispatcher_user_id=None, allow_partial=False, notes=None, payload=None):
+def release_sale(local_sale_ref, dispatcher_user_id=None, allow_partial=False, notes=None, payload=None, source_meta=None):
     now = _now_iso()
+    source = _normalize_source_meta(source_meta)
     with get_db() as conn:
         row = conn.execute(
             """
@@ -1433,14 +1527,18 @@ def release_sale(local_sale_ref, dispatcher_user_id=None, allow_partial=False, n
         conn.execute(
             """
             INSERT INTO relay_dispatch_events (
-                local_sale_ref, dispatcher_user_id, event_type, notes, payload, created_at
-            ) VALUES (?, ?, 'RELEASED', ?, ?, ?)
+                local_sale_ref, dispatcher_user_id, event_type, notes, payload,
+                source_origin, source_env, source_user_agent, created_at
+            ) VALUES (?, ?, 'RELEASED', ?, ?, ?, ?, ?, ?)
             """,
             (
                 local_sale_ref,
                 dispatcher_user_id or "",
                 notes or "",
                 _dumps(payload),
+                source["source_origin"],
+                source["source_env"],
+                source["source_user_agent"],
                 now,
             ),
         )
@@ -1480,6 +1578,7 @@ def get_pick_queue(pos_profile_id=None, limit=100):
 def list_relay_tokens(pos_profile_id=None, search=None, statuses=None, limit=100):
     query = """
         SELECT token_id, pos_profile_id, cashier_user_id, customer_id, customer_name,
+               source_origin, source_env, source_user_agent,
                status, expires_at, void_reason, voided_by, consumed_sale_ref,
                consumed_at, created_at, updated_at
         FROM relay_tokens
@@ -1564,6 +1663,7 @@ def get_relay_monitor_board(
         # Load token rows first so we can map SA/taken-time even after payment.
         token_query = """
             SELECT token_id, pos_profile_id, cashier_user_id, customer_id, customer_name,
+                   source_origin, source_env, source_user_agent,
                    status, consumed_sale_ref, created_at, updated_at
             FROM relay_tokens
             WHERE 1 = 1
@@ -1580,7 +1680,8 @@ def get_relay_monitor_board(
         sale_query = """
             SELECT local_sale_ref, token_id, pos_profile_id, cashier_user_id, cashier_session_id,
                    device_id, sale_status, pick_status, dispatch_status, paid, total, customer_id, customer_name,
-                   cloud_invoice_name, cloud_sync_status, released_by, released_at, created_at, updated_at
+                   cloud_invoice_name, cloud_sync_status, source_origin, source_env, source_user_agent,
+                   released_by, released_at, created_at, updated_at
             FROM relay_local_sales
             WHERE 1 = 1
         """
@@ -1693,6 +1794,9 @@ def get_relay_monitor_board(
             "picked_at": picked_at,
             "released_at": sale.get("released_at") or "",
             "status_changed_at": sale.get("updated_at") or sale.get("created_at"),
+            "source_origin": sale.get("source_origin") or "",
+            "source_env": sale.get("source_env") or (token or {}).get("source_env") or "",
+            "source_user_agent": sale.get("source_user_agent") or "",
         }
 
         if target_date and row["business_date"] and row["business_date"] != target_date:
@@ -1738,6 +1842,9 @@ def get_relay_monitor_board(
             "picked_at": "",
             "released_at": "",
             "status_changed_at": token.get("updated_at") or token.get("created_at"),
+            "source_origin": token.get("source_origin") or "",
+            "source_env": token.get("source_env") or "",
+            "source_user_agent": token.get("source_user_agent") or "",
         }
 
         if target_date and row["business_date"] and row["business_date"] != target_date:
@@ -1809,6 +1916,7 @@ def get_latest_local_sale(local_sale_ref):
                    total, net_total, customer_id, customer_name,
                    invoice_payload, data_payload,
                    cloud_invoice_name, cloud_sync_status, cloud_sync_error,
+                   source_origin, source_env, source_user_agent,
                    released_by, released_at, created_at, updated_at
             FROM relay_local_sales
             WHERE local_sale_ref = ?
@@ -1830,6 +1938,7 @@ def list_local_sales(limit=200, pos_profile_id=None, search=None):
                sale_status, pick_status, dispatch_status, paid,
                total, net_total, customer_id, customer_name,
                cloud_invoice_name, cloud_sync_status, cloud_sync_error,
+               source_origin, source_env, source_user_agent,
                released_by, released_at, created_at, updated_at
         FROM relay_local_sales
         WHERE 1 = 1
@@ -1871,6 +1980,7 @@ def get_local_sale_detail(local_sale_ref):
                    total, net_total, customer_id, customer_name,
                    invoice_payload, data_payload,
                    cloud_invoice_name, cloud_sync_status, cloud_sync_error,
+                   source_origin, source_env, source_user_agent,
                    released_by, released_at, created_at, updated_at
             FROM relay_local_sales
             WHERE local_sale_ref = ?
@@ -1895,6 +2005,7 @@ def get_local_sale_detail(local_sale_ref):
         pick_rows = conn.execute(
             """
             SELECT id, local_sale_ref, picker_user_id, event_type, notes, payload, created_at
+                   ,source_origin, source_env, source_user_agent
             FROM relay_pick_events
             WHERE local_sale_ref = ?
             ORDER BY id ASC
@@ -1905,6 +2016,7 @@ def get_local_sale_detail(local_sale_ref):
         dispatch_rows = conn.execute(
             """
             SELECT id, local_sale_ref, dispatcher_user_id, event_type, notes, payload, created_at
+                   ,source_origin, source_env, source_user_agent
             FROM relay_dispatch_events
             WHERE local_sale_ref = ?
             ORDER BY id ASC
@@ -1915,6 +2027,7 @@ def get_local_sale_detail(local_sale_ref):
         outbox_rows = conn.execute(
             """
             SELECT event_id, event_type, idempotency_key, local_ref, payload,
+                   source_origin, source_env, source_user_agent,
                    status, retries, next_attempt_at, last_error, cloud_ref,
                    created_at, updated_at
             FROM relay_outbox
