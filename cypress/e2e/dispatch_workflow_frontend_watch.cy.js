@@ -1,3 +1,8 @@
+const {
+  assertRelayUiAndActual,
+  assertFulfillmentDetailSynced,
+} = require("./_helpers/relay_ui_sync");
+
 function findFirstSelector($root, selectors) {
   return selectors.find((selector) => $root.find(selector).length > 0);
 }
@@ -212,6 +217,8 @@ describe("Dispatch workflow (watch mode)", () => {
       profileName,
     });
 
+    assertRelayUiAndActual({ relayBase, expectRelayOnline: true, expectCloudOnline: true });
+
     cy.readFile("cypress/tmp/picker_dispatch_target.json", { timeout: 10000 }).then((data) => {
       const fromFile = String((data && data.local_sale_ref) || "").trim();
       if (fromFile) {
@@ -261,6 +268,8 @@ describe("Dispatch workflow (watch mode)", () => {
     cy.then(() => {
       expect(targetLocalSaleRef, "dispatch targetLocalSaleRef resolved").to.be.a("string").and.not.be.empty;
       cy.contains(".v-list-item", targetLocalSaleRef, { timeout: 60000 }).click({ force: true });
+      assertRelayUiAndActual({ relayBase, expectRelayOnline: true, expectCloudOnline: true });
+      assertFulfillmentDetailSynced(targetLocalSaleRef);
       cy.get("body", { timeout: 60000 }).should("contain.text", targetLocalSaleRef);
       cy.get("body").should("contain.text", "Dispatch + Sync");
       cy.contains(".v-btn", "Release Goods", { timeout: 30000 }).should("be.visible");
@@ -283,6 +292,7 @@ describe("Dispatch workflow (watch mode)", () => {
         const latestDispatch = [...(releasedResp.body.dispatch_events || [])].pop();
         expect(latestDispatch, "dispatch event created").to.be.an("object");
         expect(String(latestDispatch.event_type || ""), "dispatch event type").to.eq("RELEASED");
+        cy.get("body").should("contain.text", "RELEASED");
         cy.log(`Dispatch released ${targetLocalSaleRef}`);
       });
   });

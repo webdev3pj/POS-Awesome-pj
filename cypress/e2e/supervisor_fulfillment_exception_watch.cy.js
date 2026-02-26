@@ -1,3 +1,9 @@
+const {
+  assertRelayUiAndActual,
+  assertFulfillmentDetailSynced,
+  getFulfillmentWorkspaceVm,
+} = require("./_helpers/relay_ui_sync");
+
 function findFirstSelector($root, selectors) {
   return selectors.find((selector) => $root.find(selector).length > 0);
 }
@@ -226,6 +232,8 @@ describe("Supervisor fulfillment exception workflow (watch mode)", () => {
       profileName,
     });
 
+    assertRelayUiAndActual({ relayBase, expectRelayOnline: true, expectCloudOnline: true });
+
     cy.request(`${relayBase}/relay/pick-queue?pos_profile_id=${encodeURIComponent(profileName)}&limit=100`)
       .then((resp) => {
         expect(resp.status).to.eq(200);
@@ -264,6 +272,8 @@ describe("Supervisor fulfillment exception workflow (watch mode)", () => {
       .then(() => {
         expect(targetLocalSaleRef, "targetLocalSaleRef resolved").to.be.a("string").and.not.be.empty;
         cy.contains(".v-list-item", targetLocalSaleRef, { timeout: 60000 }).click({ force: true });
+        assertRelayUiAndActual({ relayBase, expectRelayOnline: true, expectCloudOnline: true });
+        assertFulfillmentDetailSynced(targetLocalSaleRef, { expectedLineId: firstLineId });
         cy.get("body", { timeout: 60000 }).should("contain.text", targetLocalSaleRef);
         cy.get("body").should("contain.text", "Line Items");
         cy.get("body").should("contain.text", "Ord Qty");
@@ -278,20 +288,10 @@ describe("Supervisor fulfillment exception workflow (watch mode)", () => {
           el.dispatchEvent(new Event("scroll", { bubbles: true }));
         });
 
-        cy.get("body").then(($body) => {
-          const vmHost = [...$body.find("*")].find((el) => {
-            const vm = el && el.__vue__;
-            return (
-              vm &&
-              typeof vm.onQtyChange === "function" &&
-              typeof vm.buildLineUpdates === "function" &&
-              Array.isArray(vm.lineRows)
-            );
-          });
-          expect(vmHost, "FulfillmentWorkspace Vue host").to.exist;
-          const vm = vmHost.__vue__;
+        getFulfillmentWorkspaceVm().then((vm) => {
           const line = Array.isArray(vm.lineRows) && vm.lineRows.length ? vm.lineRows[0] : null;
           expect(line, "first picker line row (Vue)").to.be.an("object");
+          expect(Number(line.id || 0), "UI line id matches relay line id").to.eq(firstLineId);
           line.picked_qty_input = String(editedPickedQty);
           vm.onQtyChange(line);
         });
@@ -327,6 +327,7 @@ describe("Supervisor fulfillment exception workflow (watch mode)", () => {
         const latestPick = [...(exceptionResp.body.pick_events || [])].pop();
         expect(latestPick, "latest pick event after exception").to.be.an("object");
         expect(String(latestPick.event_type || ""), "pick exception event type").to.eq("PICK_EXCEPTION");
+        cy.get("body").should("contain.text", "PICK_EXCEPTION");
       })
       .then(() => {
         cy.get("body").should("contain.text", "Allow partial/exception release");
@@ -345,6 +346,7 @@ describe("Supervisor fulfillment exception workflow (watch mode)", () => {
         const latestDispatch = [...(releasedResp.body.dispatch_events || [])].pop();
         expect(latestDispatch, "dispatch event created").to.be.an("object");
         expect(String(latestDispatch.event_type || "")).to.eq("RELEASED");
+        cy.get("body").should("contain.text", "RELEASED");
         cy.writeFile("cypress/tmp/supervisor_exception_target.json", {
           local_sale_ref: targetLocalSaleRef,
           profile_name: profileName,

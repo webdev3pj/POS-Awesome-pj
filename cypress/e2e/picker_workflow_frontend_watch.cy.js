@@ -1,3 +1,9 @@
+const {
+  assertRelayUiAndActual,
+  assertFulfillmentDetailSynced,
+  getFulfillmentWorkspaceVm,
+} = require("./_helpers/relay_ui_sync");
+
 function findFirstSelector($root, selectors) {
   return selectors.find((selector) => $root.find(selector).length > 0);
 }
@@ -226,21 +232,61 @@ describe("Picker workflow (watch mode)", () => {
       profileName,
     });
 
-    cy.request(`${relayBase}/relay/pick-queue?pos_profile_id=${encodeURIComponent(profileName)}&limit=100`)
+    assertRelayUiAndActual({ relayBase, expectRelayOnline: true, expectCloudOnline: true });
+
+    cy.readFile("cypress/tmp/latest_cashier_relay_commit.json", {
+      timeout: 2000,
+      log: false,
+      failOnNonExistent: false,
+    }).then((data) => {
+      const fromFile = String((data && data.localSaleRef) || (data && data.local_sale_ref) || "").trim();
+      if (fromFile) {
+        targetLocalSaleRef = fromFile;
+        cy.log(`Picker will prefer latest cashier relay commit LSR from file: ${targetLocalSaleRef}`);
+      }
+    });
+
+    cy.then(() => {
+      if (!targetLocalSaleRef) return null;
+      return cy.request({
+        url: `${relayBase}/api/transactions/${encodeURIComponent(targetLocalSaleRef)}`,
+        failOnStatusCode: false,
+      });
+    })
+      .then((resp) => {
+        if (!resp || resp.status !== 200 || !resp.body || !resp.body.sale) return null;
+        const sale = resp.body.sale || {};
+        const dispatch = String(sale.dispatch_status || "").toUpperCase();
+        const pick = String(sale.pick_status || "").toUpperCase();
+        if (dispatch === "PENDING" && ["PAID_PENDING_PICK", "PICK_IN_PROGRESS"].includes(pick)) {
+          targetRow = sale;
+          return resp;
+        }
+        targetLocalSaleRef = "";
+        return null;
+      })
+      .then(() =>
+        cy.request(`${relayBase}/relay/pick-queue?pos_profile_id=${encodeURIComponent(profileName)}&limit=100`)
+      )
       .then((resp) => {
         expect(resp.status).to.eq(200);
         const rows = Array.isArray(resp.body && resp.body.rows) ? resp.body.rows : [];
-        targetRow = [...rows]
-          .reverse()
-          .find(
-            (r) =>
-              String((r && r.dispatch_status) || "").toUpperCase() === "PENDING" &&
-              ["PAID_PENDING_PICK", "PICK_IN_PROGRESS"].includes(
-                String((r && r.pick_status) || "").toUpperCase()
-              )
-          );
-        expect(targetRow, "pending unreleased queue row").to.be.an("object");
-        targetLocalSaleRef = String(targetRow.local_sale_ref || "").trim();
+        if (!targetLocalSaleRef) {
+          targetRow = [...rows]
+            .reverse()
+            .find(
+              (r) =>
+                String((r && r.dispatch_status) || "").toUpperCase() === "PENDING" &&
+                ["PAID_PENDING_PICK", "PICK_IN_PROGRESS"].includes(
+                  String((r && r.pick_status) || "").toUpperCase()
+                )
+            );
+          expect(targetRow, "pending unreleased queue row").to.be.an("object");
+          targetLocalSaleRef = String(targetRow.local_sale_ref || "").trim();
+        } else {
+          targetRow = rows.find((r) => String((r && r.local_sale_ref) || "").trim() === targetLocalSaleRef) || null;
+          expect(targetRow, `preferred queue row for ${targetLocalSaleRef}`).to.be.an("object");
+        }
         expect(targetLocalSaleRef).to.not.equal("");
         cy.log(`Picker target LSR: ${targetLocalSaleRef}`);
       })
@@ -264,6 +310,8 @@ describe("Picker workflow (watch mode)", () => {
       .then(() => {
         expect(targetLocalSaleRef, "targetLocalSaleRef resolved").to.be.a("string").and.not.be.empty;
         cy.contains(".v-list-item", targetLocalSaleRef, { timeout: 60000 }).click({ force: true });
+        assertRelayUiAndActual({ relayBase, expectRelayOnline: true, expectCloudOnline: true });
+        assertFulfillmentDetailSynced(targetLocalSaleRef, { expectedLineId: firstLineId });
         cy.get("body", { timeout: 60000 }).should("contain.text", targetLocalSaleRef);
         cy.get("body").should("contain.text", "Line Items");
         cy.get("body").should("contain.text", "Ord Qty");
@@ -278,20 +326,10 @@ describe("Picker workflow (watch mode)", () => {
           el.dispatchEvent(new Event("scroll", { bubbles: true }));
         });
 
-        cy.get("body").then(($body) => {
-          const vmHost = [...$body.find("*")].find((el) => {
-            const vm = el && el.__vue__;
-            return (
-              vm &&
-              typeof vm.onQtyChange === "function" &&
-              typeof vm.buildLineUpdates === "function" &&
-              Array.isArray(vm.lineRows)
-            );
-          });
-          expect(vmHost, "FulfillmentWorkspace Vue host").to.exist;
-          const vm = vmHost.__vue__;
+        getFulfillmentWorkspaceVm().then((vm) => {
           const line = Array.isArray(vm.lineRows) && vm.lineRows.length ? vm.lineRows[0] : null;
           expect(line, "first picker line row (Vue)").to.be.an("object");
+          expect(Number(line.id || 0), "UI line id matches relay line id").to.eq(firstLineId);
           line.picked_qty_input = String(editedPickedQty);
           vm.onQtyChange(line);
         });
@@ -314,6 +352,7 @@ describe("Picker workflow (watch mode)", () => {
         expect(latestPick, "latest pick event").to.be.an("object");
         expect(String(latestPick.event_type || "")).to.eq("PICK_IN_PROGRESS");
         expect(Array.isArray(latestPick.payload && latestPick.payload.line_updates)).to.eq(true);
+        cy.get("body").should("contain.text", "PICK_IN_PROGRESS");
       })
       .then(() => {
         cy.writeFile("cypress/tmp/picker_dispatch_target.json", {
@@ -330,6 +369,7 @@ describe("Picker workflow (watch mode)", () => {
         expect(readyResp.status).to.eq(200);
         const sale = readyResp.body && readyResp.body.sale ? readyResp.body.sale : {};
         expect(String(sale.pick_status || ""), "relay sale pick_status after ready").to.eq("PICKED_READY_FOR_RELEASE");
+        cy.get("body").should("contain.text", "PICKED_READY_FOR_RELEASE");
         cy.log(`Picker marked ready: ${targetLocalSaleRef}`);
       });
   });

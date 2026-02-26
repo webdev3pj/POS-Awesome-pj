@@ -1,3 +1,5 @@
+const { assertRelayUiAndActual } = require("./_helpers/relay_ui_sync");
+
 function findFirstSelector($root, selectors) {
   return selectors.find((selector) => $root.find(selector).length > 0);
 }
@@ -304,9 +306,16 @@ describe("Cashier relay-down cloud fallback (watch mode)", () => {
 
     cy.wait("@getItems", { timeout: 120000 }).its("response.statusCode").should("eq", 200);
 
+    cy.request("http://127.0.0.1:8787/health").its("body.ok").should("eq", true);
     cy.get("body", { timeout: 60000 }).should(($body) => {
       const text = ($body.text() || "").replace(/\s+/g, " ");
       expect(text).to.match(/relay/i);
+    });
+    assertRelayUiAndActual({
+      relayBase: "http://127.0.0.1:8787",
+      expectRelayOnline: false,
+      expectCloudOnline: true,
+      skipActualRelayHealth: true,
     });
 
     pickFirstUsableRow(".selection .v-data-table tbody tr").then((row) => {
@@ -347,6 +356,13 @@ describe("Cashier relay-down cloud fallback (watch mode)", () => {
     });
 
     cy.contains(".v-btn", /^Submit$/i, { timeout: 30000 }).click({ force: true });
+
+    assertRelayUiAndActual({
+      relayBase: "http://127.0.0.1:8787",
+      expectRelayOnline: false,
+      expectCloudOnline: true,
+      skipActualRelayHealth: true,
+    });
 
     cy.wait("@submitInvoiceCloud", { timeout: 120000 }).then((interception) => {
       expect(confirmSeen, "relay-down cloud-fallback confirmation prompt seen").to.eq(true);
