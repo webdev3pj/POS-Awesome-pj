@@ -286,10 +286,46 @@ export default {
       const p = (this.current_role || "").trim();
       if (p) return p;
       try {
-        return (localStorage.getItem("pos_current_role") || "").trim();
-      } catch (e) {
-        return "";
-      }
+        const stored = (localStorage.getItem("pos_current_role") || "").trim();
+        if (stored) return stored;
+      } catch (e) {}
+      try {
+        const sourceRoles = [];
+        if (typeof frappe !== "undefined" && Array.isArray(frappe.user_roles)) {
+          sourceRoles.push(...frappe.user_roles);
+        }
+        if (
+          typeof frappe !== "undefined" &&
+          frappe.boot &&
+          frappe.boot.user &&
+          Array.isArray(frappe.boot.user.roles)
+        ) {
+          sourceRoles.push(...frappe.boot.user.roles);
+        }
+        const operationalRoles = Array.from(
+          new Set(
+            sourceRoles
+              .map((r) => String(r || "").trim())
+              .filter(Boolean)
+              .filter((r) =>
+                [
+                  "cline-Sales Associate",
+                  "cline-Cashier",
+                  "cline-Picker",
+                  "cline-Dispatch",
+                  "cline-Supervisor",
+                ].includes(r)
+              )
+          )
+        );
+        if (operationalRoles.length === 1) {
+          try {
+            localStorage.setItem("pos_current_role", operationalRoles[0]);
+          } catch (e) {}
+          return operationalRoles[0];
+        }
+      } catch (e) {}
+      return "";
     },
     canPick() {
       return ["cline-Picker", "cline-Supervisor"].includes(this.roleCode);

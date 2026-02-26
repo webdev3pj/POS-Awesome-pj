@@ -390,10 +390,50 @@ export default {
   methods: {
     sync_current_role() {
       try {
-        this.current_role = (localStorage.getItem('pos_current_role') || '').trim();
-      } catch (e) {
-        this.current_role = '';
-      }
+        const stored = (localStorage.getItem('pos_current_role') || '').trim();
+        if (stored) {
+          this.current_role = stored;
+          return;
+        }
+      } catch (e) {}
+      try {
+        const sourceRoles = [];
+        if (typeof frappe !== 'undefined' && Array.isArray(frappe.user_roles)) {
+          sourceRoles.push(...frappe.user_roles);
+        }
+        if (
+          typeof frappe !== 'undefined' &&
+          frappe.boot &&
+          frappe.boot.user &&
+          Array.isArray(frappe.boot.user.roles)
+        ) {
+          sourceRoles.push(...frappe.boot.user.roles);
+        }
+        const operationalRoles = Array.from(
+          new Set(
+            sourceRoles
+              .map((r) => String(r || '').trim())
+              .filter(Boolean)
+              .filter((r) =>
+                [
+                  'cline-Sales Associate',
+                  'cline-Cashier',
+                  'cline-Picker',
+                  'cline-Dispatch',
+                  'cline-Supervisor',
+                ].includes(r)
+              )
+          )
+        );
+        if (operationalRoles.length === 1) {
+          try {
+            localStorage.setItem('pos_current_role', operationalRoles[0]);
+          } catch (e) {}
+          this.current_role = operationalRoles[0];
+          return;
+        }
+      } catch (e) {}
+      this.current_role = '';
     },
     changePage(key) {
       this.$emit('changePage', key);
