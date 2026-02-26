@@ -19,6 +19,40 @@
               {{ __('Paper-first picking with line-wise edits for exceptions. Picked qty defaults to ordered qty and keeps order UOM/conversion factor.') }}
             </v-alert>
             <div v-if="errorText" class="red--text mb-2">{{ errorText }}</div>
+            <div v-if="canDispatch" class="mb-2">
+              <v-row dense>
+                <v-col cols="6" sm="4">
+                  <v-card outlined class="pa-2">
+                    <div class="caption grey--text">{{ __('Ready') }}</div>
+                    <div class="text-subtitle-2 font-weight-bold success--text">{{ dispatchQueueStats.ready_count }}</div>
+                  </v-card>
+                </v-col>
+                <v-col cols="6" sm="4">
+                  <v-card outlined class="pa-2">
+                    <div class="caption grey--text">{{ __('Picking') }}</div>
+                    <div class="text-subtitle-2 font-weight-bold primary--text">{{ dispatchQueueStats.picking_count }}</div>
+                  </v-card>
+                </v-col>
+                <v-col cols="6" sm="4">
+                  <v-card outlined class="pa-2">
+                    <div class="caption grey--text">{{ __('Exceptions') }}</div>
+                    <div class="text-subtitle-2 font-weight-bold error--text">{{ dispatchQueueStats.exception_count }}</div>
+                  </v-card>
+                </v-col>
+                <v-col cols="6" sm="6">
+                  <v-card outlined class="pa-2">
+                    <div class="caption grey--text">{{ __('Avg Wait (Ready)') }}</div>
+                    <div class="text-subtitle-2 font-weight-bold">{{ dispatchQueueStats.avg_ready_wait_label }}</div>
+                  </v-card>
+                </v-col>
+                <v-col cols="6" sm="6">
+                  <v-card outlined class="pa-2">
+                    <div class="caption grey--text">{{ __('Oldest Open') }}</div>
+                    <div class="text-subtitle-2 font-weight-bold">{{ dispatchQueueStats.oldest_open_age_label }}</div>
+                  </v-card>
+                </v-col>
+              </v-row>
+            </div>
             <v-text-field
               v-model="queueSearch"
               dense
@@ -64,6 +98,11 @@
                         {{ row.dispatch_status }}
                       </v-chip>
                       <span class="caption grey--text">{{ money(row.total) }}</span>
+                    </v-list-item-subtitle>
+                    <v-list-item-subtitle class="caption grey--text mt-1">
+                      {{ __('Age') }}: {{ queueAgeLabel(row) }}
+                      <span class="mx-1">|</span>
+                      {{ __('Time In Current Phase') }}: {{ queuePhaseAgeLabel(row) }}
                     </v-list-item-subtitle>
                   </v-list-item-content>
                 </v-list-item>
@@ -127,6 +166,26 @@
                   </v-card>
                 </v-col>
               </v-row>
+
+              <v-card outlined class="mt-2 mb-2" v-if="detailPhaseTimeline.length">
+                <v-card-title class="py-2 text-subtitle-2">{{ __('Phase Timeline (Dispatch Monitor)') }}</v-card-title>
+                <v-card-text class="pt-0">
+                  <v-row dense>
+                    <v-col cols="12" sm="6" md="4" v-for="row in detailPhaseTimeline" :key="row.key">
+                      <v-card outlined class="pa-2 fill-height">
+                        <div class="caption grey--text">{{ row.label }}</div>
+                        <div class="text-body-2 font-weight-medium">{{ row.at_label }}</div>
+                        <div class="caption" v-if="row.duration_label">
+                          {{ __('Duration') }}: {{ row.duration_label }}
+                        </div>
+                      </v-card>
+                    </v-col>
+                  </v-row>
+                  <div class="caption grey--text mt-1" v-if="detailPhaseSummaryLines.length">
+                    <div v-for="line in detailPhaseSummaryLines" :key="line">{{ line }}</div>
+                  </div>
+                </v-card-text>
+              </v-card>
 
               <div class="d-flex flex-wrap align-center mt-2 mb-2" v-if="canPick || canDispatch">
                 <v-btn v-if="canPick" small text color="primary" class="mr-1 mb-1" @click="markAllPicked">{{ __('Mark All Picked') }}</v-btn>
@@ -391,6 +450,105 @@ export default {
       const pick = String(sale.pick_status || "").toUpperCase();
       return parseInt(sale.paid || 0, 10) === 1 && (pick === "PICKED_READY_FOR_RELEASE" || (this.allowPartialRelease && pick === "PICK_EXCEPTION"));
     },
+    dispatchQueueStats() {
+      const rows = Array.isArray(this.queueRows) ? this.queueRows : [];
+      const stats = {
+        ready_count: 0,
+        picking_count: 0,
+        exception_count: 0,
+        avg_ready_wait_ms: 0,
+        avg_ready_wait_label: "-",
+        oldest_open_age_ms: 0,
+        oldest_open_age_label: "-",
+      };
+      const nowMs = Date.now();
+      let readyWaitTotal = 0;
+      let readyWaitCount = 0;
+      rows.forEach((r) => {
+        const pick = String(r.pick_status || "").toUpperCase();
+        const dispatch = String(r.dispatch_status || "").toUpperCase();
+        if (dispatch === "RELEASED") return;
+        if (pick === "PICKED_READY_FOR_RELEASE") {
+          stats.ready_count += 1;
+          const ms = this.msSince(r.updated_at, nowMs);
+          if (ms > 0) {
+            readyWaitTotal += ms;
+            readyWaitCount += 1;
+          }
+        } else if (pick === "PICK_IN_PROGRESS") {
+          stats.picking_count += 1;
+        } else if (pick === "PICK_EXCEPTION") {
+          stats.exception_count += 1;
+        }
+        const age = this.msSince(r.created_at, nowMs);
+        if (age > stats.oldest_open_age_ms) stats.oldest_open_age_ms = age;
+      });
+      if (readyWaitCount > 0) {
+        stats.avg_ready_wait_ms = Math.round(readyWaitTotal / readyWaitCount);
+        stats.avg_ready_wait_label = this.durationLabel(stats.avg_ready_wait_ms);
+      }
+      if (stats.oldest_open_age_ms > 0) {
+        stats.oldest_open_age_label = this.durationLabel(stats.oldest_open_age_ms);
+      }
+      return stats;
+    },
+    detailPhaseTimeline() {
+      if (!this.detail || !this.detail.sale) return [];
+      const sale = this.detail.sale || {};
+      const pickEvents = Array.isArray(this.detail.pick_events) ? this.detail.pick_events : [];
+      const dispatchEvents = Array.isArray(this.detail.dispatch_events) ? this.detail.dispatch_events : [];
+      const createdAt = sale.created_at || "";
+      const pickStartAt = this.firstEventAt(pickEvents, ["PICK_IN_PROGRESS"]);
+      const pickReadyAt = this.firstEventAt(pickEvents, ["PICKED_READY_FOR_RELEASE"]);
+      const pickExceptionAt = this.lastEventAt(pickEvents, ["PICK_EXCEPTION"]);
+      const releasedAt = sale.released_at || this.firstEventAt(dispatchEvents, ["RELEASED"]);
+
+      const rows = [];
+      const add = (key, label, at, prevAt) => {
+        const atMs = this.parseIsoMs(at);
+        const prevMs = this.parseIsoMs(prevAt);
+        rows.push({
+          key,
+          label,
+          at_raw: at || "",
+          at_label: at ? this.dt(at) : "-",
+          duration_label: atMs && prevMs && atMs >= prevMs ? this.durationLabel(atMs - prevMs) : "",
+        });
+      };
+      add("paid_local", __("Paid / Local Commit"), createdAt, "");
+      add("pick_started", __("Pick Started"), pickStartAt, createdAt);
+      add("pick_ready", __("Picked Ready"), pickReadyAt, pickStartAt || createdAt);
+      if (pickExceptionAt) add("pick_exception", __("Last Exception"), pickExceptionAt, pickStartAt || createdAt);
+      add("released", __("Released"), releasedAt, pickReadyAt || pickStartAt || createdAt);
+      return rows;
+    },
+    detailPhaseSummaryLines() {
+      if (!this.detail || !this.detail.sale) return [];
+      const sale = this.detail.sale || {};
+      const pickEvents = Array.isArray(this.detail.pick_events) ? this.detail.pick_events : [];
+      const dispatchEvents = Array.isArray(this.detail.dispatch_events) ? this.detail.dispatch_events : [];
+      const createdMs = this.parseIsoMs(sale.created_at);
+      const pickStartMs = this.parseIsoMs(this.firstEventAt(pickEvents, ["PICK_IN_PROGRESS"]));
+      const pickReadyMs = this.parseIsoMs(this.firstEventAt(pickEvents, ["PICKED_READY_FOR_RELEASE"]));
+      const releasedMs = this.parseIsoMs(sale.released_at || this.firstEventAt(dispatchEvents, ["RELEASED"]));
+      const lines = [];
+      if (createdMs && pickStartMs && pickStartMs >= createdMs) {
+        lines.push(`${__("Paid -> Pick Start")}: ${this.durationLabel(pickStartMs - createdMs)}`);
+      }
+      if (pickStartMs && pickReadyMs && pickReadyMs >= pickStartMs) {
+        lines.push(`${__("Pick Start -> Picked Ready")}: ${this.durationLabel(pickReadyMs - pickStartMs)}`);
+      }
+      if (pickReadyMs && releasedMs && releasedMs >= pickReadyMs) {
+        lines.push(`${__("Picked Ready -> Released")}: ${this.durationLabel(releasedMs - pickReadyMs)}`);
+      }
+      if (createdMs && releasedMs && releasedMs >= createdMs) {
+        lines.push(`${__("Paid -> Released (Total)")}: ${this.durationLabel(releasedMs - createdMs)}`);
+      }
+      if (!releasedMs && createdMs) {
+        lines.push(`${__("Open Age")}: ${this.durationLabel(Date.now() - createdMs)}`);
+      }
+      return lines;
+    },
   },
   watch: {
     pos_profile: {
@@ -645,6 +803,54 @@ export default {
     refreshAll() {
       this.fetchQueue(false);
       if (this.selectedRef) this.fetchDetail(this.selectedRef);
+    },
+    parseIsoMs(v) {
+      if (!v) return 0;
+      const t = new Date(v).getTime();
+      return isNaN(t) ? 0 : t;
+    },
+    msSince(v, nowMs) {
+      const t = this.parseIsoMs(v);
+      if (!t) return 0;
+      const diff = (nowMs || Date.now()) - t;
+      return diff > 0 ? diff : 0;
+    },
+    durationLabel(ms) {
+      const n = Math.max(0, parseInt(ms || 0, 10));
+      if (!n) return "0m";
+      const totalSec = Math.floor(n / 1000);
+      const d = Math.floor(totalSec / 86400);
+      const h = Math.floor((totalSec % 86400) / 3600);
+      const m = Math.floor((totalSec % 3600) / 60);
+      if (d > 0) return `${d}d ${h}h`;
+      if (h > 0) return `${h}h ${m}m`;
+      return `${m}m`;
+    },
+    queueAgeLabel(row) {
+      return this.durationLabel(this.msSince(row && row.created_at));
+    },
+    queuePhaseAgeLabel(row) {
+      return this.durationLabel(this.msSince((row && row.updated_at) || (row && row.created_at)));
+    },
+    firstEventAt(events, types) {
+      const wanted = (types || []).map((t) => String(t || "").toUpperCase());
+      const rows = Array.isArray(events) ? events : [];
+      for (let i = 0; i < rows.length; i += 1) {
+        const e = rows[i] || {};
+        const et = String(e.event_type || "").toUpperCase();
+        if (wanted.includes(et) && e.created_at) return e.created_at;
+      }
+      return "";
+    },
+    lastEventAt(events, types) {
+      const wanted = (types || []).map((t) => String(t || "").toUpperCase());
+      const rows = Array.isArray(events) ? events : [];
+      for (let i = rows.length - 1; i >= 0; i -= 1) {
+        const e = rows[i] || {};
+        const et = String(e.event_type || "").toUpperCase();
+        if (wanted.includes(et) && e.created_at) return e.created_at;
+      }
+      return "";
     },
     dt(v) {
       if (!v) return "-";
