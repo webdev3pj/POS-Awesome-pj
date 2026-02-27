@@ -27,21 +27,23 @@ export default {
     setPage(page) {
       this.page = page;
     },
-    remove_frappe_nav() {
-      this.$nextTick(function () {
-        $('.page-head').remove();
-        $('.navbar.navbar-default.navbar-fixed-top').remove();
+    setShellChromeActive(isActive) {
+      const cls = 'posawesome-shell-active';
+      const roots = [document.documentElement, document.body].filter(Boolean);
+      roots.forEach((el) => {
+        if (isActive) {
+          el.classList.add(cls);
+        } else {
+          el.classList.remove(cls);
+        }
       });
     },
   },
   mounted() {
-    this.remove_frappe_nav();
+    this.setShellChromeActive(true);
   },
-  updated() {},
-  created: function () {
-    setTimeout(() => {
-      this.remove_frappe_nav();
-    }, 1000);
+  beforeDestroy() {
+    this.setShellChromeActive(false);
   },
 };
 </script>
@@ -49,5 +51,21 @@ export default {
 <style scoped>
 .container1 {
   margin-top: 0px;
+}
+</style>
+
+<style>
+html.posawesome-shell-active .navbar,
+html.posawesome-shell-active .page-head,
+html.posawesome-shell-active .layout-side-section,
+html.posawesome-shell-active .standard-sidebar {
+  display: none !important;
+}
+
+html.posawesome-shell-active .page-container,
+html.posawesome-shell-active .layout-main-section-wrapper,
+html.posawesome-shell-active .layout-main-section {
+  margin-top: 0 !important;
+  padding-top: 0 !important;
 }
 </style>
