@@ -4,7 +4,7 @@
 - This is the handoff document for a brand-new Codex session on the OptiPlex with no prior chat context.
 - It includes the exact branch, baseline commit, what is already working, what still needs to be built, and the exact order to work in.
 - It also explains how to handle secrets safely: copy local `.env` and relay config files, but do not commit them.
-- Main target (updated): build on the now-complete cloud+local role-stage reruns and move into explicit cloud-off continuity proof plus dispatch timing analytics.
+- Main target (updated): build on the now-complete cloud+local role-stage reruns and local cloud-off continuity proof, then execute the same cloud-off continuity run on cloud dev staging and proceed to dispatch timing analytics.
 
 ## Current Branch / Baseline
 - Working branch (current): `codex-5-final`
@@ -25,7 +25,7 @@
 - `6767d0f` - frontend relay role fallback fix (prevents empty-role relay submit regression)
 - `ce5f84d` - navbar relay-status fast-boot race fix (missed `register_pos_profile`)
 - `6cf64aa` - navbar relay poll recovery if profile event is missed (self-recovers via `check_opening_shift`)
-- `df1ac0c` - offline continuity relay token/monitor fallback paths (pushed; validation pending)
+- `df1ac0c` - offline continuity relay token/monitor fallback paths (local cloud-off validation complete; cloud-dev rerun pending)
 
 ## What Is Already Working (Verified)
 - SA flow on live dev site:
@@ -74,7 +74,7 @@
 - Fulfillment-role relay/cloud top-bar status chips are now live-rerun validated against actual relay API behavior on the dev site after navbar relay-status sync fixes (`ce5f84d`, `6cf64aa`)
 
 ## What Is Not Finished (Next Build Targets)
-- Execute explicit cloud-off continuity UAT end-to-end (SA -> Cashier -> Picker -> Dispatch) while relay remains reachable
+- Replay explicit cloud-off continuity UAT end-to-end (SA -> Cashier -> Picker -> Dispatch) on cloud dev staging while relay remains reachable
 - Verify token/SO visibility and status propagation across all role screens when cloud is unavailable
 - Finalize remaining Phase 3 hardening policy details (audit/reason coverage and stricter auth rollout decisions)
 - Extend dispatch timing instrumentation into persistence/reporting for business optimization analysis
@@ -192,7 +192,7 @@ Set/verify on the dev site:
 - Shared-shell Picker/Dispatch fulfillment workspace deployed and relay-local UAT validated (line-wise pick persistence + dispatch release)
 
 ### Next priorities
-1. Run explicit cloud-off continuity UAT for full role chain (SA -> Cashier -> Picker -> Dispatch) with relay evidence after each role stage
+1. Run explicit cloud-off continuity UAT for full role chain (SA -> Cashier -> Picker -> Dispatch) on cloud dev staging with relay evidence after each role stage (local baseline already done)
 2. Rollout/ops hardening (shop PC trust rollout, support checklists, historical queue cleanup)
 3. Expand dispatch phase timing instrumentation into persisted analytics/reporting
 4. Simplify picker default UX path while keeping line-item editing for exceptions/wire/UOM cases

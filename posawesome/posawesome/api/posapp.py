@@ -1932,10 +1932,18 @@ def update_invoice(data):
 
 @frappe.whitelist()
 def submit_invoice(invoice, data):
-    data = json.loads(data)
-    invoice = json.loads(invoice)
+    data = json.loads(data or "{}")
+    if not isinstance(data, dict):
+        data = {}
+
+    invoice = json.loads(invoice or "{}")
+    if not isinstance(invoice, dict):
+        invoice = {}
+
     invoice_doc = frappe.get_doc("Sales Invoice", invoice.get("name"))
     invoice_doc.update(invoice)
+
+    _set_invoice_cashier_attribution(invoice_doc, data=data, invoice_payload=invoice)
 
     if _is_relay_workflow_enabled(cstr(invoice_doc.get("pos_profile") or "").strip()):
         _require_operational_role_for_action(
@@ -2065,6 +2073,57 @@ def submit_invoice(invoice, data):
         )
 
     return {"name": invoice_doc.name, "status": invoice_doc.docstatus}
+
+
+def _set_invoice_cashier_attribution(invoice_doc, data=None, invoice_payload=None):
+    if not invoice_doc:
+        return ""
+
+    data = data or {}
+    invoice_payload = invoice_payload or {}
+    invoice_meta = None
+    try:
+        invoice_meta = frappe.get_meta("Sales Invoice")
+    except Exception:
+        invoice_meta = None
+
+    def _read(mapping, key):
+        if isinstance(mapping, dict):
+            return cstr(mapping.get(key) or "").strip()
+        return ""
+
+    cashier_user = ""
+    for candidate in (
+        _read(data, "cashier_user_id"),
+        _read(data, "cashier"),
+        _read(invoice_payload, "cashier_user_id"),
+        _read(invoice_payload, "cashier"),
+        cstr(invoice_doc.get("custom_cashier") or "").strip(),
+        cstr(invoice_doc.get("cashier_user_id") or "").strip(),
+        cstr(invoice_doc.get("owner") or "").strip(),
+        cstr(frappe.session.user or "").strip(),
+    ):
+        if candidate:
+            cashier_user = candidate
+            break
+
+    if not cashier_user or not invoice_meta:
+        return cashier_user
+
+    for fieldname in ("custom_cashier", "cashier_user_id", "cashier"):
+        if invoice_meta.has_field(fieldname):
+            invoice_doc.set(fieldname, cashier_user)
+            break
+
+    cashier_name = cstr(
+        frappe.get_cached_value("User", cashier_user, "full_name") or cashier_user
+    ).strip()
+    for name_field in ("custom_cashier_name", "cashier_name"):
+        if cashier_name and invoice_meta.has_field(name_field):
+            invoice_doc.set(name_field, cashier_name)
+            break
+
+    return cashier_user
 
 
 def set_batch_nos_for_bundels(doc, warehouse_field, throw=False):

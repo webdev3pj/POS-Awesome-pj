@@ -23,6 +23,69 @@ Note:
 
 ---
 
+## 2026-02-27 - Cashier attribution hardening for cloud Sales Invoice + multi-profile rollout runbook updates
+- Branch: `codex-5-final`
+- Summary: Implemented explicit cashier identity propagation in submit payload and server submit handler so cloud Sales Invoices can populate cashier attribution fields reliably (including relay-sync submissions), then updated runbooks for simple multi-profile rollout.
+- What changed:
+  - Cashier identity is now always sent from POS payment submit payload:
+    - `posawesome/public/js/posapp/components/pos/Payments.vue`
+    - added `data.cashier_user_id = frappe.session.user`
+  - Cloud submit handler now resolves and writes cashier attribution safely when target fields exist:
+    - `posawesome/posawesome/api/posapp.py`
+    - `submit_invoice(...)` now normalizes payload types and calls `_set_invoice_cashier_attribution(...)`
+    - new helper sets first available field among `custom_cashier` / `cashier_user_id` / `cashier`
+    - optional cashier display-name fields also supported (`custom_cashier_name` / `cashier_name`) when present
+    - fallback chain prevents relay-sync API-user attribution drift by preferring payload cashier, then invoice owner/session
+  - Multi-profile rollout guidance simplified in runbooks:
+    - `plans/pos-relay-program/runbooks/optiplex-edge-relay-next-session.md`
+    - `plans/pos-relay-program/runbooks/shop-pc-lan-relay-setup-non-technical.md`
+- What was verified:
+  - Python syntax compile passed for `posapp.py` after patch (`python -m py_compile`).
+  - Field writes are defensive (no-op when custom fields do not exist on site meta).
+- What remains:
+  - Run cloud dev watch-mode cashier submit rerun and confirm `custom_cashier` (or equivalent configured field) is populated on submitted cloud SI.
+  - Replay full role-chain validation for any additional POS profiles as they are enabled.
+- Links:
+  - `posawesome/posawesome/api/posapp.py`
+  - `posawesome/public/js/posapp/components/pos/Payments.vue`
+  - `plans/pos-relay-program/runbooks/optiplex-edge-relay-next-session.md`
+  - `plans/pos-relay-program/runbooks/shop-pc-lan-relay-setup-non-technical.md`
+
+## 2026-02-27 - Dedicated local-staging cloud-off full-chain UAT completed (SA -> Cashier -> Picker -> Dispatch, relay-only evidence)
+- Branch: `codex-5-final`
+- Summary: Executed a dedicated full-chain continuity run on local staging (`pj.local`) with relay cloud target intentionally unreachable, then validated every role handoff using relay APIs/dashboard artifacts as source of truth.
+- What changed:
+  - Ran relay in cloud-off simulation mode by temporarily setting:
+    - `relay/data/relay_config.json` -> `frappe_base_url = http://10.255.255.1:65534`
+    - `site_name = cloud-off-sim`
+  - Executed strict one-spec-at-a-time Cypress chain on local staging (headed watch-mode, hard timeout):
+    - SA role set + SA workflow + SA relay proof
+    - Cashier role set + cashier workflow + cashier relay proof
+    - Picker role set + picker workflow + picker relay proof
+    - Dispatch role set + dispatch workflow + dispatch relay proof
+  - Added consolidated evidence artifact generation:
+    - `cypress/tmp/local_staging_cloud_off_full_chain_evidence.json`
+  - Updated docs/runbooks to include this completed local cloud-off baseline and the exact repeatable command flow.
+- What was verified:
+  - All local-stage role chain specs passed in cloud-off simulation.
+  - Single-chain relay evidence is consistent across all roles:
+    - SA token/SO: `SAL-ORD-PJ7-2026-00015`
+    - Cashier local sale: `LSR-PJ7 -20260227154400-600CB9`
+    - Picker persisted: `pick_status = PICKED_READY_FOR_RELEASE`
+    - Dispatch persisted: `dispatch_status = RELEASED`
+  - Relay transaction detail for this `LSR-*` shows full stage progression and local provenance (`source_env=local_staging`, `source_origin=http://pj.local:8080`).
+  - Outbox rows for this `LSR-*` remained queued with expected cloud-unreachable/wait errors under simulation (proof that local-first chain completed without cloud sync dependency).
+  - Relay config was restored post-UAT:
+    - `frappe_base_url = https://devpjjamaica.v.frappe.cloud`
+    - `/health` remained `ok: true`
+- What remains:
+  - Replay this same dedicated cloud-off sequence on cloud dev staging after deploy confirmation.
+  - Continue dispatch timing analytics expansion (phase timing persistence/reporting and optimization views).
+- Links:
+  - `plans/pos-relay-program/uat/2026-02-27-local-staging-cloud-off-full-chain-relay-only.md`
+  - `plans/pos-relay-program/runbooks/cypress_order_of_testing.md`
+  - `cypress/tmp/local_staging_cloud_off_full_chain_evidence.json`
+
 ## 2026-02-27 - codex-5-final cloud/local full rerun completed; Cypress hardening fixes for cashier fallback, picker proof, and UI-shell timeout flake
 - Branch: `codex-5-final`
 - Summary: Completed a strict watch-mode rerun on both `devpjjamaica` (cloud) and `pj.local` (local staging) across SA -> Cashier -> Picker -> Dispatch with relay proof specs after each stage. Fixed three Cypress reliability issues found during rerun: cashier fallback item-loading flake, picker post-proof quantity mismatch after `Mark All Picked`, and a long-running UI-shell role-consistency timeout caused by `cy.then` default timeout behavior.

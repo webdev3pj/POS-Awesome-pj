@@ -28,7 +28,7 @@ Provide a zero-context startup guide for a new AI coding agent session on the Op
   - `0b8f772` adds Phase 3 baseline relay/client-key + server-side role guards and commits helper/security Cypress specs
   - `6767d0f` fixes a live cashier regression where relay submit could send an empty role (relay rejected with `RELAY_ROLE_REQUIRED`)
   - `ce5f84d` + `6cf64aa` fix fulfillment-role navbar relay-status chip races so picker/dispatch/supervisor top-bar relay chips match actual relay usage
-  - `df1ac0c` adds offline continuity fallback paths (relay token search + relay workflow monitor fallback + SA/cashier relay token/SO fallback); explicit cloud-off proof still pending
+  - `df1ac0c` adds offline continuity fallback paths (relay token search + relay workflow monitor fallback + SA/cashier relay token/SO fallback); dedicated local-staging cloud-off proof is now completed, cloud-dev rerun still pending
   - `d73fd42` (`codex-4.2-dispatch`) adds dispatch monitoring timers/phase timeline UX
   - `codes-4.3-dispatch` restores and validates local Docker staging (`pj.local:8080`) as a pre-cloud deploy loop:
     - local deploy compatibility fixes for current repo layout
@@ -62,6 +62,7 @@ Provide a zero-context startup guide for a new AI coding agent session on the Op
 8. `plans/pos-relay-program/uat/2026-02-26-local-staging-sa-cashier-picker-dispatch-and-dispatch-monitor.md`
 9. `cypress/e2e/local_staging/README.md`
 10. `plans/pos-relay-program/runbooks/cypress_order_of_testing.md`
+11. `plans/pos-relay-program/uat/2026-02-27-local-staging-cloud-off-full-chain-relay-only.md`
 
 ## Local-Only Secrets Pack (Required Before Cypress)
 ### Repo root `.env` (copy from main machine, do not commit)
@@ -173,6 +174,20 @@ Where to set this in the site frontend (ERPNext/Frappe Desk):
 - Set the field labeled `Edge Relay URL` (backend fieldname: `custom_edge_relay_url`)
 - Save
 
+### Multi-POS Profile rollout (repeat for each live profile)
+Use this exact checklist for each profile you want on relay-first flow (for example `PJ7 CASHIER`, `PJ7 PICKER`, `PJ7 DISPATCH`, branch-specific cashier profiles):
+1. Open the profile in Desk: `POS Profile` -> `<PROFILE_NAME>`.
+2. Set/verify:
+   - `custom_have_token = 1`
+   - `custom_edge_relay_url = https://192.168.50.168`
+   - `posa_edge_relay_connectivity_mode = lan_only_browser_checked`
+   - `posa_allow_cloud_fallback_when_relay_down = 1` for cashier-facing profiles, `0` for strict relay-only roles if desired
+3. Keep operational toggles aligned to role intent:
+   - cashier profiles: sales order selection + payment modes enabled
+   - picker/dispatch/supervisor profiles: fulfillment workspace enabled and role-gated
+4. Save, then open POS once with the target user role and confirm top chips show `Relay Online (LAN)`.
+5. Run the role's Cypress spec + relay proof spec before enabling the next profile.
+
 Fallback (not preferred for this workflow):
 - site config key `posa_edge_relay_url` in `site_config.json` (used only when POS Profile field is blank)
 
@@ -208,9 +223,15 @@ Fallback (not preferred for this workflow):
   - strict cloud + local staging rerun matrix is complete with watch-mode Cypress and hard timeouts
   - relay dashboard/transaction proof specs are passing after every role-stage workflow
   - UI-shell cross-role consistency spec is stable after timeout hardening
+  - dedicated local-staging cloud-off full-chain UAT is complete on OptiPlex (`pj.local`) with relay-only evidence:
+    - SA token/SO: `SAL-ORD-PJ7-2026-00015`
+    - cashier relay local sale: `LSR-PJ7 -20260227154400-600CB9`
+    - picker persisted status: `PICKED_READY_FOR_RELEASE`
+    - dispatch persisted status: `RELEASED`
+    - relay outbox for this LSR remains queued with cloud timeout/wait errors while cloud is intentionally unreachable
 - Next recommended work:
-  - Execute dedicated cloud-off continuity UAT across SA -> Cashier -> Picker -> Dispatch while relay remains reachable
-  - Capture relay-only evidence for token visibility, SO retrieval, cashier submit behavior, and fulfillment status propagation under cloud outage
+  - Replay the same dedicated cloud-off continuity UAT across SA -> Cashier -> Picker -> Dispatch on cloud dev staging after deploy confirmation
+  - Capture the same relay-only evidence set on cloud staging and compare against the local-staging baseline
   - Expand dispatch timing/phase analytics persistence and reporting
   - Start dispatch monitoring/timing-first UX and relay phase timing instrumentation (business optimization focus)
   - Simplify picker default UX path (order-level actions first) while keeping line-item editing available for exceptions/wire/UOM cases

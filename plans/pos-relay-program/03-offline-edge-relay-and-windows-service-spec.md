@@ -58,7 +58,7 @@
     - cashier relay-down fallback item/SO loading resilience
     - picker final persisted qty relay-proof consistency after `Mark All Picked`
     - long UI-shell role-consistency spec timeout stability on cloud
-  - dedicated cloud-off full-chain role continuity proof remains the next explicit UAT target
+  - dedicated cloud-off full-chain role continuity proof is now completed on local staging (`pj.local`) with relay-only evidence; cloud-dev rerun is the next explicit UAT target
 
 ## Purpose
 Define the offline continuity design and operations model for the Edge Relay, including:

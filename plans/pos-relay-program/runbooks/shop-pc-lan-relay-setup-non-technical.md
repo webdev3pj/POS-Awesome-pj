@@ -76,6 +76,18 @@ What to tell Codex/IT:
 - [ ] Picker PC ready
 - [ ] Dispatch PC ready
 
+## If you are rolling out multiple POS Profiles (simple manager steps)
+Do this once after PC trust setup is complete:
+1. Ask Codex/IT to open each live POS Profile and set:
+   - `custom_have_token = 1`
+   - `custom_edge_relay_url = https://192.168.50.168`
+2. For cashier profiles only, confirm cloud fallback toggle is enabled:
+   - `posa_allow_cloud_fallback_when_relay_down = 1`
+3. For each role/profile pair, open POS and confirm:
+   - top status chip shows `Relay Online (LAN)`
+   - role sees the expected screen (SA token flow, cashier payment flow, picker queue, dispatch queue)
+4. Run one test transaction and ask Codex/IT to confirm it appears on relay dashboard and relay API.
+
 ## Notes for Codex/IT (do not ask staff to do this)
 - The certificate installer is generated/maintained from `relay/windows_https/install_shop_pc_relay_cert.ps1` and `relay/windows_https/install_shop_pc_relay_cert.bat`.
 - Exported installer/cert artifacts for distribution may be staged under `relay/windows_https/export/` on the OptiPlex.

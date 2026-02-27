@@ -99,9 +99,10 @@ Key business rules currently agreed:
   - fulfillment-role relay status chip sync (`Picker`/`Dispatch`/`Supervisor`) is now live-validated after navbar race/recovery fixes (`ce5f84d`, `6cf64aa`):
     - UI `Relay Online (LAN)` chip matches actual relay API usage in the fulfillment workspace
     - strict Cypress assertions now check UI relay/cloud chips and actual relay `/health` together in relay-dependent specs
-  - offline continuity fallback code is pushed in `df1ac0c` (relay token search + relay workflow monitor fallback + SA/cashier relay token/SO fallback paths); full explicit cloud-off continuity proof remains pending
+  - offline continuity fallback code from `df1ac0c` (relay token search + relay workflow monitor fallback + SA/cashier relay token/SO fallback paths) is now validated on local staging in a dedicated cloud-off relay-only full-chain run; cloud-dev rerun remains pending
   - OptiPlex relay+Caddy auto-start is now implemented and verified using a Windows boot scheduled task (`POSRelayStack_Autostart_OnStart`, `SYSTEM`) with relay LAN HTTPS health checks passing
-- Priority implementation/verification target: execute explicit cloud-off (Wi-Fi down/cloud unavailable) continuity UAT across SA -> Cashier -> Picker -> Dispatch on OptiPlex relay, then extend dispatch timing analytics persistence/reporting.
+  - cashier attribution hardening is now implemented in `submit_invoice` flow so payload cashier identity is written to cloud SI cashier field(s) when present (e.g. `custom_cashier`)
+- Priority implementation/verification target: replay the same dedicated cloud-off continuity UAT sequence on cloud dev staging after deploy confirmation, then extend dispatch timing analytics persistence/reporting.
 - Frappe Cloud topology note: raw private LAN relay URLs are still not cloud-backend reachable; in LAN-only mode this is expected and treated as diagnostic-only while browser-LAN HTTPS health is the submit gate.
 
 ## What Is Already Implemented (Branch-Accurate)
@@ -187,7 +188,7 @@ Key business rules currently agreed:
 - SA relay-first/offline token creation until online-first path is stable.
 
 ## Immediate Next Recommended Task
-Run a dedicated cloud-off continuity UAT on OptiPlex relay for the full role chain (SA -> Cashier -> Picker -> Dispatch), capture relay transaction/outbox evidence for each stage, then move into dispatch timing analytics instrumentation and reporting.
+Replay the dedicated cloud-off continuity UAT against cloud dev staging (after deploy confirmation) using the same SA -> Cashier -> Picker -> Dispatch order and relay evidence capture used on local staging, then move into dispatch timing analytics instrumentation and reporting.
 
 Why this is next:
 - SA/Cashier relay-first flow is now proven on the dev site and local OptiPlex relay.
@@ -205,7 +206,7 @@ If a new session starts on the OptiPlex relay machine and does not have this con
 - Restart the local relay process if relay Python code changed (for example `relay/relay/storage.py`)
 - Copy the local-only `.env` (Cypress secrets) to the repo root if Cypress will run on the OptiPlex
 - Relay-enabled SA/Cashier demo is already proven; rerun only if revalidating after new changes
-- Next target: finish the remaining Phase 3 regression/security rerun slice and validate `df1ac0c` offline continuity fallbacks, then start dispatch monitoring/timing UX + relay timing instrumentation work
+- Next target: run the dedicated cloud-off full-chain continuity rerun on cloud dev staging (local cloud-off run is complete), then continue dispatch monitoring/timing UX + relay timing instrumentation work
 - Use strict per-spec Cypress timeouts and clean up orphan Cypress processes if a run hangs before starting the next spec
 
 ## Decision Register

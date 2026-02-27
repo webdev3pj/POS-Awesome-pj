@@ -1092,6 +1092,7 @@ export default {
       data["redeemed_customer_credit"] = this.redeemed_customer_credit;
       data["customer_credit_dict"] = this.customer_credit_dict;
       data["is_cashback"] = this.is_cashback;
+      data["cashier_user_id"] = frappe.session.user;
 
       const vm = this;
 
