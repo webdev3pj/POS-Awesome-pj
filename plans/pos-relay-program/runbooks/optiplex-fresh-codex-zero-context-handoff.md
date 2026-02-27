@@ -7,7 +7,7 @@
 - Main target (updated): build on the now-working relay-enabled SA + Cashier flow and the now cloud-parity-validated Picker/Dispatch fulfillment flow (add auth hardening, finalize rollout support, and keep UAT repeatable), or rerun demos/UAT after new changes.
 
 ## Current Branch / Baseline
-- Working branch (current): `codex-4.1-picked-dispatch-relay`
+- Working branch (current): `codex-4.4-dispatch`
 - GitHub baseline commit for this handoff: `424c79a`
 - Baseline commit message: `docs(relay): clarify frappe cloud local-lan relay constraints`
 
@@ -138,7 +138,7 @@ plans/pos-relay-program/runbooks/optiplex-edge-relay-next-session.md
 Then open:
 plans/pos-relay-program/runbooks/optiplex-fresh-codex-zero-context-handoff.md
 
-Work only on branch codex-4.1-picked-dispatch-relay (unless explicitly told to hotfix an older branch).
+Work only on branch codex-4.4-dispatch (unless explicitly told to hotfix an older branch).
 Baseline GitHub commit for this handoff is 424c79a (historical relay LAN-only baseline reference).
 
 Current verified status:
@@ -224,6 +224,9 @@ Spec order (core regression):
 6. `cypress/e2e/cashier_relay_down_cloud_fallback_watch.cy.js`
 7. `cypress/e2e/cashier_token_disabled_profile_smoke.cy.js`
 
+Full role-stage order (including relay proof specs after each role workflow) is maintained in:
+- `plans/pos-relay-program/runbooks/cypress_order_of_testing.md`
+
 Relay visual demo add-on (optional, local relay pages in Cypress):
 1. Show relay token proof page after SA submit (`/relay/token/<SO token>`) and pause for observation (manual or local demo spec, if present)
 2. Show relay transaction proof page after cashier submit (`/api/transactions/<local_sale_ref>` or dashboard `/` filtered to local sale) and pause for observation (manual or local demo spec, if present)
@@ -239,6 +242,7 @@ Relay visual demo add-on (optional, local relay pages in Cypress):
 
 ## See Also
 - `optiplex-edge-relay-next-session.md`
+- `cypress_order_of_testing.md`
 - `shop-pc-lan-relay-setup-non-technical.md`
 - `../00-ai-agent-start-here.md`
 - `../03-offline-edge-relay-and-windows-service-spec.md`

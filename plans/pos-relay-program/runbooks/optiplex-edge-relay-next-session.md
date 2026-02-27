@@ -18,7 +18,7 @@ Provide a zero-context startup guide for a new AI coding agent session on the Op
 
 ## Branch and Starting Point
 - Repo: `POS-Awesome-pj`
-- Branch to use (current): `codes-4.3-dispatch`
+- Branch to use (current): `codex-4.4-dispatch`
 - GitHub baseline commit for this handoff/runbook: `424c79a`
 - Current relay-focused branch status:
   - SA + Cashier browser flows are already validated in cloud/non-relay-missing scenarios on `codex-2-cashier`
@@ -57,6 +57,7 @@ Provide a zero-context startup guide for a new AI coding agent session on the Op
 7. `relay/README.md`
 8. `plans/pos-relay-program/uat/2026-02-26-local-staging-sa-cashier-picker-dispatch-and-dispatch-monitor.md`
 9. `cypress/e2e/local_staging/README.md`
+10. `plans/pos-relay-program/runbooks/cypress_order_of_testing.md`
 
 ## Local-Only Secrets Pack (Required Before Cypress)
 ### Repo root `.env` (copy from main machine, do not commit)
@@ -248,10 +249,12 @@ Choose `Chrome`.
 1. `cypress/e2e/admin_configure_pj7_cashier_profile.cy.js`
 2. `cypress/e2e/admin_set_cline_sa_only_role.cy.js`
 3. `cypress/e2e/sa_workflow_frontend_watch.cy.js`
-4. `cypress/e2e/admin_set_cline_cashier_only_role.cy.js`
-5. `cypress/e2e/cashier_workflow_frontend_watch.cy.js`
-6. `cypress/e2e/cashier_relay_down_cloud_fallback_watch.cy.js`
-7. `cypress/e2e/cashier_token_disabled_profile_smoke.cy.js` (regression)
+4. `cypress/e2e/relay_demo_sa_post_ui_watch.cy.js` (SA relay proof)
+5. `cypress/e2e/admin_set_cline_cashier_only_role.cy.js`
+6. `cypress/e2e/cashier_workflow_frontend_watch.cy.js`
+7. `cypress/e2e/relay_demo_postrun_ui_watch.cy.js` (cashier relay proof)
+8. `cypress/e2e/cashier_relay_down_cloud_fallback_watch.cy.js`
+9. `cypress/e2e/cashier_token_disabled_profile_smoke.cy.js` (regression)
 
 Relay UI/API sync checks expected during these runs:
 - `sa_workflow_frontend_watch.cy.js`: SA UI state aligns with token creation + relay outbox `TOKEN_CREATED` evidence
@@ -272,6 +275,9 @@ Run in headed mode (manual + Cypress helpers as available). Current status: loca
 7. Confirm dispatch queue/release-ready filtering and release action
 8. Verify relay transaction detail + dispatch events after release
 9. Confirm relay outbox `PICK_EVENT` / `RELEASE_EVENT` cloud sync completes for fresh events and cloud relay workflow state updates to `Picked` / `Released`
+
+Strict role-by-role sequence including relay proof specs after each stage now lives in:
+- `plans/pos-relay-program/runbooks/cypress_order_of_testing.md`
 
 ### 5. Optional visual relay demo sequence (Cypress + local relay pages)
 Run this when you need business-owner proof of relay local storage/status screens:

@@ -12,6 +12,7 @@
 - `README.md`
 - `runbooks/optiplex-edge-relay-next-session.md`
 - `runbooks/optiplex-fresh-codex-zero-context-handoff.md`
+- `runbooks/cypress_order_of_testing.md`
 - `runbooks/shop-pc-lan-relay-setup-non-technical.md`
 - `01-role-based-workflow-spec.md`
 - `02-master-implementation-plan.md`
@@ -20,7 +21,7 @@
 - `CHANGELOG_PROGRESS.md`
 
 ## Document Currency (Current vs Historical)
-- This is the primary handoff doc for the current branch family and is currently aligned to `codes-4.3-dispatch` (with inherited relay work from `codex-3-edge-relay`, `codex-4-picker-dispatch`, `codex-4.1-picked-dispatch-relay`, and `codex-4.2-dispatch`).
+- This is the primary handoff doc for the current branch family and is currently aligned to `codex-4.4-dispatch` (with inherited relay work from `codex-3-edge-relay`, `codex-4-picker-dispatch`, `codex-4.1-picked-dispatch-relay`, `codex-4.2-dispatch`, and `codes-4.3-dispatch`).
 - Branch progression matters:
   - `kilo-codex-v3` = baseline planning + SA/monitor rollout
   - `codex-2-cashier` = cashier filtering + cashier live UAT
@@ -29,6 +30,7 @@
   - `codex-4.1-picked-dispatch-relay` = picker/dispatch cloud sync parity fix + OptiPlex relay autostart hardening + live cloud parity validation
   - `codex-4.2-dispatch` = first dispatch monitoring/timer UI slice (queue cards + phase timeline)
   - `codes-4.3-dispatch` = local staging (`pj.local`) parity/deploy hardening + local SA->Dispatch Cypress suite + dispatch SLA sorting/timing polish
+  - `codex-4.4-dispatch` = explicit role-stage relay dashboard proof specs (SA/Cashier/Picker/Dispatch) + standardized Cypress run order docs for cloud/local handoff
 - Historical UAT docs remain branch/date-specific on purpose; do not rewrite them as generic current-state docs.
 
 ## Mission and Business Rules
@@ -42,7 +44,7 @@ Key business rules currently agreed:
 - SA-stage `sales_partner` capture is deferred and tracked as backlog.
 
 ## Current Branch and Status Snapshot
-- Current working branch: `codes-4.3-dispatch`
+- Current working branch: `codex-4.4-dispatch`
 - GitHub handoff baseline for the next OptiPlex session: `424c79a` (`docs(relay): clarify frappe cloud local-lan relay constraints`)
 - Current picker/dispatch shared-shell implementation commit: `224e842` (`feat(relay): add shared picker dispatch fulfillment workspace`)
 - Current picker/dispatch cloud-parity + OptiPlex autostart fix branch commits:
@@ -59,10 +61,15 @@ Key business rules currently agreed:
   - separate/local-labeled Cypress wrappers under `cypress/e2e/local_staging/`
   - browser runtime/console capture persisted for Cypress local staging specs (fails fast on severe local module/script runtime errors)
   - local staging `pj.local` SA->Cashier->Picker->Dispatch + supervisor + local Phase 3 guard suite rerun passing
-  - dispatch monitor UX polish:
+    - dispatch monitor UX polish:
     - SLA chips / `Over SLA` summary
     - workflow-priority queue sorting
     - stronger phase timing extraction and detail timeline monitor cards
+- Current `codex-4.4-dispatch` relay-proof test flow hardening:
+  - new picker-stage relay dashboard proof spec: `cypress/e2e/relay_demo_picker_post_ui_watch.cy.js`
+  - new dispatch-stage relay dashboard proof spec: `cypress/e2e/relay_demo_dispatch_post_ui_watch.cy.js`
+  - local-staging wrappers for all stage-proof specs under `cypress/e2e/local_staging/`
+  - standardized role-stage Cypress execution order in `runbooks/cypress_order_of_testing.md`
 - Inherited validated work:
   - `kilo-codex-v3`: SA Sales Order token flow, no-cash SA session, monitor rail foundation
   - `codex-2-cashier`: cashier `Select S.O` filtering (naming series + age), cashier live E2E coverage, token-disabled regression coverage

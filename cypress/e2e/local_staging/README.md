@@ -15,15 +15,19 @@ Recommended local end-to-end order:
 1. `local_staging_parity_smoke_watch.cy.js`
 2. `admin_set_cline_sa_only_role.cy.js`
 3. `local_staging_sa_workflow_frontend_watch.cy.js`
-4. `admin_set_cline_cashier_only_role.cy.js`
-5. `local_staging_cashier_workflow_frontend_watch.cy.js`
-6. `admin_set_cline_picker_only_role.cy.js`
-7. `local_staging_picker_workflow_frontend_watch.cy.js`
-8. `admin_set_cline_dispatch_only_role.cy.js`
-9. `local_staging_dispatch_workflow_frontend_watch.cy.js`
-10. `admin_set_cline_supervisor_only_role.cy.js` (optional)
-11. `local_staging_supervisor_fulfillment_exception_watch.cy.js` (optional)
-12. `local_staging_phase3_security_relay_role_guards_watch.cy.js`
+4. `local_staging_relay_demo_sa_post_ui_watch.cy.js`
+5. `admin_set_cline_cashier_only_role.cy.js`
+6. `local_staging_cashier_workflow_frontend_watch.cy.js`
+7. `local_staging_relay_demo_cashier_post_ui_watch.cy.js`
+8. `admin_set_cline_picker_only_role.cy.js`
+9. `local_staging_picker_workflow_frontend_watch.cy.js`
+10. `local_staging_relay_demo_picker_post_ui_watch.cy.js`
+11. `admin_set_cline_dispatch_only_role.cy.js`
+12. `local_staging_dispatch_workflow_frontend_watch.cy.js`
+13. `local_staging_relay_demo_dispatch_post_ui_watch.cy.js`
+14. `admin_set_cline_supervisor_only_role.cy.js` (optional)
+15. `local_staging_supervisor_fulfillment_exception_watch.cy.js` (optional)
+16. `local_staging_phase3_security_relay_role_guards_watch.cy.js`
 
 Recommended runner (strict timeout + post-spec scan):
 

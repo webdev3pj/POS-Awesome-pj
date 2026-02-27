@@ -23,6 +23,46 @@ Note:
 
 ---
 
+## 2026-02-27 - Role-stage relay proof specs added (SA/Cashier/Picker/Dispatch order standardized for cloud/local)
+- Branch: `codex-4.4-dispatch`
+- Summary: Added explicit relay-proof Cypress specs so each `cline` role workflow can be followed immediately by a relay dashboard/transaction validation step. Also added a single run-order document so fresh agents run the same sequence on OptiPlex for both cloud and local staging.
+- What changed:
+  - New relay proof specs:
+    - `cypress/e2e/relay_demo_picker_post_ui_watch.cy.js`
+    - `cypress/e2e/relay_demo_dispatch_post_ui_watch.cy.js`
+  - Workflow specs now emit stage artifacts used by relay proof specs:
+    - `cypress/e2e/picker_workflow_frontend_watch.cy.js` writes `cypress/tmp/latest_picker_update.json`
+    - `cypress/e2e/dispatch_workflow_frontend_watch.cy.js` writes `cypress/tmp/latest_dispatch_release.json`
+  - Local-staging wrappers added for stage proof specs:
+    - `cypress/e2e/local_staging/local_staging_relay_demo_sa_post_ui_watch.cy.js`
+    - `cypress/e2e/local_staging/local_staging_relay_demo_cashier_post_ui_watch.cy.js`
+    - `cypress/e2e/local_staging/local_staging_relay_demo_picker_post_ui_watch.cy.js`
+    - `cypress/e2e/local_staging/local_staging_relay_demo_dispatch_post_ui_watch.cy.js`
+  - New run-order handoff document:
+    - `plans/pos-relay-program/runbooks/cypress_order_of_testing.md`
+  - Runbook/start-here updates now point to the canonical order doc and current branch line:
+    - `plans/pos-relay-program/00-ai-agent-start-here.md`
+    - `plans/pos-relay-program/runbooks/optiplex-edge-relay-next-session.md`
+    - `plans/pos-relay-program/runbooks/optiplex-fresh-codex-zero-context-handoff.md`
+    - `cypress/e2e/local_staging/README.md`
+- What was verified:
+  - Cloud-dev watch-mode specs passed before this update in sequence:
+    - `admin_set_cline_sa_only_role.cy.js`
+    - `sa_workflow_frontend_watch.cy.js`
+    - `relay_demo_sa_post_ui_watch.cy.js`
+    - `admin_set_cline_cashier_only_role.cy.js`
+  - Relay health preflight on OptiPlex during this session remained `ok: true`.
+  - Full cloud role-stage rerun (cashier workflow -> picker -> dispatch with new post-stage proofs) is queued for post-deploy execution.
+- What remains:
+  - After latest cloud deploy, rerun full role-stage sequence from `runbooks/cypress_order_of_testing.md` on dev site.
+  - Publish a fresh UAT report for this exact rerun with `SAL-ORD-*` and `LSR-*` evidence from each role stage.
+- Links:
+  - `plans/pos-relay-program/runbooks/cypress_order_of_testing.md`
+  - `cypress/e2e/relay_demo_sa_post_ui_watch.cy.js`
+  - `cypress/e2e/relay_demo_postrun_ui_watch.cy.js`
+  - `cypress/e2e/relay_demo_picker_post_ui_watch.cy.js`
+  - `cypress/e2e/relay_demo_dispatch_post_ui_watch.cy.js`
+
 ## 2026-02-26 - Local staging (`pj.local`) SA->Dispatch suite restored and validated; dispatch monitor adds SLA sorting/timeline polish
 - Branch: `codes-4.3-dispatch`
 - Summary: Fixed the local Docker staging deploy/runtime mismatches so `pj.local:8080/app/posapp` renders the real POS UI again and local SA/Cashier/Picker/Dispatch/Supervisor flows pass under Cypress. Also improved dispatch monitoring UX (SLA emphasis, queue sorting, richer phase timing) and added stronger browser runtime error capture so local module/script regressions fail fast with artifacts instead of looking like generic UI assertion failures.
