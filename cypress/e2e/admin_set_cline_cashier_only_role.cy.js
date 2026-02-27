@@ -122,17 +122,6 @@ function loginWithOtp() {
 
   cy.clearCookies();
   cy.clearLocalStorage();
-  cy.visit("/login");
-
-  typeIntoFirstAvailable(
-    ["#login_email", "input[name='usr']", "input[name='login_email']", "input[type='email']"],
-    username
-  );
-  typeIntoFirstAvailable(["#login_password", "input[name='pwd']", "input[type='password']"], password, {
-    log: false,
-  });
-  clickLoginSubmitNearPassword();
-
   const maybeCompleteOtp = () => {
     cy.wait(1500);
     return cy.get("body", { timeout: 30000 }).then(($body) => {
@@ -148,7 +137,20 @@ function loginWithOtp() {
     });
   };
 
-  maybeCompleteOtp();
+  const runLoginRound = () => {
+    typeIntoFirstAvailable(
+      ["#login_email", "input[name='usr']", "input[name='login_email']", "input[type='email']"],
+      username
+    );
+    typeIntoFirstAvailable(["#login_password", "input[name='pwd']", "input[type='password']"], password, {
+      log: false,
+    });
+    clickLoginSubmitNearPassword();
+    return maybeCompleteOtp();
+  };
+
+  cy.visit("/login");
+  runLoginRound();
 
   cy.location("pathname", { timeout: 5000 }).then((pathname) => {
     if (/^\/app(\/|$)/.test(String(pathname || ""))) return;
@@ -170,6 +172,13 @@ function loginWithOtp() {
       clickLoginSubmitNearPassword();
       maybeCompleteOtp();
     });
+  });
+
+  cy.location("pathname", { timeout: 10000 }).then((pathname) => {
+    if (/^\/app(\/|$)/.test(String(pathname || ""))) return;
+    cy.log("Still on login after in-page retry; doing one full login round from fresh /login.");
+    cy.visit("/login");
+    runLoginRound();
   });
 
   cy.location("pathname", { timeout: 90000 }).should("match", /^\/app(\/|$)/);

@@ -127,18 +127,60 @@ function loginWithOtp() {
   cy.location("pathname", { timeout: 90000 }).should("match", /^\/app(\/|$)/);
 }
 
-function frappeCall(method, args, options = {}) {
-  const timeout = Number(options.timeout || 60000);
-  return cy.window({ timeout: 30000 }).then({ timeout }, (win) => {
-    return new Cypress.Promise((resolve, reject) => {
-      win.frappe.call({
-        method,
-        args: args || {},
-        callback: (r) => resolve(r),
-        error: (err) => reject(err),
+function _frappeCallOnce(method, args, timeoutMs) {
+  return cy.window({ timeout: 30000 }).then(() => {
+    return cy.window({ timeout: 30000 }).then((win) => {
+      return new Cypress.Promise((resolve, reject) => {
+        let settled = false;
+        const timeoutHandle = setTimeout(() => {
+          if (settled) return;
+          settled = true;
+          reject(new Error(`frappe.call timeout for method: ${method}`));
+        }, Math.max(1000, Number(timeoutMs || 60000)));
+
+        const finish = (fn, value) => {
+          if (settled) return;
+          settled = true;
+          clearTimeout(timeoutHandle);
+          fn(value);
+        };
+
+        try {
+          win.frappe.call({
+            method,
+            args: args || {},
+            callback: (r) => finish(resolve, r),
+            error: (err) => finish(reject, err),
+          });
+        } catch (err) {
+          finish(reject, err);
+        }
       });
     });
   });
+}
+
+function frappeCall(method, args, options = {}) {
+  const timeout = Number(options.timeout || 60000);
+  const retries = Number(options.retries || 1);
+
+  const attempt = (retryIndex = 0) => {
+    return cy.then(() => _frappeCallOnce(method, args, timeout)).then(
+      (resp) => resp,
+      (err) => {
+        if (retryIndex >= retries) throw err;
+        cy.log(
+          `frappe.call retry ${retryIndex + 1}/${retries} for ${method} after error: ${String(
+            (err && err.message) || err || ""
+          ).slice(0, 160)}`
+        );
+        cy.wait(1500);
+        return attempt(retryIndex + 1);
+      }
+    );
+  };
+
+  return attempt(0);
 }
 
 function parseLabelFromOtpUri(uri) {
