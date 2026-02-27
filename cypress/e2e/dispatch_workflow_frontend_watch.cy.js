@@ -304,6 +304,15 @@ describe("Dispatch workflow (watch mode)", () => {
         const latestDispatch = [...(releasedResp.body.dispatch_events || [])].pop();
         expect(latestDispatch, "dispatch event created").to.be.an("object");
         expect(String(latestDispatch.event_type || ""), "dispatch event type").to.eq("RELEASED");
+        cy.writeFile("cypress/tmp/latest_dispatch_release.json", {
+          local_sale_ref: targetLocalSaleRef,
+          dispatch_status: String(sale.dispatch_status || ""),
+          pick_status: String(sale.pick_status || ""),
+          cloud_sync_status: String(sale.cloud_sync_status || ""),
+          released_by: String(sale.released_by || ""),
+          released_at: String(sale.released_at || ""),
+          dispatch_event_type: String(latestDispatch.event_type || ""),
+        });
         cy.get("body").should("contain.text", "RELEASED");
         cy.log(`Dispatch released ${targetLocalSaleRef}`);
       });

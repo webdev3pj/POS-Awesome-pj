@@ -353,6 +353,13 @@ describe("Picker workflow (watch mode)", () => {
         expect(String(latestPick.event_type || "")).to.eq("PICK_IN_PROGRESS");
         expect(Array.isArray(latestPick.payload && latestPick.payload.line_updates)).to.eq(true);
         cy.get("body").should("contain.text", "PICK_IN_PROGRESS");
+        cy.writeFile("cypress/tmp/latest_picker_update.json", {
+          local_sale_ref: targetLocalSaleRef,
+          first_line_id: firstLineId,
+          picked_qty: editedPickedQty,
+          pick_status: String(body.sale.pick_status || ""),
+          event_type: String(latestPick.event_type || ""),
+        });
       })
       .then(() => {
         cy.writeFile("cypress/tmp/picker_dispatch_target.json", {
@@ -369,6 +376,14 @@ describe("Picker workflow (watch mode)", () => {
         expect(readyResp.status).to.eq(200);
         const sale = readyResp.body && readyResp.body.sale ? readyResp.body.sale : {};
         expect(String(sale.pick_status || ""), "relay sale pick_status after ready").to.eq("PICKED_READY_FOR_RELEASE");
+        cy.writeFile("cypress/tmp/latest_picker_update.json", {
+          local_sale_ref: targetLocalSaleRef,
+          first_line_id: firstLineId,
+          picked_qty: editedPickedQty,
+          pick_status: String(sale.pick_status || ""),
+          dispatch_status: String(sale.dispatch_status || ""),
+          cloud_sync_status: String(sale.cloud_sync_status || ""),
+        });
         cy.get("body").should("contain.text", "PICKED_READY_FOR_RELEASE");
         cy.log(`Picker marked ready: ${targetLocalSaleRef}`);
       });
