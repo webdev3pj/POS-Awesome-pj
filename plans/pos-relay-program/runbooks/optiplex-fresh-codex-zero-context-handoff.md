@@ -4,10 +4,10 @@
 - This is the handoff document for a brand-new Codex session on the OptiPlex with no prior chat context.
 - It includes the exact branch, baseline commit, what is already working, what still needs to be built, and the exact order to work in.
 - It also explains how to handle secrets safely: copy local `.env` and relay config files, but do not commit them.
-- Main target (updated): build on the now-working relay-enabled SA + Cashier flow and the now cloud-parity-validated Picker/Dispatch fulfillment flow (add auth hardening, finalize rollout support, and keep UAT repeatable), or rerun demos/UAT after new changes.
+- Main target (updated): build on the now-complete cloud+local role-stage reruns and move into explicit cloud-off continuity proof plus dispatch timing analytics.
 
 ## Current Branch / Baseline
-- Working branch (current): `codex-4.4-dispatch`
+- Working branch (current): `codex-5-final`
 - GitHub baseline commit for this handoff: `424c79a`
 - Baseline commit message: `docs(relay): clarify frappe cloud local-lan relay constraints`
 
@@ -74,10 +74,10 @@
 - Fulfillment-role relay/cloud top-bar status chips are now live-rerun validated against actual relay API behavior on the dev site after navbar relay-status sync fixes (`ce5f84d`, `6cf64aa`)
 
 ## What Is Not Finished (Next Build Targets)
-- Complete the remaining full live rerun/negative validation for the new Phase 3 baseline relay/client-key and server-side role guards on the current deployed build (SA/Cashier + fallback + security spec slice)
-- Live-validate `df1ac0c` offline continuity fallback behavior (relay token/monitor/SO fallback paths), including a local `pj.local:8080` true cloud-off exercise
-- Finalize remaining Phase 3 hardening (audit/reason enforcement coverage, stricter auth rollout policy)
-- Start dispatch monitoring/timing-first UX and relay timing instrumentation (phase-duration visibility / optimization data)
+- Execute explicit cloud-off continuity UAT end-to-end (SA -> Cashier -> Picker -> Dispatch) while relay remains reachable
+- Verify token/SO visibility and status propagation across all role screens when cloud is unavailable
+- Finalize remaining Phase 3 hardening policy details (audit/reason coverage and stricter auth rollout decisions)
+- Extend dispatch timing instrumentation into persistence/reporting for business optimization analysis
 - Shop-PC certificate trust rollout on non-OptiPlex devices (SA/Cashier/Picker/Dispatch PCs)
 - Cleanup/classification of historical queued outbox failure rows (older pre-fix smoke/UAT artifacts)
 
@@ -90,7 +90,7 @@
 ## Local-Only Secrets Pack (What must exist on the OptiPlex)
 ### 1. Cypress secrets (`.env` in repo root)
 File (local only, do not commit):
-- `I:\vscode repos\POS-Awesome-pj\.env`
+- `C:\vs code repos\POS-Awesome-pj\.env`
 
 Exact env vars required by `cypress.config.cjs`:
 ```dotenv
@@ -138,7 +138,7 @@ plans/pos-relay-program/runbooks/optiplex-edge-relay-next-session.md
 Then open:
 plans/pos-relay-program/runbooks/optiplex-fresh-codex-zero-context-handoff.md
 
-Work only on branch codex-4.4-dispatch (unless explicitly told to hotfix an older branch).
+Work only on branch codex-5-final (unless explicitly told to hotfix an older branch).
 Baseline GitHub commit for this handoff is 424c79a (historical relay LAN-only baseline reference).
 
 Current verified status:
@@ -192,21 +192,21 @@ Set/verify on the dev site:
 - Shared-shell Picker/Dispatch fulfillment workspace deployed and relay-local UAT validated (line-wise pick persistence + dispatch release)
 
 ### Next priorities
-1. Finish Phase 3 live validation rerun on deployed `0b8f772` + `6767d0f` (strict Cypress timeouts + UI-vs-actual relay assertions)
+1. Run explicit cloud-off continuity UAT for full role chain (SA -> Cashier -> Picker -> Dispatch) with relay evidence after each role stage
 2. Rollout/ops hardening (shop PC trust rollout, support checklists, historical queue cleanup)
-3. Expand fulfillment UAT coverage for supervisor/exception paths
+3. Expand dispatch phase timing instrumentation into persisted analytics/reporting
 4. Simplify picker default UX path while keeping line-item editing for exceptions/wire/UOM cases
 
 ## Cypress Run Order (Watch Mode, Chrome)
 Preferred on OptiPlex (visible Chrome, strict timeout, one spec at a time):
 ```powershell
-Set-Location 'I:\vscode repos\POS-Awesome-pj'
+Set-Location 'C:\vs code repos\POS-Awesome-pj'
 & 'C:\Program Files\nodejs\node.exe' scripts\cypress-gui-watch.cjs --once --browser chrome --spec cypress/e2e/<spec>.cy.js
 ```
 
 Alternative (manual Cypress runner UI):
 ```powershell
-Set-Location 'I:\vscode repos\POS-Awesome-pj'
+Set-Location 'C:\vs code repos\POS-Awesome-pj'
 npm.cmd run e2e:open
 ```
 
@@ -247,3 +247,4 @@ Relay visual demo add-on (optional, local relay pages in Cypress):
 - `../00-ai-agent-start-here.md`
 - `../03-offline-edge-relay-and-windows-service-spec.md`
 - `../CHANGELOG_PROGRESS.md`
+

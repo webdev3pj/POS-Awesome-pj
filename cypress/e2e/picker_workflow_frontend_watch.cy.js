@@ -375,17 +375,26 @@ describe("Picker workflow (watch mode)", () => {
       .then((readyResp) => {
         expect(readyResp.status).to.eq(200);
         const sale = readyResp.body && readyResp.body.sale ? readyResp.body.sale : {};
+        const readyLines = Array.isArray(readyResp.body && readyResp.body.lines) ? readyResp.body.lines : [];
+        const readyLine = readyLines.find((line) => Number(line && line.id) === firstLineId) || null;
+        const readyPickedQty = Number(
+          readyLine &&
+            readyLine.payload &&
+            readyLine.payload.picker &&
+            readyLine.payload.picker.picked_qty
+        );
+        const persistedPickedQty = Number.isFinite(readyPickedQty) && readyPickedQty > 0 ? readyPickedQty : editedPickedQty;
         expect(String(sale.pick_status || ""), "relay sale pick_status after ready").to.eq("PICKED_READY_FOR_RELEASE");
         cy.writeFile("cypress/tmp/latest_picker_update.json", {
           local_sale_ref: targetLocalSaleRef,
           first_line_id: firstLineId,
-          picked_qty: editedPickedQty,
+          picked_qty: persistedPickedQty,
           pick_status: String(sale.pick_status || ""),
           dispatch_status: String(sale.dispatch_status || ""),
           cloud_sync_status: String(sale.cloud_sync_status || ""),
         });
         cy.get("body").should("contain.text", "PICKED_READY_FOR_RELEASE");
-        cy.log(`Picker marked ready: ${targetLocalSaleRef}`);
+        cy.log(`Picker marked ready: ${targetLocalSaleRef} (picked_qty=${persistedPickedQty})`);
       });
   });
 });

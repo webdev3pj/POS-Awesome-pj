@@ -53,6 +53,17 @@ Optional hardening:
 14. `cypress/e2e/admin_set_cline_supervisor_only_role.cy.js`
 15. `cypress/e2e/supervisor_fulfillment_exception_watch.cy.js`
 16. `cypress/e2e/phase3_security_relay_role_guards_watch.cy.js`
+17. `cypress/e2e/ui_shell_chrome_role_consistency.cy.js`
+
+Supervisor reseed rule (important):
+- If step 15 fails with `pending unreleased queue row: expected undefined to be an object`, the queue was already fully released by dispatch.
+- Reseed before re-running step 15:
+  1. `cypress/e2e/admin_set_cline_sa_only_role.cy.js`
+  2. `cypress/e2e/sa_workflow_frontend_watch.cy.js`
+  3. `cypress/e2e/admin_set_cline_cashier_only_role.cy.js`
+  4. `cypress/e2e/cashier_workflow_frontend_watch.cy.js`
+  5. `cypress/e2e/admin_set_cline_supervisor_only_role.cy.js`
+  6. `cypress/e2e/supervisor_fulfillment_exception_watch.cy.js`
 
 ## Local Staging Order (`http://pj.local:8080/`)
 Set once before the run:
@@ -79,6 +90,16 @@ Optional hardening:
 14. `cypress/e2e/admin_set_cline_supervisor_only_role.cy.js`
 15. `cypress/e2e/local_staging/local_staging_supervisor_fulfillment_exception_watch.cy.js`
 16. `cypress/e2e/local_staging/local_staging_phase3_security_relay_role_guards_watch.cy.js`
+
+Supervisor reseed rule (important):
+- If step 15 fails with `pending unreleased queue row: expected undefined to be an object`, the queue was already fully released by dispatch.
+- Reseed before re-running step 15:
+  1. `cypress/e2e/admin_set_cline_sa_only_role.cy.js`
+  2. `cypress/e2e/local_staging/local_staging_sa_workflow_frontend_watch.cy.js`
+  3. `cypress/e2e/admin_set_cline_cashier_only_role.cy.js`
+  4. `cypress/e2e/local_staging/local_staging_cashier_workflow_frontend_watch.cy.js`
+  5. `cypress/e2e/admin_set_cline_supervisor_only_role.cy.js`
+  6. `cypress/e2e/local_staging/local_staging_supervisor_fulfillment_exception_watch.cy.js`
 
 ## Stage Evidence Files (produced by specs)
 - SA: `cypress/tmp/latest_sa_order.json`

@@ -3,7 +3,7 @@
 ## TL;DR (Business Owner)
 - This is the first file to open on the OptiPlex machine.
 - It tells a new AI agent exactly what branch to use, how to start the Edge Relay locally, what to configure in `PJ7 CASHIER`, and what tests to run.
-- Relay-enabled SA + Cashier flow is already proven on the OptiPlex/dev site, and Picker/Dispatch relay-first flow (including cloud fulfillment sync parity) is now proven on `codex-4.1-picked-dispatch-relay`; next sessions should build on that proof (auth hardening, rollout), or rerun demos/UAT when validating new changes.
+- Relay-enabled SA + Cashier flow is already proven on the OptiPlex/dev site, and Picker/Dispatch relay-first flow (including cloud fulfillment sync parity) is proven and rerun-validated through `codex-5-final`; next sessions should build on that proof (cloud-off continuity + analytics), or rerun demos/UAT when validating new changes.
 - Local relay core endpoints are already smoke-tested and the relay-host runbook process is established from `codex-3-edge-relay` forward.
 - For a completely fresh Codex session, also open `optiplex-fresh-codex-zero-context-handoff.md`.
 
@@ -18,7 +18,7 @@ Provide a zero-context startup guide for a new AI coding agent session on the Op
 
 ## Branch and Starting Point
 - Repo: `POS-Awesome-pj`
-- Branch to use (current): `codex-4.4-dispatch`
+- Branch to use (current): `codex-5-final`
 - GitHub baseline commit for this handoff/runbook: `424c79a`
 - Current relay-focused branch status:
   - SA + Cashier browser flows are already validated in cloud/non-relay-missing scenarios on `codex-2-cashier`
@@ -35,6 +35,10 @@ Provide a zero-context startup guide for a new AI coding agent session on the Op
     - separate local-staging Cypress suite under `cypress/e2e/local_staging/`
     - local SA->Cashier->Picker->Dispatch + supervisor + local relay-guard specs passing on `pj.local`
     - dispatch monitor SLA sorting/timing/detail-panel polish validated locally
+  - `codex-5-final` completes strict reruns on both cloud and local:
+    - SA -> Cashier -> Picker -> Dispatch role-stage suites with relay proof specs after each stage
+    - supervisor exception and phase3 security reruns
+    - Cypress hardening fixes for cashier fallback, picker final persisted qty proof, and long UI-shell role-consistency timeout stability
   - local relay HTTP smoke (`/health`, `/relay/session/open`, `/relay/token/create`, `/relay/commit-invoice`) passed
   - headed Cypress relay demo proof completed:
     - SA token/SO `SAL-ORD-PJ7-2026-00009`
@@ -62,7 +66,7 @@ Provide a zero-context startup guide for a new AI coding agent session on the Op
 ## Local-Only Secrets Pack (Required Before Cypress)
 ### Repo root `.env` (copy from main machine, do not commit)
 File:
-- `I:\vscode repos\POS-Awesome-pj\.env`
+- `C:\vs code repos\POS-Awesome-pj\.env`
 
 Exact keys required by `cypress.config.cjs`:
 ```dotenv
@@ -114,7 +118,7 @@ What it should do:
 ### Option B (manual, PowerShell)
 From repo root:
 ```powershell
-Set-Location 'I:\vscode repos\POS-Awesome-pj\relay'
+Set-Location 'C:\vs code repos\POS-Awesome-pj\relay'
 python -m venv .venv
 .\.venv\Scripts\python -m pip install -r requirements.txt
 .\.venv\Scripts\python -m relay.app
@@ -122,7 +126,7 @@ python -m venv .venv
 
 If `.venv` already exists:
 ```powershell
-Set-Location 'I:\vscode repos\POS-Awesome-pj\relay'
+Set-Location 'C:\vs code repos\POS-Awesome-pj\relay'
 .\.venv\Scripts\python -m relay.app
 ```
 
@@ -200,10 +204,14 @@ Fallback (not preferred for this workflow):
   - shared-shell Picker/Dispatch fulfillment workspace loads in POS Awesome for fulfillment roles
   - picker line-wise pick updates persist to relay line payloads (`payload.picker`) with UOM/conversion metadata
   - dispatch release updates relay local sale and dispatch events
+- Completed on `codex-5-final`:
+  - strict cloud + local staging rerun matrix is complete with watch-mode Cypress and hard timeouts
+  - relay dashboard/transaction proof specs are passing after every role-stage workflow
+  - UI-shell cross-role consistency spec is stable after timeout hardening
 - Next recommended work:
-  - Deploy `codes-4.3-dispatch` to cloud dev site and rerun dispatch/supervisor on cloud before continuing feature work
-  - Finish the remaining Phase 3 regression/security rerun slice (SA/Cashier + fallback + relay-guard spec) on the latest deployed build using strict Cypress timeouts + UI-vs-actual relay assertions
-  - Live-validate `df1ac0c` offline continuity fallback behavior (cloud site first, then `pj.local:8080` for true cloud-off simulation)
+  - Execute dedicated cloud-off continuity UAT across SA -> Cashier -> Picker -> Dispatch while relay remains reachable
+  - Capture relay-only evidence for token visibility, SO retrieval, cashier submit behavior, and fulfillment status propagation under cloud outage
+  - Expand dispatch timing/phase analytics persistence and reporting
   - Start dispatch monitoring/timing-first UX and relay phase timing instrumentation (business optimization focus)
   - Simplify picker default UX path (order-level actions first) while keeping line-item editing available for exceptions/wire/UOM cases
   - shop-PC certificate trust rollout and support docs cleanup
@@ -226,13 +234,13 @@ Do this before opening POS.
 ### 2. Run Cypress in watch mode (Chrome)
 Preferred on OptiPlex (visible Chrome, one spec at a time):
 ```powershell
-Set-Location 'I:\vscode repos\POS-Awesome-pj'
+Set-Location 'C:\vs code repos\POS-Awesome-pj'
 & 'C:\Program Files\nodejs\node.exe' scripts\cypress-gui-watch.cjs --once --browser chrome --spec cypress/e2e/<spec>.cy.js
 ```
 
 Alternative (manual Cypress runner UI):
 ```powershell
-Set-Location 'I:\vscode repos\POS-Awesome-pj'
+Set-Location 'C:\vs code repos\POS-Awesome-pj'
 npm.cmd run e2e:open
 ```
 Choose `Chrome`.
@@ -261,7 +269,7 @@ Relay UI/API sync checks expected during these runs:
 - `cashier_workflow_frontend_watch.cy.js`: relay UI chip/banner state aligns with relay `/health`, `SESSION_OPEN`, `SALE_COMMITTED`, and local sale/outbox evidence
 - `cashier_relay_down_cloud_fallback_watch.cy.js`: relay-down UI state is intentional and must match the relay-down simulation
 
-### 4. Picker/Dispatch validation sequence (after deploying fulfillment/auth changes on `codex-4.1-picked-dispatch-relay`)
+### 4. Picker/Dispatch validation sequence (after deploying fulfillment/auth changes on `codex-5-final` or descendants)
 Run in headed mode (manual + Cypress helpers as available). Current status: local relay persistence and cloud parity for fresh fulfillment events are validated; use this sequence after UI/auth/backend changes:
 1. Set `cline` role to `Picker` and open POS
 2. Confirm shared-shell fulfillment panel loads (not cashier cart/payment layout)
@@ -296,7 +304,7 @@ Run this when you need business-owner proof of relay local storage/status screen
 - Watch relay dashboard `/` `Outbox Counters (v2 Local-First)` and `Transaction Timeline (Local Sales)` for SA/Cashier local-first activity
 - For Picker/Dispatch, watch relay transaction detail + outbox rows (`PICK_EVENT`, `RELEASE_EVENT`) and distinguish:
   - local relay status success (expected)
-  - cloud sync completion for fresh events (expected after `codex-4.1-picked-dispatch-relay`)
+  - cloud sync completion for fresh events (expected after the `codex-4.1-picked-dispatch-relay` parity fixes and retained in `codex-5-final`)
 - Historical outbox rows from pre-fix runs may still show old `500`/`417` errors; use fresh timestamps/local refs when validating.
 - Remember `/queue` is the legacy queue UI and may remain idle while v2 outbox/transaction views update
 
@@ -397,3 +405,4 @@ This now uses an isolated temp DB per test and should not fail due to stale loca
 - `./shop-pc-lan-relay-setup-non-technical.md`
 - `../uat/2026-02-23-local-edge-relay-smoke.md`
 - `../../../relay/README.md`
+

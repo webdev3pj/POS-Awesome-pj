@@ -23,6 +23,44 @@ Note:
 
 ---
 
+## 2026-02-27 - codex-5-final cloud/local full rerun completed; Cypress hardening fixes for cashier fallback, picker proof, and UI-shell timeout flake
+- Branch: `codex-5-final`
+- Summary: Completed a strict watch-mode rerun on both `devpjjamaica` (cloud) and `pj.local` (local staging) across SA -> Cashier -> Picker -> Dispatch with relay proof specs after each stage. Fixed three Cypress reliability issues found during rerun: cashier fallback item-loading flake, picker post-proof quantity mismatch after `Mark All Picked`, and a long-running UI-shell role-consistency timeout caused by `cy.then` default timeout behavior.
+- What changed:
+  - Cypress spec hardening:
+    - `cypress/e2e/cashier_relay_down_cloud_fallback_watch.cy.js`
+      - tolerant handling for intermittent/cached `get_items` intercept responses
+      - row/card retry logic for selecting first sellable item
+      - fallback path to load a Sales Order into cart via `Select S.O` when item grid is empty
+    - `cypress/e2e/picker_workflow_frontend_watch.cy.js`
+      - writes final persisted `picked_qty` from relay transaction detail after `Mark All Picked` / ready-state transition
+      - prevents stale `latest_picker_update.json` values from mismatching relay post-proof checks
+    - `cypress/e2e/ui_shell_chrome_role_consistency.cy.js`
+      - explicit long timeouts added around long `frappe.call` chains
+      - `_frappeCallOnce` rewritten to use single `.then({ timeout: ... })` call path so inner promise is not constrained by default 15s `cy.then` timeout
+  - Test process clarifications:
+    - supervisor exception spec requires a fresh pending unreleased queue row; if dispatch already released everything, reseed with new SA + cashier transaction before running supervisor exception
+- What was verified:
+  - Local relay preflight remained healthy throughout:
+    - `http://127.0.0.1:8787/health` -> `ok: true`
+  - Local staging (`http://pj.local:8080/`) strict watch-mode rerun:
+    - full SA -> Cashier -> Picker -> Dispatch role stage sequence with relay proof specs after each role stage: pass
+    - supervisor exception + local phase3 security spec: pass (after reseeding pending row)
+  - Cloud dev site (`https://devpjjamaica.v.frappe.cloud/`) strict watch-mode rerun:
+    - admin config + SA/Cashier/Picker/Dispatch + relay proof specs + fallback + token-disabled + phase3 security: pass
+    - supervisor exception: pass after reseeding pending row
+    - UI shell role consistency spec: pass after timeout/helper fix
+- What remains:
+  - Offline full-chain proof with deliberate cloud outage across all roles (SA -> cashier -> picker -> dispatch) still needs dedicated execution and UAT write-up
+  - Dispatch timing analytics expansion (phase duration extraction/persistence and analysis-ready reporting) remains active product work
+  - Telegram worker branch-creation policy fixes remain deferred to separate task stream
+- Links:
+  - `plans/pos-relay-program/runbooks/cypress_order_of_testing.md`
+  - `plans/pos-relay-program/uat/2026-02-27-codex-5-final-cloud-and-local-role-stage-rerun.md`
+  - `cypress/e2e/cashier_relay_down_cloud_fallback_watch.cy.js`
+  - `cypress/e2e/picker_workflow_frontend_watch.cy.js`
+  - `cypress/e2e/ui_shell_chrome_role_consistency.cy.js`
+
 ## 2026-02-27 - Role-stage relay proof specs added (SA/Cashier/Picker/Dispatch order standardized for cloud/local)
 - Branch: `codex-4.4-dispatch`
 - Summary: Added explicit relay-proof Cypress specs so each `cline` role workflow can be followed immediately by a relay dashboard/transaction validation step. Also added a single run-order document so fresh agents run the same sequence on OptiPlex for both cloud and local staging.

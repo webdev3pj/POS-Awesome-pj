@@ -128,34 +128,34 @@ function loginWithOtp() {
 }
 
 function _frappeCallOnce(method, args, timeoutMs) {
-  return cy.window({ timeout: 30000 }).then(() => {
-    return cy.window({ timeout: 30000 }).then((win) => {
-      return new Cypress.Promise((resolve, reject) => {
-        let settled = false;
-        const timeoutHandle = setTimeout(() => {
-          if (settled) return;
-          settled = true;
-          reject(new Error(`frappe.call timeout for method: ${method}`));
-        }, Math.max(1000, Number(timeoutMs || 60000)));
+  const callTimeout = Math.max(1000, Number(timeoutMs || 60000));
+  const thenTimeout = callTimeout + 5000;
+  return cy.window({ timeout: 30000 }).then({ timeout: thenTimeout }, (win) => {
+    return new Cypress.Promise((resolve, reject) => {
+      let settled = false;
+      const timeoutHandle = setTimeout(() => {
+        if (settled) return;
+        settled = true;
+        reject(new Error(`frappe.call timeout for method: ${method}`));
+      }, callTimeout);
 
-        const finish = (fn, value) => {
-          if (settled) return;
-          settled = true;
-          clearTimeout(timeoutHandle);
-          fn(value);
-        };
+      const finish = (fn, value) => {
+        if (settled) return;
+        settled = true;
+        clearTimeout(timeoutHandle);
+        fn(value);
+      };
 
-        try {
-          win.frappe.call({
-            method,
-            args: args || {},
-            callback: (r) => finish(resolve, r),
-            error: (err) => finish(reject, err),
-          });
-        } catch (err) {
-          finish(reject, err);
-        }
-      });
+      try {
+        win.frappe.call({
+          method,
+          args: args || {},
+          callback: (r) => finish(resolve, r),
+          error: (err) => finish(reject, err),
+        });
+      } catch (err) {
+        finish(reject, err);
+      }
     });
   });
 }
@@ -163,9 +163,10 @@ function _frappeCallOnce(method, args, timeoutMs) {
 function frappeCall(method, args, options = {}) {
   const timeout = Number(options.timeout || 60000);
   const retries = Number(options.retries || 1);
+  const thenTimeout = Math.max(15000, timeout + 5000);
 
   const attempt = (retryIndex = 0) => {
-    return cy.then(() => _frappeCallOnce(method, args, timeout)).then(
+    return cy.then({ timeout: thenTimeout }, () => _frappeCallOnce(method, args, timeout)).then(
       (resp) => resp,
       (err) => {
         if (retryIndex >= retries) throw err;
@@ -327,11 +328,13 @@ describe("UI shell consistency: ERPNext chrome hidden for all cline roles", () =
     loginWithOtp();
     cy.visit("/app");
 
-    frappeCall("frappe.client.get_list", {
-      doctype: "Role",
-      fields: ["name"],
-      limit_page_length: 1000,
-    }).then((roleResp) => {
+    cy.then({ timeout: 240000 }, () =>
+      frappeCall("frappe.client.get_list", {
+        doctype: "Role",
+        fields: ["name"],
+        limit_page_length: 1000,
+      })
+    ).then((roleResp) => {
       const roleRows = Array.isArray(roleResp && roleResp.message) ? roleResp.message : [];
       const roleNames = roleRows.map((r) => String((r && r.name) || "").trim()).filter(Boolean);
       const clineRoles = roleNames.filter((name) => name.startsWith("cline-"));
@@ -346,12 +349,14 @@ describe("UI shell consistency: ERPNext chrome hidden for all cline roles", () =
       });
     });
 
-    frappeCall("frappe.client.get_list", {
-      doctype: "User",
-      fields: ["name", "email", "username", "enabled"],
-      limit_page_length: 200,
-      filters: { enabled: 1 },
-    }).then((resp) => {
+    cy.then({ timeout: 240000 }, () =>
+      frappeCall("frappe.client.get_list", {
+        doctype: "User",
+        fields: ["name", "email", "username", "enabled"],
+        limit_page_length: 200,
+        filters: { enabled: 1 },
+      })
+    ).then((resp) => {
       const users = Array.isArray(resp && resp.message) ? resp.message : [];
       const candidates = [
         explicitUserDocname,
@@ -380,7 +385,7 @@ describe("UI shell consistency: ERPNext chrome hidden for all cline roles", () =
     const roleOrder = ["sa", "cashier", "picker", "dispatch", "supervisor"];
     const snapshots = [];
     roleOrder.forEach((roleKey) => {
-      cy.then(() =>
+      cy.then({ timeout: 240000 }, () =>
         frappeCall("frappe.client.get", {
           doctype: "User",
           name: targetUserDocname,
@@ -409,13 +414,15 @@ describe("UI shell consistency: ERPNext chrome hidden for all cline roles", () =
             });
           }
 
-          return frappeCall("frappe.client.save", {
-            doc: {
-              ...doc,
-              roles: rebuiltRoles,
-              __unsaved: 1,
-            },
-          });
+          return cy.then({ timeout: 240000 }, () =>
+            frappeCall("frappe.client.save", {
+              doc: {
+                ...doc,
+                roles: rebuiltRoles,
+                __unsaved: 1,
+              },
+            })
+          );
         })
         .then((saveResp) => {
           const saved = saveResp && saveResp.message ? saveResp.message : null;

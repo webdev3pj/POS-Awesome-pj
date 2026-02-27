@@ -22,7 +22,7 @@
 - `CHANGELOG_PROGRESS.md`
 
 ## Document Currency
-- This is the current offline/relay reference for the active branch family and is aligned through `codex-4.1-picked-dispatch-relay` (inherits `codex-3-edge-relay` LAN-only/fallback work, `codex-4-picker-dispatch` fulfillment workspace work, and `codex-4.1` picker/dispatch cloud sync parity + OptiPlex autostart hardening).
+- This is the current offline/relay reference for the active branch family and is aligned through `codex-5-final` (inherits `codex-3-edge-relay` LAN-only/fallback work, `codex-4-picker-dispatch` fulfillment workspace work, `codex-4.1` picker/dispatch cloud sync parity + OptiPlex autostart hardening, `codes-4.3` local staging parity hardening, and `codex-5-final` strict cloud/local rerun completion).
 - Some sections describe target-state service packaging/security that is still planned (especially Phase 3/Phase 4+ items).
 - For the latest verified relay behavior, use:
   - `CHANGELOG_PROGRESS.md`
@@ -51,6 +51,14 @@
   - optional relay client auth header plumbing (`X-Relay-Client-Key`) exists
   - server-side role checks for key workflow APIs are implemented
   - full live regression/negative coverage and rollout hardening are still pending
+- Current implemented state on `codex-5-final` (verified 2026-02-27):
+  - strict watch-mode reruns (cloud + local staging) for SA/Cashier/Picker/Dispatch relay role-stage proofs are complete
+  - supervisor exception and phase3 guard specs were rerun with strict timeout discipline
+  - Cypress hardening fixes landed for:
+    - cashier relay-down fallback item/SO loading resilience
+    - picker final persisted qty relay-proof consistency after `Mark All Picked`
+    - long UI-shell role-consistency spec timeout stability on cloud
+  - dedicated cloud-off full-chain role continuity proof remains the next explicit UAT target
 
 ## Purpose
 Define the offline continuity design and operations model for the Edge Relay, including:
