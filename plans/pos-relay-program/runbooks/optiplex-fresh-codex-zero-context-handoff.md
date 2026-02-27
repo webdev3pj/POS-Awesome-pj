@@ -237,6 +237,7 @@ Relay visual demo add-on (optional, local relay pages in Cypress):
 - `plans/pos-relay-program/03-offline-edge-relay-and-windows-service-spec.md`
 - `plans/pos-relay-program/runbooks/optiplex-edge-relay-next-session.md`
 - `plans/pos-relay-program/runbooks/shop-pc-lan-relay-setup-non-technical.md`
+- `plans/pos-relay-program/runbooks/new-shop-one-click-setup.md`
 - `plans/pos-relay-program/uat/<date>-*.md`
 - relevant phase docs touched by actual implementation/testing
 
@@ -244,6 +245,7 @@ Relay visual demo add-on (optional, local relay pages in Cypress):
 - `optiplex-edge-relay-next-session.md`
 - `cypress_order_of_testing.md`
 - `shop-pc-lan-relay-setup-non-technical.md`
+- `new-shop-one-click-setup.md`
 - `../00-ai-agent-start-here.md`
 - `../03-offline-edge-relay-and-windows-service-spec.md`
 - `../CHANGELOG_PROGRESS.md`

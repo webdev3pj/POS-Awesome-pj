@@ -23,6 +23,29 @@ Note:
 
 ---
 
+## 2026-02-27 - One-click new-shop onboarding automation added (multi-profile + PC package)
+- Branch: `codex-5-final`
+- Summary: Added an owner-friendly one-click onboarding flow that configures multiple POS Profiles on the site, runs relay preflight checks, and generates a ready-to-share shop-PC installer package.
+- What changed:
+  - Added new onboarding script:
+    - `scripts/shop-onboarding/one_click_new_shop_setup.ps1`
+  - Added one-click launcher:
+    - `scripts/shop-onboarding/ONE-CLICK-NEW-SHOP-SETUP.bat`
+  - Added editable config template:
+    - `scripts/shop-onboarding/shop_onboarding_config.example.json`
+  - Added quick operator doc:
+    - `scripts/shop-onboarding/README.md`
+  - Updated runbooks to include the new automated path:
+    - `plans/pos-relay-program/runbooks/shop-pc-lan-relay-setup-non-technical.md`
+    - `plans/pos-relay-program/runbooks/optiplex-edge-relay-next-session.md`
+    - `plans/pos-relay-program/runbooks/new-shop-one-click-setup.md`
+    - `plans/pos-relay-program/00-ai-agent-start-here.md`
+- What was verified:
+  - PowerShell script parses and runs in `-WhatIf` mode.
+  - Script output/report path created under `scripts/shop-onboarding/output/`.
+- What remains:
+  - Run against live target config (real API key/secret + real profile list) and attach resulting onboarding report to next UAT note.
+
 ## 2026-02-27 - Cashier attribution hardening for cloud Sales Invoice + multi-profile rollout runbook updates
 - Branch: `codex-5-final`
 - Summary: Implemented explicit cashier identity propagation in submit payload and server submit handler so cloud Sales Invoices can populate cashier attribution fields reliably (including relay-sync submissions), then updated runbooks for simple multi-profile rollout.

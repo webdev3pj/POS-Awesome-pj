@@ -1,0 +1,40 @@
+{
+  "site_url": "https://devpjjamaica.v.frappe.cloud",
+  "pos_url": "https://devpjjamaica.v.frappe.cloud/app/posapp",
+  "relay_url": "https://192.168.50.168",
+  "relay_health_urls": [
+    "http://127.0.0.1:8787/health",
+    "https://192.168.50.168/health"
+  ],
+  "shop_pc_package_output_dir": "scripts/shop-onboarding/output/shop-pc-package",
+  "profiles": [
+    {
+      "name": "PJ7 CASHIER",
+      "cashier_profile": true,
+      "custom_have_token": 1,
+      "custom_edge_relay_url": "https://192.168.50.168",
+      "posa_edge_relay_connectivity_mode": "lan_only_browser_checked",
+      "posa_allow_cloud_fallback_when_relay_down": 1,
+      "posa_allow_sales_order": 1,
+      "custom_allow_select_sales_order": 1,
+      "posa_sales_order_naming_series": "SAL-ORD-PJ7-.YYYY.-",
+      "posa_sales_order_lookup_max_age_days": 1
+    },
+    {
+      "name": "PJ7 PICKER",
+      "cashier_profile": false,
+      "custom_have_token": 1,
+      "custom_edge_relay_url": "https://192.168.50.168",
+      "posa_edge_relay_connectivity_mode": "lan_only_browser_checked",
+      "posa_allow_cloud_fallback_when_relay_down": 0
+    },
+    {
+      "name": "PJ7 DISPATCH",
+      "cashier_profile": false,
+      "custom_have_token": 1,
+      "custom_edge_relay_url": "https://192.168.50.168",
+      "posa_edge_relay_connectivity_mode": "lan_only_browser_checked",
+      "posa_allow_cloud_fallback_when_relay_down": 0
+    }
+  ]
+}

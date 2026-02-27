@@ -14,6 +14,7 @@
 - `runbooks/optiplex-fresh-codex-zero-context-handoff.md`
 - `runbooks/cypress_order_of_testing.md`
 - `runbooks/shop-pc-lan-relay-setup-non-technical.md`
+- `runbooks/new-shop-one-click-setup.md`
 - `01-role-based-workflow-spec.md`
 - `02-master-implementation-plan.md`
 - `03-offline-edge-relay-and-windows-service-spec.md`
@@ -102,6 +103,7 @@ Key business rules currently agreed:
   - offline continuity fallback code from `df1ac0c` (relay token search + relay workflow monitor fallback + SA/cashier relay token/SO fallback paths) is now validated on local staging in a dedicated cloud-off relay-only full-chain run; cloud-dev rerun remains pending
   - OptiPlex relay+Caddy auto-start is now implemented and verified using a Windows boot scheduled task (`POSRelayStack_Autostart_OnStart`, `SYSTEM`) with relay LAN HTTPS health checks passing
   - cashier attribution hardening is now implemented in `submit_invoice` flow so payload cashier identity is written to cloud SI cashier field(s) when present (e.g. `custom_cashier`)
+  - one-click new-shop onboarding automation is available at `scripts/shop-onboarding/one_click_new_shop_setup.ps1` to configure multiple POS profiles and generate the shop-PC cert installer package
 - Priority implementation/verification target: replay the same dedicated cloud-off continuity UAT sequence on cloud dev staging after deploy confirmation, then extend dispatch timing analytics persistence/reporting.
 - Frappe Cloud topology note: raw private LAN relay URLs are still not cloud-backend reachable; in LAN-only mode this is expected and treated as diagnostic-only while browser-LAN HTTPS health is the submit gate.
 
@@ -376,6 +378,7 @@ If a new session starts on the OptiPlex relay machine and does not have this con
 - `runbooks/optiplex-edge-relay-next-session.md`
 - `runbooks/optiplex-fresh-codex-zero-context-handoff.md`
 - `runbooks/shop-pc-lan-relay-setup-non-technical.md`
+- `runbooks/new-shop-one-click-setup.md`
 - `01-role-based-workflow-spec.md`
 - `02-master-implementation-plan.md`
 - `03-offline-edge-relay-and-windows-service-spec.md`

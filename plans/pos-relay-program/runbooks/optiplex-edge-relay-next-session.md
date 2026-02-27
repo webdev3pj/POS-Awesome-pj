@@ -63,6 +63,7 @@ Provide a zero-context startup guide for a new AI coding agent session on the Op
 9. `cypress/e2e/local_staging/README.md`
 10. `plans/pos-relay-program/runbooks/cypress_order_of_testing.md`
 11. `plans/pos-relay-program/uat/2026-02-27-local-staging-cloud-off-full-chain-relay-only.md`
+12. `plans/pos-relay-program/runbooks/new-shop-one-click-setup.md`
 
 ## Local-Only Secrets Pack (Required Before Cypress)
 ### Repo root `.env` (copy from main machine, do not commit)
@@ -190,6 +191,20 @@ Use this exact checklist for each profile you want on relay-first flow (for exam
 
 Fallback (not preferred for this workflow):
 - site config key `posa_edge_relay_url` in `site_config.json` (used only when POS Profile field is blank)
+
+### Automated alternative (recommended for multiple new profiles)
+Instead of setting each profile manually in Desk, run:
+```powershell
+$env:FRAPPE_API_KEY='YOUR_API_KEY'
+$env:FRAPPE_API_SECRET='YOUR_API_SECRET'
+Copy-Item .\scripts\shop-onboarding\shop_onboarding_config.example.json .\scripts\shop-onboarding\shop_onboarding_config.json
+notepad .\scripts\shop-onboarding\shop_onboarding_config.json
+powershell -ExecutionPolicy Bypass -File .\scripts\shop-onboarding\one_click_new_shop_setup.ps1 -ConfigPath .\scripts\shop-onboarding\shop_onboarding_config.json
+```
+This performs:
+- relay health preflight checks
+- multi-profile POS Profile field updates
+- shop-PC one-click cert package generation for rollout
 
 ### Relay URL notes (current behavior + LAN-only mode)
 - Historical baseline (pre-LAN-only mode):

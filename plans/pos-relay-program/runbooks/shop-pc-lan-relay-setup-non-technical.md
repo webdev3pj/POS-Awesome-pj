@@ -1,5 +1,30 @@
 # Shop PC LAN Relay Setup (Non-Technical, One-Time)
 
+## Fastest New-Shop Setup (Owner, 10-minute path)
+On the OptiPlex, use the one-click onboarding script for multiple POS profiles:
+1. Set API credentials in PowerShell:
+```powershell
+$env:FRAPPE_API_KEY='YOUR_API_KEY'
+$env:FRAPPE_API_SECRET='YOUR_API_SECRET'
+```
+2. Edit the profile list once:
+```powershell
+Copy-Item .\scripts\shop-onboarding\shop_onboarding_config.example.json .\scripts\shop-onboarding\shop_onboarding_config.json
+notepad .\scripts\shop-onboarding\shop_onboarding_config.json
+```
+3. Run one-click setup:
+```powershell
+powershell -ExecutionPolicy Bypass -File .\scripts\shop-onboarding\one_click_new_shop_setup.ps1 -ConfigPath .\scripts\shop-onboarding\shop_onboarding_config.json
+```
+4. Use generated package on each shop PC:
+   - `scripts\shop-onboarding\output\shop-pc-package\SHOP-PC-ONE-CLICK-SETUP.bat`
+
+This automates:
+- relay health checks
+- POS profile configuration (multiple profiles)
+- shop-PC installer package generation
+- readiness report output
+
 ## TL;DR (Business Owner / Shop Staff)
 - Do this **once** on each shop PC (SA, Cashier, Picker, Dispatch).
 - Run the relay certificate installer as **Administrator**.
