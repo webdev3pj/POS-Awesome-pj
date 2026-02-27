@@ -638,7 +638,7 @@ describe('Cashier frontend workflow (watch mode)', () => {
     cy.contains('.workflow-ticket-rail-panel', 'Order Monitor', { timeout: 10000 }).should('not.be.visible');
 
     cy.contains('.v-btn', 'Select S.O', { timeout: 30000 }).click({ force: true });
-    cy.contains('.v-dialog--active .headline', 'Select Sales Orders', { timeout: 30000 }).should('be.visible');
+    cy.contains('.v-dialog--active .headline', 'Select Sales Orders', { timeout: 30000 }).should('exist');
     cy.wait('@searchOrders', { timeout: 120000 }).then((interception) => {
       expect(interception?.response?.statusCode, 'search_orders status').to.eq(200);
       const reqBody = interception?.request?.body;

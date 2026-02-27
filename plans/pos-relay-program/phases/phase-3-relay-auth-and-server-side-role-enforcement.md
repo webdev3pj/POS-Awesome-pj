@@ -14,11 +14,11 @@
 - `../CHANGELOG_PROGRESS.md`
 
 ## Document Currency
-- This is a current planning doc (Phase 3 is not complete).
+- This is a current implementation/signoff doc (Phase 3 relay-side hardening is largely complete, but full backend trust-model closure is not complete).
 - `codex-4.1-picked-dispatch-relay` now includes a Phase 3 baseline implementation (`0b8f772`) plus frontend follow-up fixes from live deploy testing:
   - `6767d0f` (relay role fallback for empty local role)
   - `ce5f84d` / `6cf64aa` (navbar relay-status polling/profile-registration race fixes so UI relay chips reflect actual fulfillment relay usage)
-- This doc now tracks a mixed state: baseline auth/authorization is implemented in code, while full live regression/negative coverage and rollout hardening remain open.
+- This doc now tracks a mixed state: relay-side auth/authorization and negative coverage are implemented in code, while final backend trust-model closure and rollout hardening remain open.
 - For the latest relay runtime verification, use:
   - `../uat/2026-02-23-local-edge-relay-smoke.md`
   - `../uat/2026-02-24-optiplex-lan-https-relay-sa-cashier-e2e-demo.md`
@@ -54,6 +54,8 @@ This phase is especially important because the recommended UX direction is a **s
 - Shared-shell Picker/Dispatch/Supervisor fulfillment workspace is now implemented on `codex-4-picker-dispatch` and live-validated locally (OptiPlex relay + dev site) while calling relay pick/release endpoints from the same POS shell (`/relay/pick/update`, `/relay/dispatch/release`), increasing the urgency of relay auth/authorization before wider rollout.
 - Picker line-wise fulfillment payloads are now persisted in relay local line payloads (`payload.picker`) and included in relay outbox `PICK_EVENT` payloads (`Implemented` local-first behavior, live UAT verified), but role trust remains client-provided until this phase is completed.
 - Live dev-site/OptiPlex UAT now confirms picker and dispatch actions execute through the relay and sync fresh outbox fulfillment events (`PICK_EVENT`, `RELEASE_EVENT`) to the cloud after the `codex-4.1-picked-dispatch-relay` parity fix. This increases operational pressure to complete this phase's auth/authorization controls before wider rollout because the fulfillment path is now more end-to-end complete.
+- `codex-5-final` extends relay-side role guards to the legacy write endpoints (`/relay/token`, `/relay/pick`, `/relay/release`, `/relay/submit-invoice`) so the older compatibility surface no longer bypasses the Phase 3 role matrix.
+- `codex-5-final` also expands the headed Cypress security matrix to cover missing-role and wrong-role cases across both v2 and legacy relay write endpoints, plus simple allowed-role passthrough checks.
 
 ## Target Trust Model (Recommended)
 - Keep one POS Awesome UI shell for all roles.
@@ -71,12 +73,12 @@ This phase is especially important because the recommended UX direction is a **s
 ## Implementation Tasks
 - [ ] Define trusted relay identity model (device token, signed payload, or equivalent).
 - [ ] Implement relay auth middleware/check for mutating `/relay/*` endpoints. `Partial`: baseline guard + optional client-key plumbing implemented on `codex-4.1-picked-dispatch-relay`; rollout policy and stronger trust model still pending.
-- [ ] Implement per-endpoint role authorization rules (SA/Cashier/Picker/Dispatch/Supervisor). `Partial`: baseline role guards implemented; full validation matrix and edge-case coverage still pending.
+- [x] Implement per-endpoint role authorization rules (SA/Cashier/Picker/Dispatch/Supervisor) at the relay surface.
 - [ ] Standardize error responses (`NOT_AUTHORIZED`, `AUTH_REQUIRED`, role mismatch).
 - [ ] Add server-side role validation in ERPNext/Frappe APIs where role-bound actions occur. `Partial`: key workflow APIs updated; complete coverage/audit review still pending.
 - [ ] Log role/user/device identifiers on token, commit, pick, release actions.
 - [ ] Log override reason + approver identity for supervisor-only exception paths.
-- [ ] Add tests for spoofed role payload attempts and missing auth.
+- [x] Add tests for spoofed role payload attempts and missing auth at the relay surface.
 - [ ] Update `01-role-based-workflow-spec.md` and `03-offline-edge-relay-and-windows-service-spec.md` with final trust model.
 
 Implementation note (current dev-site state, not a substitute for this phase):
@@ -102,19 +104,26 @@ Implementation note (current dev-site state, not a substitute for this phase):
   - allow approved override endpoints only (do not implicitly allow all actions without audit logging)
 
 ## Tests and Verification
-- [ ] Automated tests for unauthorized/forbidden relay requests.
-- [ ] Positive tests for each allowed role/action pair.
+- [x] Automated tests for unauthorized/forbidden relay requests at the relay surface.
+- [~] Positive tests for each allowed role/action pair.
 - [ ] Manual verification that bypassing UI controls cannot invoke forbidden actions.
 - [ ] Negative tests from shared-shell UI contexts (e.g. Picker browser attempts cashier submit, Dispatch browser attempts pick update with forged role payload).
 - [ ] Add negative tests covering the new shared-shell fulfillment workspace (e.g. forged picker/dispatch payloads from `FulfillmentWorkspace.vue` context).
 - [ ] Add negative tests specifically for cloud fulfillment sync endpoints (`update_relay_picking_status`, `release_relay_dispatch`) to ensure role spoofing is rejected after the `codex-4.1-picked-dispatch-relay` endpoint parity fix.
-- [ ] Complete live dev-site rerun on deployed `0b8f772` + `6767d0f` using strict per-spec Cypress timeouts and UI-vs-actual relay status assertions in relay-dependent specs.
+- [~] Complete live dev-site rerun on current deployed branch using strict per-spec Cypress timeouts and UI-vs-actual relay status assertions in relay-dependent specs.
 
-Current validation status note (2026-02-26):
-- `cashier_workflow_frontend_watch.cy.js` and `phase3_security_relay_role_guards_watch.cy.js` both passed on the deployed dev site after `6767d0f`.
-- Fulfillment rerun (Picker/Dispatch/Supervisor) with strict UI-vs-actual relay assertions is now passing on the deployed dev site after navbar relay-status fixes `ce5f84d` + `6cf64aa`.
-- Remaining recommended rerun for Phase 3 signoff is the full SA/Cashier + fallback + security spec slice on the latest deployed build under the same strict timeout policy.
-- Local-staging parity note (`codes-4.3-dispatch`): `cypress/e2e/local_staging/local_staging_phase3_security_relay_role_guards_watch.cy.js` now runs against `pj.local:8080` as a pre-cloud deploy smoke and passed during the 2026-02-26 local SA->Dispatch rerun after local Docker deploy/runtime fixes.
+Current validation status note (2026-02-27):
+- Dedicated cloud-dev cloud-off continuity rerun is now complete in headed Cypress on `codex-5-final`:
+  - SA token creation passed
+  - Cashier local commit passed with relay-only local sale creation
+  - Picker update passed and persisted line-wise picker payload
+  - Dispatch release passed and persisted relay release state
+  - relay proof specs passed after cashier, picker, and dispatch stages
+- Expanded `phase3_security_relay_role_guards_watch.cy.js` now passes for:
+  - v2 endpoints on the live OptiPlex relay service
+  - legacy endpoints on a parallel user-owned patched relay instance (`127.0.0.1:8788`) because the service-owned `8787` listener could not be hot-reloaded from the non-admin Codex shell
+- The remaining explicit Phase 3 security gap is the backend trust-model negative matrix for cloud fulfillment sync methods (`update_relay_picking_status`, `release_relay_dispatch`) and broader shared-shell forged-request attempts.
+- The remaining operational rerun before production signoff is the final normal cloud-available rerun after the relay cloud target is restored from the temporary cloud-off simulation.
 
 ## Known Risks
 - Breaking active store devices if auth rollout is not coordinated.

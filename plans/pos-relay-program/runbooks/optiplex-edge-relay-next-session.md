@@ -39,6 +39,13 @@ Provide a zero-context startup guide for a new AI coding agent session on the Op
     - SA -> Cashier -> Picker -> Dispatch role-stage suites with relay proof specs after each stage
     - supervisor exception and phase3 security reruns
     - Cypress hardening fixes for cashier fallback, picker final persisted qty proof, and long UI-shell role-consistency timeout stability
+    - cloud-dev dedicated cloud-off full-chain rerun now completed on the real OptiPlex relay service with:
+      - token/SO `SAL-ORD-PJ7-2026-00027`
+      - relay local sale `LSR-PJ7 -20260227233006-CE7913`
+      - picker persisted partial qty `0.5`
+      - dispatch persisted `RELEASED`
+      - outbox intentionally queued because relay cloud target was forced offline for continuity proof
+    - relay Phase 3 matrix expanded so both v2 and legacy relay write endpoints are role-guarded in branch code
   - local relay HTTP smoke (`/health`, `/relay/session/open`, `/relay/token/create`, `/relay/commit-invoice`) passed
   - headed Cypress relay demo proof completed:
     - SA token/SO `SAL-ORD-PJ7-2026-00009`
@@ -238,6 +245,11 @@ This performs:
   - strict cloud + local staging rerun matrix is complete with watch-mode Cypress and hard timeouts
   - relay dashboard/transaction proof specs are passing after every role-stage workflow
   - UI-shell cross-role consistency spec is stable after timeout hardening
+  - dedicated cloud-dev cloud-off continuity rerun is complete on OptiPlex relay (`127.0.0.1:8787`) with relay-only evidence for SA -> Cashier -> Picker -> Dispatch
+  - Phase 3 relay guard matrix is expanded and passing:
+    - v2 endpoints validated against the live relay service
+    - legacy endpoint guard patch validated against a parallel patched relay instance on `127.0.0.1:8788`
+    - note: the service-owned live listener on `8787` could not be hot-reloaded from the non-admin Codex shell, so legacy-route validation used the patched parallel process
   - dedicated local-staging cloud-off full-chain UAT is complete on OptiPlex (`pj.local`) with relay-only evidence:
     - SA token/SO: `SAL-ORD-PJ7-2026-00015`
     - cashier relay local sale: `LSR-PJ7 -20260227154400-600CB9`
@@ -245,8 +257,16 @@ This performs:
     - dispatch persisted status: `RELEASED`
     - relay outbox for this LSR remains queued with cloud timeout/wait errors while cloud is intentionally unreachable
 - Next recommended work:
-  - Replay the same dedicated cloud-off continuity UAT across SA -> Cashier -> Picker -> Dispatch on cloud dev staging after deploy confirmation
-  - Capture the same relay-only evidence set on cloud staging and compare against the local-staging baseline
+  - Restore relay `frappe_base_url` from temporary cloud-off simulation back to the real cloud dev site before any normal cloud rerun
+  - Run the final normal cloud-available rerun on the latest deployed branch:
+    - SA
+    - Cashier
+    - relay-down/cloud-up fallback
+    - Picker
+    - Dispatch
+    - Supervisor
+    - relay proof specs after each role stage
+  - If production signoff requires complete backend trust-model closure, add explicit negative tests for Frappe cloud fulfillment sync methods (`update_relay_picking_status`, `release_relay_dispatch`)
   - Expand dispatch timing/phase analytics persistence and reporting
   - Start dispatch monitoring/timing-first UX and relay phase timing instrumentation (business optimization focus)
   - Simplify picker default UX path (order-level actions first) while keeping line-item editing available for exceptions/wire/UOM cases

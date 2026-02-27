@@ -23,6 +23,57 @@ Note:
 
 ---
 
+## 2026-02-27 - Cloud-dev dedicated cloud-off full chain rerun completed; Phase 3 relay negative matrix expanded and closed at relay surface
+- Branch: `codex-5-final`
+- Summary: Replayed the cloud-dev role chain with the OptiPlex relay intentionally pointed at a dead cloud target so the browser and relay were forced into local-only continuity mode, then extended Phase 3 so both v2 and legacy relay write endpoints now enforce role authorization and are covered by an expanded Cypress matrix.
+- What changed:
+  - Extended relay role enforcement to legacy write endpoints in addition to the already-guarded v2 endpoints:
+    - `relay/relay/app.py`
+    - added `_require_relay_role(...)` checks to:
+      - `/relay/token`
+      - `/relay/pick`
+      - `/relay/release`
+      - `/relay/submit-invoice`
+  - Expanded security spec:
+    - `cypress/e2e/phase3_security_relay_role_guards_watch.cy.js`
+    - now covers missing-role + wrong-role cases across:
+      - v2: `/relay/session/open`, `/relay/token/create`, `/relay/commit-invoice`, `/relay/pick/update`, `/relay/dispatch/release`
+      - legacy: `/relay/token`, `/relay/pick`, `/relay/release`, `/relay/submit-invoice`
+    - added allowed-role passthrough checks
+    - added `Cypress.env("relayBase")` override so the same spec can target a parallel relay instance when needed
+- What was verified:
+  - Dedicated cloud-dev cloud-off full-chain watch-mode rerun passed on the real OptiPlex relay (`127.0.0.1:8787`) with relay-only evidence:
+    - `admin_set_cline_sa_only_role.cy.js`
+    - `sa_workflow_frontend_watch.cy.js`
+    - `admin_set_cline_cashier_only_role.cy.js`
+    - `cashier_workflow_frontend_watch.cy.js`
+    - `relay_demo_postrun_ui_watch.cy.js`
+    - `admin_set_cline_picker_only_role.cy.js`
+    - `picker_workflow_frontend_watch.cy.js`
+    - `relay_demo_picker_post_ui_watch.cy.js`
+    - `admin_set_cline_dispatch_only_role.cy.js`
+    - `dispatch_workflow_frontend_watch.cy.js`
+    - `relay_demo_dispatch_post_ui_watch.cy.js`
+  - Fresh cloud-off evidence captured:
+    - token/SO: `SAL-ORD-PJ7-2026-00027`
+    - relay local sale: `LSR-PJ7 -20260227233006-CE7913`
+    - local invoice payload name: `ACC-SINV-2026-00311`
+    - picker persisted partial line qty: `picked_qty = 0.5`, `pick_status = PICKED_READY_FOR_RELEASE`
+    - dispatch persisted release: `dispatch_status = RELEASED`, `released_by = cline@pjjamaica.com`
+    - outbox remained queued by design because relay cloud target was forced to `http://10.255.255.1:65534`
+  - Expanded Phase 3 relay matrix passed in headed Cypress:
+    - v2 endpoints passed against the live relay service on `8787`
+    - legacy endpoint guard patch passed against a parallel user-owned patched relay on `127.0.0.1:8788`
+    - reason for split: the service-owned live relay listener on `8787` could not be hot-reloaded from the current non-admin Codex shell
+- What remains:
+  - Restore relay cloud target from cloud-off simulation back to the real dev site before the next normal cloud rerun
+  - Run the final standard cloud rerun with cloud available again (SA/Cashier/fallback + Picker/Dispatch/Supervisor + relay proof)
+  - Add explicit negative tests for server-side cloud fulfillment sync methods (`update_relay_picking_status`, `release_relay_dispatch`) if full backend trust-model closure is required before production signoff
+- Links:
+  - `plans/pos-relay-program/uat/2026-02-27-cloud-dev-cloud-off-full-chain-and-phase3-relay-matrix.md`
+  - `relay/relay/app.py`
+  - `cypress/e2e/phase3_security_relay_role_guards_watch.cy.js`
+
 ## 2026-02-27 - One-click new-shop onboarding automation added (multi-profile + PC package)
 - Branch: `codex-5-final`
 - Summary: Added an owner-friendly one-click onboarding flow that configures multiple POS Profiles on the site, runs relay preflight checks, and generates a ready-to-share shop-PC installer package.

@@ -475,6 +475,9 @@ def create_app():
         if auth_err:
             return auth_err
         payload = request.get_json(silent=True) or {}
+        role_err = _require_relay_role(payload, RELAY_ROLE_GROUPS["token_create"])
+        if role_err:
+            return role_err
         if isinstance(payload, dict):
             payload.setdefault("_relay_source", _request_source_meta())
         event_id = enqueue_event("token_create", payload)
@@ -486,6 +489,9 @@ def create_app():
         if auth_err:
             return auth_err
         payload = request.get_json(silent=True) or {}
+        role_err = _require_relay_role(payload, RELAY_ROLE_GROUPS["pick_update"])
+        if role_err:
+            return role_err
         if isinstance(payload, dict):
             payload.setdefault("_relay_source", _request_source_meta())
         event_id = enqueue_event("pick_update", payload)
@@ -497,6 +503,9 @@ def create_app():
         if auth_err:
             return auth_err
         payload = request.get_json(silent=True) or {}
+        role_err = _require_relay_role(payload, RELAY_ROLE_GROUPS["dispatch_release"])
+        if role_err:
+            return role_err
         if isinstance(payload, dict):
             payload.setdefault("_relay_source", _request_source_meta())
         event_id = enqueue_event("dispatch_release", payload)
@@ -511,6 +520,9 @@ def create_app():
             return auth_err
 
         payload = request.get_json(silent=True) or {}
+        role_err = _require_relay_role(payload, RELAY_ROLE_GROUPS["commit_invoice"])
+        if role_err:
+            return role_err
         if isinstance(payload, dict):
             payload.setdefault("_relay_source", _request_source_meta())
         invoice_payload = payload.get("invoice")
