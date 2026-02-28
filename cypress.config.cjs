@@ -3,6 +3,12 @@ const path = require("path");
 const crypto = require("crypto");
 const dotenv = require("dotenv");
 const { defineConfig } = require("cypress");
+const {
+  assertFileExists,
+  extractTokenSlipEvidence,
+  renderHtmlToPdf,
+  saveTokenSlipHtml,
+} = require("./cypress/e2e/_helpers/token_slip_artifacts");
 
 dotenv.config({ path: path.resolve(__dirname, ".env"), quiet: true });
 
@@ -159,6 +165,18 @@ module.exports = defineConfig({
             )
           );
           return outPath;
+        },
+        saveTokenSlipHtml({ html, meta, spec, testTitle }) {
+          return saveTokenSlipHtml({ html, meta, spec, testTitle });
+        },
+        renderHtmlToPdf({ htmlPath, pdfPath }) {
+          return renderHtmlToPdf({ htmlPath, pdfPath });
+        },
+        extractTokenSlipEvidence({ html }) {
+          return extractTokenSlipEvidence(html);
+        },
+        assertFileExists({ filePath }) {
+          return assertFileExists(filePath);
         },
       });
 

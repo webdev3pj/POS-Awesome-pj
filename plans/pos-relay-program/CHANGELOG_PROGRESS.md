@@ -23,6 +23,59 @@ Note:
 
 ---
 
+## 2026-02-28 - Cloud-dev token slip PDF capture + cashier retrieval validation completed
+- Branch: `codex-5-final`
+- Summary: Added a dedicated headed Cypress cloud-dev proof that captures the real SA token slip popup HTML, renders it to PDF, validates printed business fields and machine-readable payloads, then proves the current cashier retrieval path on the live dev site.
+- What changed:
+  - Added Node-side Cypress tasks for token slip artifact handling:
+    - `cypress.config.cjs`
+    - new tasks:
+      - `saveTokenSlipHtml`
+      - `renderHtmlToPdf`
+      - `extractTokenSlipEvidence`
+      - `assertFileExists`
+  - Added token slip artifact helper:
+    - `cypress/e2e/_helpers/token_slip_artifacts.js`
+  - Added dedicated cloud-dev watch spec:
+    - `cypress/e2e/token_print_pdf_and_cashier_retrieve_watch.cy.js`
+    - captures real popup HTML from `Print Token Slip`
+    - renders PDF artifact with local headless Chrome
+    - validates printed:
+      - Sales Order / token id
+      - token last4
+      - customer
+      - sales associate
+      - date
+      - time
+      - grand total
+    - attempts cashier retrieval in this order:
+      - raw QR payload
+      - barcode / SO payload
+      - explicit SO fallback
+    - writes summary/evidence JSON files under `cypress/tmp/`
+- What was verified:
+  - Cloud-dev spec passed in headed Chrome against `https://devpjjamaica.v.frappe.cloud/`.
+  - Fresh evidence:
+    - Sales Order / token: `SAL-ORD-PJ7-2026-00032`
+    - printed token last4: `0032`
+    - created invoice from cashier retrieval: `ACC-SINV-2026-00314`
+    - PDF artifact:
+      - `cypress/tmp/token_slips/20260228-024509__cypress__e2e__token_print_pdf_and_cashier_retrieve_watch.cy.js__token_print_pdf_and_cashier_retrieve.pdf`
+  - Retrieval result on current product behavior:
+    - `qrLookupSupported = false`
+    - `barcodeLookupWorked = true`
+    - `fallbackSoLookupWorked = false`
+    - `loadedIntoInvoice = true`
+  - Relay proof captured matching token state for the same Sales Order/token:
+    - `cypress/tmp/latest_token_print_relay_evidence.json`
+- What remains:
+  - Real printer/scanner hardware signoff is still separate; this run proves browser/PDF render and current cashier retrieval behavior, not physical scanner optics.
+  - If scanner-first cashier intake is required, implement a QR-ingestable cashier search/parser instead of relying on the current barcode/SO-name path.
+- Links:
+  - `cypress/e2e/token_print_pdf_and_cashier_retrieve_watch.cy.js`
+  - `cypress/e2e/_helpers/token_slip_artifacts.js`
+  - `plans/pos-relay-program/uat/2026-02-28-cloud-dev-token-print-pdf-and-cashier-retrieval.md`
+
 ## 2026-02-27 - Cloud-dev dedicated cloud-off full chain rerun completed; Phase 3 relay negative matrix expanded and closed at relay surface
 - Branch: `codex-5-final`
 - Summary: Replayed the cloud-dev role chain with the OptiPlex relay intentionally pointed at a dead cloud target so the browser and relay were forced into local-only continuity mode, then extended Phase 3 so both v2 and legacy relay write endpoints now enforce role authorization and are covered by an expanded Cypress matrix.

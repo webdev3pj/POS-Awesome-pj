@@ -190,8 +190,8 @@ Status tags in the last column reflect the current program branch family state; 
 | Close cash shift | No | Yes | No | No | Conditional | `Partial` (SA hidden/blocked locally; broader role rules pending) | `Partial` |
 | View ticket monitor rail (read-only) | Yes | Yes | Yes | Yes | Yes | `Implemented` (dev-site UAT verified on `codex-2-cashier`; inherited) | `N/A` |
 | Create token/order | Yes | Optional | No | No | Optional | `Implemented` (SA SO token path verified) | `Partial` (server/relay auth still pending) |
-| Print token slip | Yes | Optional | No | No | Optional | `Partial` (text token today) | `N/A` |
-| Render QR/barcode token slip | Yes | Optional | No | No | Optional | `Partial` (token dialog and print path verified; printer/QR visual UAT still environment-specific) | `N/A` |
+| Print token slip | Yes | Optional | No | No | Optional | `Implemented` (token dialog + explicit `Print Token Slip` CTA live-validated; browser PDF artifact proof completed on cloud dev) | `N/A` |
+| Render QR/barcode token slip | Yes | Optional | No | No | Optional | `Partial` (browser/PDF render verified; raw QR cashier lookup unsupported today, barcode/SO retrieval proven; physical printer/scanner signoff still pending) | `N/A` |
 | Take payment | No | Yes | No | No | Conditional | `Partial` | `Planned` (Phase 3 auth) |
 | Submit SI | No | Yes | No | No | Conditional | `Partial` | `Partial` |
 | Void token | No | No | No | No | Yes | `Planned` | `Partial` (relay endpoint exists; auth missing) |
@@ -212,6 +212,7 @@ What exists:
 What is missing:
 - Full cashier/picker/dispatch lifecycle integration and relay-enabled proof for the same order (next phases / relay testing).
 - Printer-specific QR/barcode output visual validation on target hardware/browser.
+- Scanner-first cashier intake from raw QR payload. Current proven cashier retrieval path is barcode/Sales Order lookup, not QR JSON parsing.
 - Full SA-specific visibility (Phase 2).
 - Server/relay authorization (Phase 3).
 
@@ -227,6 +228,10 @@ What exists:
 - Direct cloud fallback disabled when relay-enabled commit fails (`Implemented`).
 - SO selection and SO -> SI conversion support exists (`Implemented`).
 - Workflow monitor rail can surface pending order status/timing (read-only) for profile/date scope (`Implemented`, dev-site UAT verified).
+- Dedicated token slip retrieval validation now proves the current cashier intake behavior on cloud dev:
+  - raw QR payload lookup is not supported by current cashier search
+  - barcode/Sales Order lookup works
+  - retrieved order loads into invoice successfully
 
 What is missing:
 - Prefer/guide cashier flow toward SO-first in role-specific UI (Phase 2).

@@ -38,22 +38,35 @@ Run in this exact order:
 1. `cypress/e2e/admin_configure_pj7_cashier_profile.cy.js`
 2. `cypress/e2e/admin_set_cline_sa_only_role.cy.js`
 3. `cypress/e2e/sa_workflow_frontend_watch.cy.js`
-4. `cypress/e2e/relay_demo_sa_post_ui_watch.cy.js`
-5. `cypress/e2e/admin_set_cline_cashier_only_role.cy.js`
-6. `cypress/e2e/cashier_workflow_frontend_watch.cy.js`
-7. `cypress/e2e/relay_demo_postrun_ui_watch.cy.js`
-8. `cypress/e2e/admin_set_cline_picker_only_role.cy.js`
-9. `cypress/e2e/picker_workflow_frontend_watch.cy.js`
-10. `cypress/e2e/relay_demo_picker_post_ui_watch.cy.js`
-11. `cypress/e2e/admin_set_cline_dispatch_only_role.cy.js`
-12. `cypress/e2e/dispatch_workflow_frontend_watch.cy.js`
-13. `cypress/e2e/relay_demo_dispatch_post_ui_watch.cy.js`
+4. `cypress/e2e/token_print_pdf_and_cashier_retrieve_watch.cy.js`
+5. `cypress/e2e/relay_demo_sa_post_ui_watch.cy.js`
+6. `cypress/e2e/admin_set_cline_cashier_only_role.cy.js`
+7. `cypress/e2e/cashier_workflow_frontend_watch.cy.js`
+8. `cypress/e2e/relay_demo_postrun_ui_watch.cy.js`
+9. `cypress/e2e/admin_set_cline_picker_only_role.cy.js`
+10. `cypress/e2e/picker_workflow_frontend_watch.cy.js`
+11. `cypress/e2e/relay_demo_picker_post_ui_watch.cy.js`
+12. `cypress/e2e/admin_set_cline_dispatch_only_role.cy.js`
+13. `cypress/e2e/dispatch_workflow_frontend_watch.cy.js`
+14. `cypress/e2e/relay_demo_dispatch_post_ui_watch.cy.js`
 
 Optional hardening:
-14. `cypress/e2e/admin_set_cline_supervisor_only_role.cy.js`
-15. `cypress/e2e/supervisor_fulfillment_exception_watch.cy.js`
-16. `cypress/e2e/phase3_security_relay_role_guards_watch.cy.js`
-17. `cypress/e2e/ui_shell_chrome_role_consistency.cy.js`
+15. `cypress/e2e/admin_set_cline_supervisor_only_role.cy.js`
+16. `cypress/e2e/supervisor_fulfillment_exception_watch.cy.js`
+17. `cypress/e2e/phase3_security_relay_role_guards_watch.cy.js`
+18. `cypress/e2e/ui_shell_chrome_role_consistency.cy.js`
+
+Token print / retrieval signoff rule (after step 4):
+- Review:
+  - `cypress/tmp/latest_token_print_retrieval_summary.json`
+  - `cypress/tmp/latest_token_print_relay_evidence.json`
+  - `cypress/tmp/latest_token_print_invoice_from_order_response.json`
+  - latest PDF artifact under `cypress/tmp/token_slips/`
+- Expected current product result:
+  - `qrLookupSupported = false`
+  - `barcodeLookupWorked = true`
+  - `loadedIntoInvoice = true`
+- Treat raw QR lookup failure as a documented product limitation, not a regression, unless cashier QR parsing is intentionally implemented later.
 
 Cashier attribution post-check (after step 7):
 1. Open `cypress/tmp/latest_cashier_relay_commit.json` and copy `cloudInvoiceName`.
