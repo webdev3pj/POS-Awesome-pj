@@ -6,11 +6,10 @@
       @click="toggleExpanded(false)"
     ></div>
     <div
-      v-show="isMobile || expanded"
       class="workflow-ticket-rail"
       :class="{ expanded: expanded, mobile: isMobile, desktop: !isMobile }"
     >
-      <div v-if="isMobile" class="workflow-ticket-rail-handle">
+      <div class="workflow-ticket-rail-handle">
         <v-badge
           :content="String(pendingCount)"
           :value="pendingCount > 0"
@@ -28,7 +27,7 @@
             <v-icon>mdi-ticket-outline</v-icon>
           </v-btn>
         </v-badge>
-        <div class="workflow-ticket-rail-label">
+        <div v-if="isMobile" class="workflow-ticket-rail-label">
           {{ expanded ? __('Orders') : pendingCount }}
         </div>
       </div>
@@ -565,6 +564,27 @@ export default {
   gap: 6px;
 }
 
+.workflow-ticket-rail.desktop .workflow-ticket-rail-handle {
+  width: 40px;
+  min-height: 48px;
+  padding: 6px 0;
+  border-radius: 14px;
+  background: rgba(255, 255, 255, 0.94);
+  box-shadow: 0 8px 20px rgba(15, 23, 42, 0.12);
+}
+
+.workflow-ticket-rail.desktop .workflow-ticket-rail-handle :deep(.v-badge__badge) {
+  min-width: 18px;
+  height: 18px;
+  font-size: 10px;
+  line-height: 18px;
+}
+
+.workflow-ticket-rail.desktop .workflow-ticket-rail-handle :deep(.v-btn) {
+  width: 32px !important;
+  height: 32px !important;
+}
+
 .workflow-ticket-rail-label {
   font-size: 11px;
   line-height: 1;
@@ -579,7 +599,7 @@ export default {
   width: min(380px, calc(100vw - 70px));
   max-height: calc(100vh - 110px);
   overflow: hidden;
-  margin-left: 0;
+  margin-left: 8px;
   display: flex;
   flex-direction: column;
   border-radius: 16px;
