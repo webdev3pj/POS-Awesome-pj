@@ -6,10 +6,11 @@
       @click="toggleExpanded(false)"
     ></div>
     <div
+      v-show="isMobile || expanded"
       class="workflow-ticket-rail"
-      :class="{ expanded: expanded, mobile: isMobile }"
+      :class="{ expanded: expanded, mobile: isMobile, desktop: !isMobile }"
     >
-      <div class="workflow-ticket-rail-handle">
+      <div v-if="isMobile" class="workflow-ticket-rail-handle">
         <v-badge
           :content="String(pendingCount)"
           :value="pendingCount > 0"
@@ -236,6 +237,7 @@ export default {
     expanded() {
       this.refreshClockTimer();
       this.restartPolling();
+      this.emitSummaryChanged();
       if (this.expanded) {
         this.fetchBoard(false);
       }
@@ -269,6 +271,16 @@ export default {
         return;
       }
       this.expanded = !this.expanded;
+    },
+    onToggleRequested() {
+      this.toggleExpanded();
+    },
+    emitSummaryChanged() {
+      evntBus.$emit('workflow_monitor_summary_changed', {
+        profile_name: this.profileName,
+        pending_count: this.pendingCount,
+        expanded: this.expanded,
+      });
     },
     handleVisibilityChange() {
       this.visibilityHidden = typeof document !== 'undefined' ? !!document.hidden : false;
@@ -411,6 +423,7 @@ export default {
         };
         this.rows = Array.isArray(payload.rows) ? payload.rows : [];
         this.errorText = '';
+        this.emitSummaryChanged();
       } catch (e) {
         this.errorText = (e && e.message) || __('Unable to load workflow monitor.');
       } finally {
@@ -496,7 +509,9 @@ export default {
     if (typeof window !== 'undefined') {
       window.addEventListener('resize', this.handleResize);
     }
+    this.emitSummaryChanged();
     evntBus.$on('workflow_monitor_refresh_requested', this.onRefreshRequested);
+    evntBus.$on('workflow_monitor_toggle_requested', this.onToggleRequested);
   },
   beforeDestroy() {
     this.stopPolling();
@@ -511,6 +526,7 @@ export default {
       window.removeEventListener('resize', this.handleResize);
     }
     evntBus.$off('workflow_monitor_refresh_requested', this.onRefreshRequested);
+    evntBus.$off('workflow_monitor_toggle_requested', this.onToggleRequested);
   },
 };
 </script>
@@ -525,15 +541,20 @@ export default {
 
 .workflow-ticket-rail {
   position: fixed;
-  left: 6px;
+  left: 68px;
   top: 86px;
   z-index: 90;
   display: flex;
   align-items: flex-start;
 }
 
+.workflow-ticket-rail.desktop {
+  left: 72px;
+}
+
 .workflow-ticket-rail.mobile {
   top: 76px;
+  left: 6px;
 }
 
 .workflow-ticket-rail-handle {
@@ -558,9 +579,10 @@ export default {
   width: min(380px, calc(100vw - 70px));
   max-height: calc(100vh - 110px);
   overflow: hidden;
-  margin-left: 8px;
+  margin-left: 0;
   display: flex;
   flex-direction: column;
+  border-radius: 16px;
 }
 
 .workflow-ticket-rail.mobile .workflow-ticket-rail-panel {
@@ -574,6 +596,10 @@ export default {
   justify-content: space-between;
   gap: 8px;
   padding: 10px 12px 4px;
+}
+
+.workflow-ticket-rail.desktop .workflow-ticket-rail-panel {
+  box-shadow: 0 14px 34px rgba(15, 23, 42, 0.12) !important;
 }
 
 .workflow-ticket-rail-title {

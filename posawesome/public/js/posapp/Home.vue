@@ -1,8 +1,8 @@
 <template>
-  <v-app class="container1">
-    <v-main>
+  <v-app class="posawesome-shell-app">
+    <v-main class="posawesome-shell-main">
       <Navbar @changePage="setPage($event)"></Navbar>
-      <component v-bind:is="page" class="mx-4 md-4"></component>
+      <component v-bind:is="page" class="posawesome-page-shell"></component>
     </v-main>
   </v-app>
 </template>
@@ -48,12 +48,6 @@ export default {
 };
 </script>
 
-<style scoped>
-.container1 {
-  margin-top: 0px;
-}
-</style>
-
 <style>
 html.posawesome-shell-active .navbar,
 html.posawesome-shell-active .page-head,
@@ -64,8 +58,40 @@ html.posawesome-shell-active .standard-sidebar {
 
 html.posawesome-shell-active .page-container,
 html.posawesome-shell-active .layout-main-section-wrapper,
-html.posawesome-shell-active .layout-main-section {
+html.posawesome-shell-active .layout-main-section,
+html.posawesome-shell-active .main-section {
   margin-top: 0 !important;
+  margin-left: 0 !important;
+  margin-right: 0 !important;
   padding-top: 0 !important;
+  padding-left: 0 !important;
+  padding-right: 0 !important;
+}
+
+html.posawesome-shell-active,
+html.posawesome-shell-active body,
+html.posawesome-shell-active #body,
+html.posawesome-shell-active .page-container,
+html.posawesome-shell-active .layout-main-section-wrapper,
+html.posawesome-shell-active .layout-main-section,
+html.posawesome-shell-active .main-section {
+  background: #f4f7fb !important;
+}
+
+html.posawesome-shell-active .page-container,
+html.posawesome-shell-active .layout-main-section-wrapper,
+html.posawesome-shell-active .layout-main-section,
+html.posawesome-shell-active .main-section,
+html.posawesome-shell-active .v-application,
+html.posawesome-shell-active .v-application--wrap,
+html.posawesome-shell-active .v-main {
+  min-height: 100vh;
+}
+
+html.posawesome-shell-active .posawesome-shell-app,
+html.posawesome-shell-active .posawesome-shell-main,
+html.posawesome-shell-active .posawesome-page-shell {
+  min-height: 100vh;
+  background: #f4f7fb !important;
 }
 </style>

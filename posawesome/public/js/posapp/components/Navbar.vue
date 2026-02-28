@@ -237,6 +237,29 @@
             </v-list-item-content>
           </v-list-item>
         </v-list-item-group>
+        <v-divider v-if="show_workflow_monitor_toggle" class="my-2"></v-divider>
+        <v-list-item
+          v-if="show_workflow_monitor_toggle"
+          class="workflow-monitor-drawer-item"
+          @click="toggle_workflow_monitor"
+        >
+          <v-list-item-icon>
+            <v-badge
+              :content="String(workflow_monitor_pending_count)"
+              :value="workflow_monitor_pending_count > 0"
+              color="error"
+              overlap
+            >
+              <v-icon>mdi-ticket-outline</v-icon>
+            </v-badge>
+          </v-list-item-icon>
+          <v-list-item-content>
+            <v-list-item-title>{{ __('Order Monitor') }}</v-list-item-title>
+            <v-list-item-subtitle>
+              {{ workflow_monitor_expanded ? __('Open') : __('Show pending orders') }}
+            </v-list-item-subtitle>
+          </v-list-item-content>
+        </v-list-item>
       </v-list>
     </v-navigation-drawer>
     <v-snackbar v-model="snack" :timeout="5000" :color="snackColor" top right>
@@ -327,6 +350,8 @@ export default {
       },
       cloud_poll_timer: null,
       current_role: '',
+      workflow_monitor_pending_count: 0,
+      workflow_monitor_expanded: false,
     };
   },
   computed: {
@@ -386,6 +411,10 @@ export default {
       }
       return this.cloud_status.server_online ? 'success' : 'warning';
     },
+    show_workflow_monitor_toggle() {
+      const profile = this.pos_profile || {};
+      return parseInt(profile.custom_have_token || 0, 10) === 1;
+    },
   },
   methods: {
     sync_current_role() {
@@ -437,6 +466,19 @@ export default {
     },
     changePage(key) {
       this.$emit('changePage', key);
+    },
+    toggle_workflow_monitor() {
+      evntBus.$emit('workflow_monitor_toggle_requested');
+    },
+    on_workflow_monitor_summary_changed(payload) {
+      const summary = payload || {};
+      const summaryProfile = String(summary.profile_name || '').trim();
+      const activeProfile = String((this.pos_profile && this.pos_profile.name) || '').trim();
+      if (activeProfile && summaryProfile && activeProfile !== summaryProfile) {
+        return;
+      }
+      this.workflow_monitor_pending_count = parseInt(summary.pending_count || 0, 10) || 0;
+      this.workflow_monitor_expanded = !!summary.expanded;
     },
     go_desk() {
       frappe.set_route('/');
@@ -886,6 +928,7 @@ export default {
     evntBus.$on('set_last_invoice', (data) => {
       this.last_invoice = data;
     });
+    evntBus.$on('workflow_monitor_summary_changed', this.on_workflow_monitor_summary_changed);
     evntBus.$on('freeze', (data) => {
       this.freeze = true;
       this.freezeTitle = data.title;
@@ -912,6 +955,7 @@ export default {
     evntBus.$off('register_pos_profile');
     evntBus.$off('check_relay_connectivity');
     evntBus.$off('set_last_invoice');
+    evntBus.$off('workflow_monitor_summary_changed', this.on_workflow_monitor_summary_changed);
     evntBus.$off('freeze');
     evntBus.$off('unfreeze');
   },
@@ -921,5 +965,9 @@ export default {
 <style scoped>
 .margen-top {
   margin-top: 0px;
+}
+
+.workflow-monitor-drawer-item :deep(.v-list-item__subtitle) {
+  color: rgba(255, 255, 255, 0.72);
 }
 </style>

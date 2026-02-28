@@ -1,5 +1,5 @@
 <template>
-  <div fluid class="mt-2">
+  <div class="pos-shell">
     <ClosingDialog></ClosingDialog>
     <Drafts></Drafts>
     <SalesOrders></SalesOrders>
@@ -340,4 +340,15 @@ export default {
 };
 </script>
 
-<style scoped></style>
+<style scoped>
+.pos-shell {
+  padding: 8px 10px 10px;
+  background: #f4f7fb;
+}
+
+@media (max-width: 959px) {
+  .pos-shell {
+    padding: 6px;
+  }
+}
+</style>
