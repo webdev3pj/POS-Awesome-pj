@@ -1428,6 +1428,9 @@ export default {
                 <div><b>${__("Sales Associate")}:</b> ${this.escape_html(meta.sales_associate_name || frappe.session.user_fullname || frappe.session.user)}</div>
                 <div><b>${__("Date")}:</b> ${this.escape_html(dt.dateLabel)} &nbsp; <b>${__("Time")}:</b> ${this.escape_html(dt.timeLabel)}</div>
                 <div><b>${__("Grand Total")}:</b> ${this.escape_html(grandTotal)}</div>
+              </div>
+              <div style="padding-top:0.75rem;text-align:center;color:#085294;font-size:13px;font-weight:600;">
+                ${this.escape_html(__("Use the 'Print Token Slip' button below to print and hand this token to the customer."))}
               </div>`,
           },
           {
@@ -1440,11 +1443,12 @@ export default {
             )}</small></div>`,
           },
         ],
-        primary_action_label: __("Print"),
+        primary_action_label: __("Print Token Slip"),
         primary_action() {
           vm.print_sales_order_token_slip(meta);
           d.hide();
         },
+        secondary_action_label: __("Close"),
       });
       d.show();
     },
