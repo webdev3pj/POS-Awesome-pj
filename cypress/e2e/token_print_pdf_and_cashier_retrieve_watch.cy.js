@@ -619,11 +619,50 @@ function setInputValue(selector, value) {
     });
 }
 
+function getSearchOrderNameFromRequestBody(body) {
+  if (!body) return '';
+  if (typeof body === 'object') {
+    return String(body.order_name || body?.args?.order_name || '').trim();
+  }
+  if (typeof body === 'string') {
+    const text = String(body || '');
+    try {
+      const params = new URLSearchParams(text);
+      return String(params.get('order_name') || '').trim();
+    } catch (_err) {
+      // Ignore URLSearchParams parsing errors.
+    }
+    try {
+      const parsed = JSON.parse(text);
+      return String(parsed.order_name || parsed?.args?.order_name || '').trim();
+    } catch (_err) {
+      // Ignore JSON parsing errors.
+    }
+  }
+  return '';
+}
+
+function waitForSearchOrdersForQuery(query, maxRetries = 6) {
+  const expected = String(query == null ? '' : query).trim();
+  const attempt = (retryIndex = 0) =>
+    cy.wait('@searchOrders', { timeout: 120000 }).then((interception) => {
+      const sent = getSearchOrderNameFromRequestBody(interception?.request?.body);
+      if (sent === expected) return interception;
+      if (retryIndex >= maxRetries) return interception;
+      cy.log(
+        `search_orders alias mismatch (expected "${expected}" got "${sent}"), waiting next matching response (${retryIndex + 1}/${maxRetries}).`
+      );
+      return attempt(retryIndex + 1);
+    });
+  return attempt(0);
+}
+
 function searchSalesOrders(query) {
   const inputSelector = '.v-dialog--active input';
-  setInputValue(inputSelector, query);
+  const normalizedQuery = String(query == null ? '' : query);
+  setInputValue(inputSelector, normalizedQuery);
   cy.contains('.v-dialog--active .v-btn', /^Search$/i, { timeout: 30000 }).click({ force: true });
-  return cy.wait('@searchOrders', { timeout: 120000 }).then((interception) => {
+  return waitForSearchOrdersForQuery(normalizedQuery).then((interception) => {
     expect(interception?.response?.statusCode, 'search_orders status').to.eq(200);
     const rows = Array.isArray(interception?.response?.body?.message) ? interception.response.body.message : [];
     return rows;

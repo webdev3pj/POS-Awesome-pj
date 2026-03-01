@@ -607,7 +607,7 @@ describe('SA frontend workflow (watch mode)', () => {
     cy.get('@tokenDialog').should('contain.text', 'SO:');
 
     cy.get('@tokenDialog').within(() => {
-      cy.contains('button, .v-btn', /^Print$/i).click({ force: true });
+      cy.contains('button, .v-btn', /^Print( Token Slip)?$/i).click({ force: true });
     });
     cy.get('@windowOpen').should('have.been.called');
 
