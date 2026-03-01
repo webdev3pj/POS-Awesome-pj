@@ -112,6 +112,13 @@ def _build_request_payload(event_type, payload):
             "sales_invoice": payload.get("sales_invoice") or payload.get("cloud_invoice_name"),
             "pos_profile": payload.get("pos_profile") or payload.get("pos_profile_id") or "",
             "allow_exception_release": 1 if payload.get("allow_partial") else 0,
+            "dispatch_proof": payload.get("dispatch_proof") or {
+                "ack_name": payload.get("proof_ack_name") or "",
+                "proof_mode": payload.get("proof_mode") or "",
+                "proof_ref_no": payload.get("proof_ref_no") or "",
+                "proof_notes": payload.get("proof_notes") or "",
+            },
+            "dispatch_line_snapshot": payload.get("line_snapshot") or [],
         }
 
     if event_type == "CUSTOMER_UPSERT":

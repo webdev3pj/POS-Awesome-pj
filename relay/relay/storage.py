@@ -175,6 +175,9 @@ def init_db():
                 source_origin TEXT,
                 source_env TEXT,
                 source_user_agent TEXT,
+                dispatch_proof_payload TEXT NOT NULL DEFAULT '{}',
+                dispatch_exception_state TEXT NOT NULL DEFAULT 'NONE',
+                cashier_adjustment_required INTEGER NOT NULL DEFAULT 0,
                 released_by TEXT,
                 released_at TEXT,
                 created_at TEXT NOT NULL,
@@ -338,6 +341,9 @@ def init_db():
             _ensure_column(conn, table_name, "source_origin", "TEXT")
             _ensure_column(conn, table_name, "source_env", "TEXT")
             _ensure_column(conn, table_name, "source_user_agent", "TEXT")
+        _ensure_column(conn, "relay_local_sales", "dispatch_proof_payload", "TEXT NOT NULL DEFAULT '{}'")
+        _ensure_column(conn, "relay_local_sales", "dispatch_exception_state", "TEXT NOT NULL DEFAULT 'NONE'")
+        _ensure_column(conn, "relay_local_sales", "cashier_adjustment_required", "INTEGER NOT NULL DEFAULT 0")
 
 
 def load_config():
@@ -1486,9 +1492,89 @@ def update_pick_status(local_sale_ref, picking_status, picker_user_id=None, note
     return {"ok": True, "local_sale_ref": local_sale_ref, "pick_status": picking_status}
 
 
+def _normalize_line_snapshot(rows):
+    snapshot_rows = rows if isinstance(rows, list) else []
+    cleaned = []
+    for row in snapshot_rows:
+        if not isinstance(row, dict):
+            continue
+        line_id_raw = row.get("line_id")
+        if line_id_raw is None:
+            line_id_raw = row.get("id")
+        try:
+            line_id = int(line_id_raw)
+        except Exception:
+            line_id = 0
+        item_code = str(row.get("item_code") or "").strip()[:140]
+        item_name = str(row.get("item_name") or "").strip()[:240]
+        try:
+            ordered_qty = float(row.get("ordered_qty") or row.get("qty") or 0)
+        except Exception:
+            ordered_qty = 0.0
+        try:
+            picked_qty = float(row.get("picked_qty") or 0)
+        except Exception:
+            picked_qty = 0.0
+        ordered_uom = str(row.get("ordered_uom") or row.get("uom") or "").strip()[:40]
+        picked_uom = str(row.get("picked_uom") or ordered_uom or "").strip()[:40]
+        try:
+            conversion_factor = float(row.get("conversion_factor") or 1)
+        except Exception:
+            conversion_factor = 1.0
+        try:
+            picked_stock_qty = float(row.get("picked_stock_qty") or (picked_qty * conversion_factor))
+        except Exception:
+            picked_stock_qty = picked_qty * conversion_factor
+        pick_status = str(row.get("pick_status") or "").strip().upper()[:60]
+        if line_id <= 0 and not item_code:
+            continue
+        cleaned.append(
+            {
+                "line_id": line_id,
+                "item_code": item_code,
+                "item_name": item_name,
+                "ordered_qty": ordered_qty,
+                "ordered_uom": ordered_uom,
+                "picked_qty": picked_qty,
+                "picked_uom": picked_uom,
+                "conversion_factor": conversion_factor,
+                "picked_stock_qty": picked_stock_qty,
+                "pick_status": pick_status,
+            }
+        )
+    return cleaned
+
+
 def release_sale(local_sale_ref, dispatcher_user_id=None, allow_partial=False, notes=None, payload=None, source_meta=None):
     now = _now_iso()
     source = _normalize_source_meta(source_meta)
+    payload_obj = payload if isinstance(payload, dict) else {}
+    proof_ack_name = str(payload_obj.get("proof_ack_name") or "").strip()[:140]
+    proof_mode = str(payload_obj.get("proof_mode") or "").strip().lower()
+    proof_ref_no = str(payload_obj.get("proof_ref_no") or "").strip()[:120]
+    proof_notes = str(payload_obj.get("proof_notes") or payload_obj.get("notes") or "").strip()[:500]
+    line_snapshot = _normalize_line_snapshot(payload_obj.get("line_snapshot"))
+    line_summary = payload_obj.get("line_summary") if isinstance(payload_obj.get("line_summary"), dict) else {}
+
+    if not proof_ack_name:
+        return {"ok": False, "code": "DISPATCH_PROOF_ACK_REQUIRED", "message": "proof_ack_name is required"}
+    if proof_mode not in ("counter", "delivery", "other"):
+        return {
+            "ok": False,
+            "code": "DISPATCH_PROOF_MODE_REQUIRED",
+            "message": "proof_mode must be one of counter|delivery|other",
+        }
+    if not line_snapshot:
+        return {"ok": False, "code": "DISPATCH_LINE_SNAPSHOT_REQUIRED", "message": "line_snapshot is required"}
+
+    proof_payload = {
+        "ack_name": proof_ack_name,
+        "proof_mode": proof_mode,
+        "proof_ref_no": proof_ref_no,
+        "proof_notes": proof_notes,
+        "captured_at": now,
+    }
+
     with get_db() as conn:
         row = conn.execute(
             """
@@ -1518,24 +1604,37 @@ def release_sale(local_sale_ref, dispatcher_user_id=None, allow_partial=False, n
         conn.execute(
             """
             UPDATE relay_local_sales
-            SET dispatch_status = 'RELEASED', released_by = ?, released_at = ?, updated_at = ?
+            SET dispatch_status = 'RELEASED',
+                dispatch_proof_payload = ?,
+                dispatch_exception_state = 'NONE',
+                cashier_adjustment_required = 0,
+                released_by = ?,
+                released_at = ?,
+                updated_at = ?
             WHERE local_sale_ref = ?
             """,
-            (dispatcher_user_id or "", now, now, local_sale_ref),
+            (_dumps(proof_payload), dispatcher_user_id or "", now, now, local_sale_ref),
         )
+
+        dispatch_event_payload = {
+            "proof": proof_payload,
+            "line_snapshot": line_snapshot,
+            "line_summary": line_summary,
+            "allow_partial": bool(allow_partial),
+        }
 
         conn.execute(
             """
             INSERT INTO relay_dispatch_events (
                 local_sale_ref, dispatcher_user_id, event_type, notes, payload,
                 source_origin, source_env, source_user_agent, created_at
-            ) VALUES (?, ?, 'RELEASED', ?, ?, ?, ?, ?, ?)
+            ) VALUES (?, ?, 'DISPATCH_RELEASED_WITH_PROOF', ?, ?, ?, ?, ?, ?)
             """,
             (
                 local_sale_ref,
                 dispatcher_user_id or "",
-                notes or "",
-                _dumps(payload),
+                notes or proof_notes,
+                _dumps(dispatch_event_payload),
                 source["source_origin"],
                 source["source_env"],
                 source["source_user_agent"],
@@ -1543,7 +1642,102 @@ def release_sale(local_sale_ref, dispatcher_user_id=None, allow_partial=False, n
             ),
         )
 
-    return {"ok": True, "local_sale_ref": local_sale_ref, "dispatch_status": "RELEASED"}
+    return {
+        "ok": True,
+        "local_sale_ref": local_sale_ref,
+        "dispatch_status": "RELEASED",
+        "dispatch_proof": proof_payload,
+    }
+
+
+def flag_dispatch_mismatch(
+    local_sale_ref,
+    dispatcher_user_id=None,
+    reason_code=None,
+    reason_text=None,
+    requires_cashier_adjustment=False,
+    payload=None,
+    source_meta=None,
+):
+    now = _now_iso()
+    source = _normalize_source_meta(source_meta)
+    payload_obj = payload if isinstance(payload, dict) else {}
+    reason_code = str(reason_code or payload_obj.get("reason_code") or "").strip().upper()[:80]
+    reason_text = str(reason_text or payload_obj.get("reason_text") or payload_obj.get("notes") or "").strip()[:500]
+    if not reason_code and not reason_text:
+        return {
+            "ok": False,
+            "code": "MISMATCH_REASON_REQUIRED",
+            "message": "reason_code or reason_text is required",
+        }
+    line_snapshot = _normalize_line_snapshot(payload_obj.get("line_snapshot"))
+    requires_cashier_adjustment = bool(
+        requires_cashier_adjustment or payload_obj.get("requires_cashier_adjustment")
+    )
+
+    event_payload = {
+        "reason_code": reason_code,
+        "reason_text": reason_text,
+        "requires_cashier_adjustment": 1 if requires_cashier_adjustment else 0,
+        "line_snapshot": line_snapshot,
+        "captured_at": now,
+    }
+
+    with get_db() as conn:
+        row = conn.execute(
+            """
+            SELECT local_sale_ref, dispatch_status
+            FROM relay_local_sales
+            WHERE local_sale_ref = ?
+            """,
+            (local_sale_ref,),
+        ).fetchone()
+        if not row:
+            return {"ok": False, "code": "SALE_NOT_FOUND"}
+        if str(row["dispatch_status"] or "").upper() == "RELEASED":
+            return {"ok": False, "code": "ALREADY_RELEASED", "message": "Cannot flag mismatch after release"}
+
+        conn.execute(
+            """
+            UPDATE relay_local_sales
+            SET pick_status = 'PICK_EXCEPTION',
+                dispatch_status = 'PENDING',
+                dispatch_proof_payload = '{}',
+                dispatch_exception_state = 'MISMATCH_RETURNED_TO_PICKER',
+                cashier_adjustment_required = ?,
+                updated_at = ?
+            WHERE local_sale_ref = ?
+            """,
+            (1 if requires_cashier_adjustment else 0, now, local_sale_ref),
+        )
+
+        conn.execute(
+            """
+            INSERT INTO relay_dispatch_events (
+                local_sale_ref, dispatcher_user_id, event_type, notes, payload,
+                source_origin, source_env, source_user_agent, created_at
+            ) VALUES (?, ?, 'DISPATCH_MISMATCH_FLAGGED', ?, ?, ?, ?, ?, ?)
+            """,
+            (
+                local_sale_ref,
+                dispatcher_user_id or "",
+                reason_text or "",
+                _dumps(event_payload),
+                source["source_origin"],
+                source["source_env"],
+                source["source_user_agent"],
+                now,
+            ),
+        )
+
+    return {
+        "ok": True,
+        "local_sale_ref": local_sale_ref,
+        "pick_status": "PICK_EXCEPTION",
+        "dispatch_status": "PENDING",
+        "dispatch_exception_state": "MISMATCH_RETURNED_TO_PICKER",
+        "cashier_adjustment_required": 1 if requires_cashier_adjustment else 0,
+    }
 
 
 def get_pick_queue(pos_profile_id=None, limit=100):
@@ -1551,8 +1745,9 @@ def get_pick_queue(pos_profile_id=None, limit=100):
         if pos_profile_id:
             cur = conn.execute(
                 """
-                SELECT local_sale_ref, pos_profile_id, customer_id, customer_name,
-                       pick_status, dispatch_status, paid, total, created_at, updated_at
+                SELECT local_sale_ref, token_id, pos_profile_id, customer_id, customer_name,
+                       pick_status, dispatch_status, dispatch_exception_state, cashier_adjustment_required,
+                       paid, total, created_at, updated_at
                 FROM relay_local_sales
                 WHERE pos_profile_id = ? AND paid = 1 AND dispatch_status != 'RELEASED'
                 ORDER BY created_at ASC
@@ -1563,8 +1758,9 @@ def get_pick_queue(pos_profile_id=None, limit=100):
         else:
             cur = conn.execute(
                 """
-                SELECT local_sale_ref, pos_profile_id, customer_id, customer_name,
-                       pick_status, dispatch_status, paid, total, created_at, updated_at
+                SELECT local_sale_ref, token_id, pos_profile_id, customer_id, customer_name,
+                       pick_status, dispatch_status, dispatch_exception_state, cashier_adjustment_required,
+                       paid, total, created_at, updated_at
                 FROM relay_local_sales
                 WHERE paid = 1 AND dispatch_status != 'RELEASED'
                 ORDER BY created_at ASC
@@ -1681,6 +1877,7 @@ def get_relay_monitor_board(
             SELECT local_sale_ref, token_id, pos_profile_id, cashier_user_id, cashier_session_id,
                    device_id, sale_status, pick_status, dispatch_status, paid, total, customer_id, customer_name,
                    cloud_invoice_name, cloud_sync_status, source_origin, source_env, source_user_agent,
+                   dispatch_proof_payload, dispatch_exception_state, cashier_adjustment_required,
                    released_by, released_at, created_at, updated_at
             FROM relay_local_sales
             WHERE 1 = 1
@@ -1794,6 +1991,9 @@ def get_relay_monitor_board(
             "picked_at": picked_at,
             "released_at": sale.get("released_at") or "",
             "status_changed_at": sale.get("updated_at") or sale.get("created_at"),
+            "dispatch_proof": _loads(sale.get("dispatch_proof_payload")),
+            "dispatch_exception_state": sale.get("dispatch_exception_state") or "NONE",
+            "cashier_adjustment_required": int(sale.get("cashier_adjustment_required") or 0),
             "source_origin": sale.get("source_origin") or "",
             "source_env": sale.get("source_env") or (token or {}).get("source_env") or "",
             "source_user_agent": sale.get("source_user_agent") or "",
@@ -1842,6 +2042,9 @@ def get_relay_monitor_board(
             "picked_at": "",
             "released_at": "",
             "status_changed_at": token.get("updated_at") or token.get("created_at"),
+            "dispatch_proof": {},
+            "dispatch_exception_state": "NONE",
+            "cashier_adjustment_required": 0,
             "source_origin": token.get("source_origin") or "",
             "source_env": token.get("source_env") or "",
             "source_user_agent": token.get("source_user_agent") or "",
@@ -1917,6 +2120,7 @@ def get_latest_local_sale(local_sale_ref):
                    invoice_payload, data_payload,
                    cloud_invoice_name, cloud_sync_status, cloud_sync_error,
                    source_origin, source_env, source_user_agent,
+                   dispatch_proof_payload, dispatch_exception_state, cashier_adjustment_required,
                    released_by, released_at, created_at, updated_at
             FROM relay_local_sales
             WHERE local_sale_ref = ?
@@ -1928,6 +2132,9 @@ def get_latest_local_sale(local_sale_ref):
         data = dict(row)
         data["invoice_payload"] = _loads(data.get("invoice_payload"))
         data["data_payload"] = _loads(data.get("data_payload"))
+        data["dispatch_proof_payload"] = _loads(data.get("dispatch_proof_payload"))
+        data["dispatch_proof"] = data["dispatch_proof_payload"]
+        data["cashier_adjustment_required"] = int(data.get("cashier_adjustment_required") or 0)
         return data
 
 
@@ -1939,6 +2146,7 @@ def list_local_sales(limit=200, pos_profile_id=None, search=None):
                total, net_total, customer_id, customer_name,
                cloud_invoice_name, cloud_sync_status, cloud_sync_error,
                source_origin, source_env, source_user_agent,
+               dispatch_proof_payload, dispatch_exception_state, cashier_adjustment_required,
                released_by, released_at, created_at, updated_at
         FROM relay_local_sales
         WHERE 1 = 1
@@ -1967,7 +2175,12 @@ def list_local_sales(limit=200, pos_profile_id=None, search=None):
 
     with get_db() as conn:
         cur = conn.execute(query, tuple(params))
-        return [dict(r) for r in cur.fetchall()]
+        rows = [dict(r) for r in cur.fetchall()]
+        for row in rows:
+            row["dispatch_proof_payload"] = _loads(row.get("dispatch_proof_payload"))
+            row["dispatch_proof"] = row["dispatch_proof_payload"]
+            row["cashier_adjustment_required"] = int(row.get("cashier_adjustment_required") or 0)
+        return rows
 
 
 def get_local_sale_detail(local_sale_ref):
@@ -1981,6 +2194,7 @@ def get_local_sale_detail(local_sale_ref):
                    invoice_payload, data_payload,
                    cloud_invoice_name, cloud_sync_status, cloud_sync_error,
                    source_origin, source_env, source_user_agent,
+                   dispatch_proof_payload, dispatch_exception_state, cashier_adjustment_required,
                    released_by, released_at, created_at, updated_at
             FROM relay_local_sales
             WHERE local_sale_ref = ?
@@ -2040,6 +2254,9 @@ def get_local_sale_detail(local_sale_ref):
     sale = dict(sale_row)
     sale["invoice_payload"] = _loads(sale.get("invoice_payload"))
     sale["data_payload"] = _loads(sale.get("data_payload"))
+    sale["dispatch_proof_payload"] = _loads(sale.get("dispatch_proof_payload"))
+    sale["dispatch_proof"] = sale["dispatch_proof_payload"]
+    sale["cashier_adjustment_required"] = int(sale.get("cashier_adjustment_required") or 0)
 
     lines = [dict(r) for r in line_rows]
     for row in lines:

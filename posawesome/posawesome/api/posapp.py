@@ -1333,6 +1333,10 @@ def get_relay_workflow_monitor_board(
         "paid_at",
         "pick_started_at",
         "picked_at",
+        "dispatch_exception_state",
+        "cashier_adjustment_required",
+        "dispatch_proof",
+        "dispatch_proof_payload",
     ):
         if _relay_workflow_has_field(maybe_field):
             state_fields.append(maybe_field)
@@ -1509,6 +1513,11 @@ def get_relay_workflow_monitor_board(
             "picked_at": row.get("picked_at"),
             "released_at": row.get("released_at"),
             "status_changed_at": status_changed_at,
+            "dispatch_exception_state": row.get("dispatch_exception_state") or "NONE",
+            "cashier_adjustment_required": cint(row.get("cashier_adjustment_required") or 0),
+            "dispatch_proof": row.get("dispatch_proof")
+            or row.get("dispatch_proof_payload")
+            or {},
         }
         rows.append(monitor_row)
         status_counts[monitor_row["display_status"]] = status_counts.get(monitor_row["display_status"], 0) + 1

@@ -24,10 +24,11 @@ Recommended local end-to-end order:
 10. `local_staging_relay_demo_picker_post_ui_watch.cy.js`
 11. `admin_set_cline_dispatch_only_role.cy.js`
 12. `local_staging_dispatch_workflow_frontend_watch.cy.js`
-13. `local_staging_relay_demo_dispatch_post_ui_watch.cy.js`
-14. `admin_set_cline_supervisor_only_role.cy.js` (optional)
-15. `local_staging_supervisor_fulfillment_exception_watch.cy.js` (optional)
-16. `local_staging_phase3_security_relay_role_guards_watch.cy.js`
+13. `local_staging_dispatch_mismatch_returns_to_picker_watch.cy.js`
+14. `local_staging_relay_demo_dispatch_post_ui_watch.cy.js`
+15. `admin_set_cline_supervisor_only_role.cy.js` (optional)
+16. `local_staging_supervisor_fulfillment_exception_watch.cy.js` (optional)
+17. `local_staging_phase3_security_relay_role_guards_watch.cy.js`
 
 Recommended runner (strict timeout + post-spec scan):
 

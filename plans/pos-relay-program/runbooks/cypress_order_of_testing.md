@@ -48,13 +48,14 @@ Run in this exact order:
 11. `cypress/e2e/relay_demo_picker_post_ui_watch.cy.js`
 12. `cypress/e2e/admin_set_cline_dispatch_only_role.cy.js`
 13. `cypress/e2e/dispatch_workflow_frontend_watch.cy.js`
-14. `cypress/e2e/relay_demo_dispatch_post_ui_watch.cy.js`
+14. `cypress/e2e/dispatch_mismatch_returns_to_picker_watch.cy.js`
+15. `cypress/e2e/relay_demo_dispatch_post_ui_watch.cy.js`
 
 Optional hardening:
-15. `cypress/e2e/admin_set_cline_supervisor_only_role.cy.js`
-16. `cypress/e2e/supervisor_fulfillment_exception_watch.cy.js`
-17. `cypress/e2e/phase3_security_relay_role_guards_watch.cy.js`
-18. `cypress/e2e/ui_shell_chrome_role_consistency.cy.js`
+16. `cypress/e2e/admin_set_cline_supervisor_only_role.cy.js`
+17. `cypress/e2e/supervisor_fulfillment_exception_watch.cy.js`
+18. `cypress/e2e/phase3_security_relay_role_guards_watch.cy.js`
+19. `cypress/e2e/ui_shell_chrome_role_consistency.cy.js`
 
 Token print / retrieval signoff rule (after step 4):
 - Review:
@@ -102,12 +103,13 @@ Run in this exact order:
 10. `cypress/e2e/local_staging/local_staging_relay_demo_picker_post_ui_watch.cy.js`
 11. `cypress/e2e/admin_set_cline_dispatch_only_role.cy.js`
 12. `cypress/e2e/local_staging/local_staging_dispatch_workflow_frontend_watch.cy.js`
-13. `cypress/e2e/local_staging/local_staging_relay_demo_dispatch_post_ui_watch.cy.js`
+13. `cypress/e2e/local_staging/local_staging_dispatch_mismatch_returns_to_picker_watch.cy.js`
+14. `cypress/e2e/local_staging/local_staging_relay_demo_dispatch_post_ui_watch.cy.js`
 
 Optional hardening:
-14. `cypress/e2e/admin_set_cline_supervisor_only_role.cy.js`
-15. `cypress/e2e/local_staging/local_staging_supervisor_fulfillment_exception_watch.cy.js`
-16. `cypress/e2e/local_staging/local_staging_phase3_security_relay_role_guards_watch.cy.js`
+15. `cypress/e2e/admin_set_cline_supervisor_only_role.cy.js`
+16. `cypress/e2e/local_staging/local_staging_supervisor_fulfillment_exception_watch.cy.js`
+17. `cypress/e2e/local_staging/local_staging_phase3_security_relay_role_guards_watch.cy.js`
 
 Supervisor reseed rule (important):
 - If step 15 fails with `pending unreleased queue row: expected undefined to be an object`, the queue was already fully released by dispatch.

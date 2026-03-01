@@ -23,6 +23,62 @@ Note:
 
 ---
 
+## 2026-03-01 - Detailed-default fulfillment UX + dispatch proof/mismatch relay hardening
+- Branch: `codex-5-final`
+- Summary: Implemented dispatch completion proof capture on relay, added explicit dispatch mismatch return-to-picker flow, and kept fulfillment workspace default in detailed mode with a visible simple/detailed toggle.
+- What changed:
+  - Relay storage schema and state model:
+    - `relay/relay/storage.py`
+    - new `relay_local_sales` fields:
+      - `dispatch_proof_payload`
+      - `dispatch_exception_state`
+      - `cashier_adjustment_required`
+    - `release_sale(...)` now requires dispatch proof + line snapshot and records:
+      - event type `DISPATCH_RELEASED_WITH_PROOF`
+      - proof payload + line snapshot in dispatch event
+    - added `flag_dispatch_mismatch(...)` to return rows to picker path:
+      - `pick_status=PICK_EXCEPTION`
+      - `dispatch_status=PENDING`
+      - `dispatch_exception_state=MISMATCH_RETURNED_TO_PICKER`
+      - `cashier_adjustment_required` flag
+      - event type `DISPATCH_MISMATCH_FLAGGED`
+  - Relay API endpoints:
+    - `relay/relay/app.py`
+    - `/relay/dispatch/release` now validates:
+      - `proof_ack_name`
+      - `proof_mode`
+      - `line_snapshot`
+    - new `/relay/dispatch/mismatch` endpoint (dispatch/supervisor role-guarded)
+  - Fulfillment UI:
+    - `posawesome/public/js/posapp/components/pos/FulfillmentWorkspace.vue`
+    - explicit view toggle (`Detailed` default, `Simple` optional)
+    - dispatch proof form (ack/mode/ref/notes)
+    - release button gated by proof validity + existing release gates
+    - mismatch form + `Flag Mismatch` action
+    - detail chips/labels for mismatch and cashier-adjustment-required state
+  - Monitor/sync mapping:
+    - `relay/relay/sync_worker.py` release payload enrichment now includes dispatch proof + line snapshot fields for cloud handoff context
+    - `posawesome/posawesome/api/posapp.py` monitor board mapping now carries optional dispatch exception/proof/adjustment fields when available
+  - Cypress:
+    - updated `cypress/e2e/dispatch_workflow_frontend_watch.cy.js` for proof-required release assertions
+    - added `cypress/e2e/dispatch_mismatch_returns_to_picker_watch.cy.js`
+    - added `cypress/e2e/local_staging/local_staging_dispatch_mismatch_returns_to_picker_watch.cy.js`
+    - updated role-consistency check in `cypress/e2e/ui_shell_chrome_role_consistency.cy.js` to assert detailed mode default for fulfillment roles
+  - Runbook updates:
+    - `plans/pos-relay-program/runbooks/cypress_order_of_testing.md`
+    - `cypress/e2e/local_staging/README.md`
+- What was verified:
+  - Implementation patch complete across relay + UI + Cypress coverage.
+  - Validation run pending on deployed environment (run order updated with mismatch spec between dispatch workflow and relay dispatch post-proof).
+- What remains:
+  - Execute the updated cloud/local watch-mode suite and publish UAT evidence for dispatch proof + mismatch path.
+- Links:
+  - `relay/relay/storage.py`
+  - `relay/relay/app.py`
+  - `posawesome/public/js/posapp/components/pos/FulfillmentWorkspace.vue`
+  - `cypress/e2e/dispatch_mismatch_returns_to_picker_watch.cy.js`
+  - `plans/pos-relay-program/runbooks/cypress_order_of_testing.md`
+
 ## 2026-02-28 - Cloud-dev token slip PDF capture + cashier retrieval validation completed
 - Branch: `codex-5-final`
 - Summary: Added a dedicated headed Cypress cloud-dev proof that captures the real SA token slip popup HTML, renders it to PDF, validates printed business fields and machine-readable payloads, then proves the current cashier retrieval path on the live dev site.

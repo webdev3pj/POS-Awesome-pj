@@ -268,12 +268,18 @@ Key fields:
   - `cloud_sync_error`
 - release audit fields:
   - `released_by`, `released_at`
+- dispatch proof / exception fields:
+  - `dispatch_proof_payload` (JSON text)
+  - `dispatch_exception_state`
+  - `cashier_adjustment_required` (`0|1`)
 - `created_at`, `updated_at`
 
 Semantics:
 - Created atomically on relay commit.
 - Serves as the local operational record for pick/dispatch workflows.
 - `idempotency_key` prevents duplicate local sales on retries/double clicks.
+- Dispatch completion is auditable via proof payload persistence on release.
+- Dispatch mismatch flow is persisted directly on the sale header and pushes rows back to picker exception state.
 
 ### `relay_local_sale_lines`
 Purpose:
@@ -338,6 +344,9 @@ Key fields:
 
 Semantics:
 - Operational audit log for gate release actions.
+- Current event types include:
+  - `DISPATCH_RELEASED_WITH_PROOF`
+  - `DISPATCH_MISMATCH_FLAGGED`
 
 ### `relay_customers`
 Purpose:
@@ -485,6 +494,40 @@ Examples present in branch:
 - `/relay/pick-queue`
 - `/relay/pick/update`
 - `/relay/dispatch/release`
+- `/relay/dispatch/mismatch`
+
+### Dispatch workflow endpoint contract (current)
+- `POST /relay/dispatch/release`:
+  - required:
+    - `local_sale_ref`
+    - `proof_ack_name`
+    - `proof_mode` (`counter|delivery|other`)
+    - `line_snapshot` (current line rows at release time)
+  - optional:
+    - `proof_ref_no`
+    - `proof_notes`
+    - `allow_partial`
+    - `notes`
+  - result:
+    - updates sale to `dispatch_status=RELEASED`
+    - persists `dispatch_proof_payload`
+    - appends `DISPATCH_RELEASED_WITH_PROOF` dispatch event
+    - enqueues outbox `RELEASE_EVENT`
+- `POST /relay/dispatch/mismatch`:
+  - required:
+    - `local_sale_ref`
+    - `reason_code` or `reason_text`
+  - optional:
+    - `requires_cashier_adjustment`
+    - `line_snapshot`
+  - result:
+    - updates sale to:
+      - `pick_status=PICK_EXCEPTION`
+      - `dispatch_status=PENDING`
+      - `dispatch_exception_state=MISMATCH_RETURNED_TO_PICKER`
+      - `cashier_adjustment_required` from payload
+    - appends `DISPATCH_MISMATCH_FLAGGED` dispatch event
+    - enqueues outbox `PICK_EVENT` for cloud-side pick-status parity
 
 ## Windows Operation Model (Current Branch Reality)
 ### Current startup model (`Implemented`)

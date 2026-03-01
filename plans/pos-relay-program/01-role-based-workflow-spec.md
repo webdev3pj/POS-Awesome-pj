@@ -196,7 +196,8 @@ Status tags in the last column reflect the current program branch family state; 
 | Submit SI | No | Yes | No | No | Conditional | `Partial` | `Partial` |
 | Void token | No | No | No | No | Yes | `Planned` | `Partial` (relay endpoint exists; auth missing) |
 | Pick update | No | No | Yes | No | Yes | `Implemented` (shared-shell relay path live-validated on `codex-4-picker-dispatch` / `codex-4.1-picked-dispatch-relay`) | `Partial` (auth/trust pending; cloud parity now verified for fresh events) |
-| Dispatch release | No | No | No | Yes | Yes | `Implemented` (shared-shell relay path live-validated on `codex-4-picker-dispatch` / `codex-4.1-picked-dispatch-relay`) | `Partial` (auth/trust pending; cloud parity now verified for fresh events) |
+| Dispatch release (with proof) | No | No | No | Yes | Yes | `Implemented` (detailed-default fulfillment UI; release gated by proof fields) | `Partial` (auth/trust pending; cloud parity now verified for fresh events) |
+| Dispatch flag mismatch (return to picker) | No | No | No | Yes | Yes | `Implemented` (dispatch/supervisor mismatch action in shared shell) | `Partial` (new relay endpoint + outbox sync path; live rerun pending) |
 | Override exceptions | No | No | No | Limited | Yes | `Planned` | `Planned` |
 
 ## Current Implementation Notes by Role
@@ -270,31 +271,41 @@ Recommended picker flow (same POS shell, relay-backed):
 - Ticket monitor rail remains visible for cross-role context; picker actions may later deep-link from rail row -> pick detail panel.
 
 ### Dispatch (`cline-Dispatch`)
-Status: `Partial` (core local-first workflow + cloud parity for fresh events proven through `codex-4.1-picked-dispatch-relay`)
+Status: `Implemented` (dispatch monitor/release UX) / `Partial` (full cloud signoff matrix)
 
 What exists:
-- Relay dispatch release API and state transitions (`Implemented` backend foundation).
-- Shared-shell fulfillment workspace UI is implemented on `codex-4-picker-dispatch` and live-validated on dev site + OptiPlex relay (`Partial`, core local-first path proven):
-  - release-ready queue filtering in POS Awesome
-  - relay sale detail/status visibility
-  - relay `/relay/dispatch/release` action with partial/exception override toggle
-- Live UAT proof (2026-02-24, headed Cypress on OptiPlex):
-  - dispatch released a picker-ready local sale
-  - relay sale `dispatch_status = RELEASED`
-  - local `RELEASED` dispatch event created
-  - sale disappeared from relay pick queue
+- Relay dispatch release API now enforces proof fields + line snapshot (`proof_ack_name`, `proof_mode`, `line_snapshot`) before release (`Implemented` backend foundation).
+- New relay dispatch mismatch API (`/relay/dispatch/mismatch`) returns a row to picker exception flow (`Implemented` backend foundation).
+- Shared-shell fulfillment workspace is detailed by default for fulfillment roles, with simple mode optional:
+  - dispatch queue monitor cards (ready/picking/exception + SLA cards)
+  - release-proof form in detail pane
+  - explicit `Release Goods` gate bound to proof validity + existing paid/picked checks
+  - explicit `Flag Mismatch` action with reason + cashier-adjustment flag
+  - detail chips for mismatch state and cashier-adjustment-required state
+- Relay state/events now persist dispatch proof and mismatch transitions:
+  - release event type: `DISPATCH_RELEASED_WITH_PROOF`
+  - mismatch event type: `DISPATCH_MISMATCH_FLAGGED`
+  - sale fields: `dispatch_proof_payload`, `dispatch_exception_state`, `cashier_adjustment_required`
 
 What is missing:
-- Dispatch hold/reason/override UX refinement and explicit supervisor pathways.
-- Committed/repeatable Cypress dispatch spec coverage exists on `codex-4.1-picked-dispatch-relay`; live rerun/standardization and hold/reason variants are still pending.
-- Server/relay authorization (Phase 3).
+- Full live-cloud rerun signoff for every negative case after deployment (proof-missing, mismatch role-rejection, offline retry matrix).
+- Additional dispatch UX polish for high-volume operation (possible future enhancement; not required for current flow).
+- Final Phase 3 trust-model closure/signoff across full negative matrix.
 
 Recommended dispatch flow (same POS shell, relay-backed):
-- Default dispatch landing panel shows release-ready orders (picked/paid, not released) and held/exception items requiring resolution.
-- Normal case (fast path): dispatch confirms release with one explicit action after verifying picked/paid status.
-- Edge case: hold/reason/override path is used when pick is partial/exception or supervisor approval is required.
-- Relay records dispatch release event locally and updates local sale release status immediately.
-- Sync to cloud happens through relay outbox/event sync without blocking the local release action when offline policy allows.
+- Dispatch default landing panel is detailed mode and monitor-first:
+  - queue sorted by SLA urgency + current phase age (oldest first)
+  - release-ready rows plus exception visibility
+- Normal case:
+  - dispatch opens a row
+  - fills release proof (ack + mode required)
+  - releases goods
+  - relay marks `dispatch_status=RELEASED` and writes `DISPATCH_RELEASED_WITH_PROOF`
+- Mismatch case:
+  - dispatch flags mismatch with reason
+  - relay sets row back to picker exception (`pick_status=PICK_EXCEPTION`, `dispatch_status=PENDING`)
+  - cashier-adjustment-required flag is carried for financial correction path
+- Sync to cloud continues via relay outbox and should not block local dispatch state transitions.
 
 ### Supervisor (`cline-Supervisor`)
 Status: `Planned` / `Partial`

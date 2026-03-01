@@ -15,11 +15,30 @@
             </div>
           </v-card-title>
           <v-card-text class="pt-0">
+            <div class="d-flex align-center justify-space-between mb-2">
+              <v-btn-toggle
+                v-model="viewMode"
+                dense
+                mandatory
+                class="fulfillment-view-toggle"
+                data-cy="fulfillment-view-mode"
+              >
+                <v-btn small value="detailed" data-cy="fulfillment-view-detailed">
+                  {{ __('Detailed') }}
+                </v-btn>
+                <v-btn small value="simple" data-cy="fulfillment-view-simple">
+                  {{ __('Simple') }}
+                </v-btn>
+              </v-btn-toggle>
+              <div class="caption grey--text">
+                {{ isDetailedView ? __('Detailed view (default)') : __('Simple view') }}
+              </div>
+            </div>
             <v-alert dense outlined type="info" class="mb-2">
               {{ __('Paper-first picking with line-wise edits for exceptions. Picked qty defaults to ordered qty and keeps order UOM/conversion factor.') }}
             </v-alert>
             <div v-if="errorText" class="red--text mb-2">{{ errorText }}</div>
-            <div v-if="canDispatch" class="mb-2">
+            <div v-if="canDispatch && isDetailedView" class="mb-2">
               <v-row dense>
                 <v-col cols="6" sm="4">
                   <v-card outlined class="pa-2">
@@ -59,7 +78,7 @@
                 </v-col>
               </v-row>
             </div>
-            <div v-if="canDispatch" class="caption grey--text mb-2">
+            <div v-if="canDispatch && isDetailedView" class="caption grey--text mb-2">
               {{ __('Dispatch queue is auto-sorted by SLA urgency and time waiting in current phase (oldest first).') }}
             </div>
             <v-text-field
@@ -122,6 +141,15 @@
                       <span class="mx-1">|</span>
                       {{ queuePhaseLabel(row) }}: {{ queuePhaseAgeLabel(row) }}
                     </v-list-item-subtitle>
+                    <v-list-item-subtitle
+                      v-if="String(row.dispatch_exception_state || 'NONE') !== 'NONE'"
+                      class="caption error--text mt-1"
+                    >
+                      {{ row.dispatch_exception_state }}
+                      <span v-if="Number(row.cashier_adjustment_required || 0) === 1">
+                        | {{ __('Cashier Adjustment Required') }}
+                      </span>
+                    </v-list-item-subtitle>
                   </v-list-item-content>
                 </v-list-item>
               </v-list>
@@ -150,6 +178,24 @@
                 </v-chip>
                 <v-chip small :color="syncColor(detail.sale.cloud_sync_status)" text-color="white">
                   {{ detail.sale.cloud_sync_status }}
+                </v-chip>
+                <v-chip
+                  v-if="String(detail.sale.dispatch_exception_state || 'NONE') !== 'NONE'"
+                  small
+                  class="ml-1"
+                  color="error"
+                  text-color="white"
+                >
+                  {{ detail.sale.dispatch_exception_state }}
+                </v-chip>
+                <v-chip
+                  v-if="Number(detail.sale.cashier_adjustment_required || 0) === 1"
+                  small
+                  class="ml-1"
+                  color="warning"
+                  text-color="white"
+                >
+                  {{ __('Cashier Adjustment Required') }}
                 </v-chip>
               </div>
             </div>
@@ -185,7 +231,11 @@
                 </v-col>
               </v-row>
 
-              <v-card outlined class="mt-2 mb-2" v-if="detailPhaseTimeline.length">
+              <v-alert v-if="hasDispatchProofOnSale && isDetailedView" dense outlined type="success" class="mt-2 mb-2">
+                <strong>{{ __('Dispatch Proof') }}:</strong> {{ dispatchProofSummaryText }}
+              </v-alert>
+
+              <v-card outlined class="mt-2 mb-2" v-if="isDetailedView && detailPhaseTimeline.length">
                 <v-card-title class="py-2 text-subtitle-2">{{ __('Phase Timeline (Dispatch Monitor)') }}</v-card-title>
                 <v-card-text class="pt-0">
                   <v-row dense class="mb-1" v-if="detailMonitorSnapshot">
@@ -238,7 +288,30 @@
                 <v-btn v-if="canPick" small color="primary" class="mr-1 mb-1" :loading="actionLoading" @click="pickUpdate('PICK_IN_PROGRESS')">{{ __('Start/Save Picking') }}</v-btn>
                 <v-btn v-if="canPick" small color="success" class="mr-1 mb-1" :loading="actionLoading" @click="markPickedReady">{{ __('Mark Picked Ready') }}</v-btn>
                 <v-btn v-if="canPick" small color="warning" class="mr-1 mb-1" :loading="actionLoading" @click="pickUpdate('PICK_EXCEPTION')">{{ __('Flag Exception') }}</v-btn>
-                <v-btn v-if="canDispatch" small color="success" class="mr-1 mb-1" :loading="actionLoading" :disabled="!canRelease" @click="releaseSale">{{ __('Release Goods') }}</v-btn>
+                <v-btn
+                  v-if="canDispatch"
+                  small
+                  color="success"
+                  class="mr-1 mb-1"
+                  :loading="actionLoading"
+                  :disabled="!canRelease"
+                  data-cy="dispatch-release-button"
+                  @click="releaseSale"
+                >
+                  {{ __('Release Goods') }}
+                </v-btn>
+                <v-btn
+                  v-if="canDispatch"
+                  small
+                  color="warning"
+                  class="mr-1 mb-1"
+                  :loading="actionLoading"
+                  :disabled="!selectedRef || String((detail && detail.sale && detail.sale.dispatch_status) || '').toUpperCase() === 'RELEASED'"
+                  data-cy="dispatch-flag-mismatch"
+                  @click="flagMismatch"
+                >
+                  {{ __('Flag Mismatch') }}
+                </v-btn>
                 <v-checkbox
                   v-if="canDispatch"
                   v-model="allowPartialRelease"
@@ -310,6 +383,89 @@
                   </v-card>
                 </v-col>
                 <v-col cols="12" md="5">
+                  <v-card outlined class="mb-2" v-if="canDispatch">
+                    <v-card-title class="py-2 text-subtitle-2">{{ __('Dispatch Release Proof') }}</v-card-title>
+                    <v-card-text class="pt-0">
+                      <v-text-field
+                        v-model="dispatchProofAckName"
+                        dense
+                        outlined
+                        hide-details
+                        data-cy="dispatch-proof-ack"
+                        :label="__('Acknowledged By (required)')"
+                        class="mb-2"
+                      />
+                      <v-select
+                        v-model="dispatchProofMode"
+                        :items="dispatchProofModeOptions"
+                        item-text="text"
+                        item-value="value"
+                        dense
+                        outlined
+                        hide-details
+                        data-cy="dispatch-proof-mode"
+                        :label="__('Proof Mode (required)')"
+                        class="mb-2"
+                      />
+                      <v-text-field
+                        v-model="dispatchProofRefNo"
+                        dense
+                        outlined
+                        hide-details
+                        data-cy="dispatch-proof-ref"
+                        :label="__('Reference No (optional)')"
+                        class="mb-2"
+                      />
+                      <v-textarea
+                        v-model="dispatchProofNotes"
+                        rows="2"
+                        dense
+                        outlined
+                        auto-grow
+                        hide-details
+                        data-cy="dispatch-proof-notes"
+                        :label="__('Proof Notes (optional)')"
+                      />
+                      <div class="caption red--text mt-2" v-if="!dispatchProofValid">
+                        {{ __('Release requires Acknowledged By and Proof Mode.') }}
+                      </div>
+                    </v-card-text>
+                  </v-card>
+                  <v-card outlined class="mb-2" v-if="canDispatch">
+                    <v-card-title class="py-2 text-subtitle-2">{{ __('Dispatch Mismatch') }}</v-card-title>
+                    <v-card-text class="pt-0">
+                      <v-select
+                        v-model="mismatchReasonCode"
+                        :items="mismatchReasonOptions"
+                        item-text="text"
+                        item-value="value"
+                        dense
+                        outlined
+                        hide-details
+                        data-cy="dispatch-mismatch-code"
+                        :label="__('Reason Code')"
+                        class="mb-2"
+                      />
+                      <v-textarea
+                        v-model="mismatchReasonText"
+                        rows="2"
+                        dense
+                        outlined
+                        auto-grow
+                        hide-details
+                        data-cy="dispatch-mismatch-text"
+                        :label="__('Reason Details')"
+                        class="mb-2"
+                      />
+                      <v-checkbox
+                        v-model="mismatchRequiresCashierAdjustment"
+                        dense
+                        hide-details
+                        data-cy="dispatch-mismatch-cashier-adjustment"
+                        :label="__('Requires cashier adjustment')"
+                      />
+                    </v-card-text>
+                  </v-card>
                   <v-card outlined class="mb-2">
                     <v-card-title class="py-2 text-subtitle-2">{{ __('Notes') }}</v-card-title>
                     <v-card-text class="pt-0">
@@ -317,7 +473,7 @@
                       <v-textarea v-model="dispatchNotes" v-if="canDispatch" rows="2" dense outlined auto-grow hide-details :label="__('Dispatch notes')" />
                     </v-card-text>
                   </v-card>
-                  <v-card outlined class="mb-2">
+                  <v-card outlined class="mb-2" v-if="isDetailedView">
                     <v-card-title class="py-2 text-subtitle-2">{{ __('Pick History') }}</v-card-title>
                     <v-card-text class="pt-0 events-wrap">
                       <div v-if="!detail.pick_events.length" class="grey--text">{{ __('No pick events') }}</div>
@@ -328,7 +484,7 @@
                       </div>
                     </v-card-text>
                   </v-card>
-                  <v-card outlined>
+                  <v-card outlined v-if="isDetailedView">
                     <v-card-title class="py-2 text-subtitle-2">{{ __('Dispatch + Sync') }}</v-card-title>
                     <v-card-text class="pt-0 events-wrap">
                       <div v-for="e in detail.dispatch_events.slice().reverse()" :key="`d-${e.id}`" class="mb-2">
@@ -381,9 +537,29 @@ export default {
       lineDrafts: {},
       pickNotes: "",
       dispatchNotes: "",
+      viewMode: "detailed",
+      dispatchProofAckName: "",
+      dispatchProofMode: "counter",
+      dispatchProofRefNo: "",
+      dispatchProofNotes: "",
+      mismatchReasonCode: "ITEM_MISMATCH",
+      mismatchReasonText: "",
+      mismatchRequiresCashierAdjustment: true,
       allowPartialRelease: false,
       pollTimer: null,
       lineStatusOptions: ["NOT_PICKED", "PICKED", "PARTIAL", "EXCEPTION"],
+      mismatchReasonOptions: [
+        { text: __("Item mismatch"), value: "ITEM_MISMATCH" },
+        { text: __("Qty mismatch"), value: "QTY_MISMATCH" },
+        { text: __("Damaged goods"), value: "DAMAGED_GOODS" },
+        { text: __("Customer request"), value: "CUSTOMER_REQUEST" },
+        { text: __("Other"), value: "OTHER" },
+      ],
+      dispatchProofModeOptions: [
+        { text: __("Counter pickup"), value: "counter" },
+        { text: __("Delivery handover"), value: "delivery" },
+        { text: __("Other"), value: "other" },
+      ],
     };
   },
   computed: {
@@ -495,7 +671,38 @@ export default {
       const sale = this.detail.sale;
       if (String(sale.dispatch_status || "").toUpperCase() === "RELEASED") return false;
       const pick = String(sale.pick_status || "").toUpperCase();
-      return parseInt(sale.paid || 0, 10) === 1 && (pick === "PICKED_READY_FOR_RELEASE" || (this.allowPartialRelease && pick === "PICK_EXCEPTION"));
+      return (
+        parseInt(sale.paid || 0, 10) === 1 &&
+        (pick === "PICKED_READY_FOR_RELEASE" || (this.allowPartialRelease && pick === "PICK_EXCEPTION")) &&
+        this.dispatchProofValid
+      );
+    },
+    isDetailedView() {
+      return String(this.viewMode || "detailed") !== "simple";
+    },
+    dispatchProofValid() {
+      if (!this.canDispatch) return true;
+      const ack = String(this.dispatchProofAckName || "").trim();
+      const mode = String(this.dispatchProofMode || "").trim().toLowerCase();
+      return !!ack && ["counter", "delivery", "other"].includes(mode);
+    },
+    hasDispatchProofOnSale() {
+      const sale = (this.detail && this.detail.sale) || {};
+      const proof = sale.dispatch_proof || sale.dispatch_proof_payload || {};
+      return proof && typeof proof === "object" && !!String(proof.ack_name || "").trim();
+    },
+    dispatchProofSummaryText() {
+      const sale = (this.detail && this.detail.sale) || {};
+      const proof = sale.dispatch_proof || sale.dispatch_proof_payload || {};
+      if (!proof || typeof proof !== "object") return "";
+      const ack = String(proof.ack_name || "").trim() || "-";
+      const mode = String(proof.proof_mode || "").trim() || "-";
+      const ref = String(proof.proof_ref_no || "").trim();
+      const at = String(proof.captured_at || "").trim();
+      const parts = [`${__("Ack")}: ${ack}`, `${__("Mode")}: ${mode}`];
+      if (ref) parts.push(`${__("Ref")}: ${ref}`);
+      if (at) parts.push(`${__("At")}: ${this.dt(at)}`);
+      return parts.join(" | ");
     },
     dispatchQueueStats() {
       const rows = Array.isArray(this.queueRows) ? this.queueRows : [];
@@ -774,6 +981,24 @@ export default {
         next[line.id] = this.makeLineDraft(line, eventMap[line.id]);
       });
       this.lineDrafts = next;
+      this.syncDispatchInputsFromDetail();
+    },
+    syncDispatchInputsFromDetail() {
+      const sale = (this.detail && this.detail.sale) || {};
+      const proofRaw = sale.dispatch_proof || sale.dispatch_proof_payload || {};
+      const proof = proofRaw && typeof proofRaw === "object" ? proofRaw : {};
+      const ack = String(proof.ack_name || "").trim();
+      const mode = String(proof.proof_mode || "").trim().toLowerCase();
+      const refNo = String(proof.proof_ref_no || "").trim();
+      const notes = String(proof.proof_notes || "").trim();
+
+      this.dispatchProofAckName = ack || this.dispatchProofAckName || "";
+      this.dispatchProofMode = ["counter", "delivery", "other"].includes(mode)
+        ? mode
+        : this.dispatchProofMode || "counter";
+      this.dispatchProofRefNo = refNo || "";
+      this.dispatchProofNotes = notes || "";
+      this.mismatchRequiresCashierAdjustment = Number(sale.cashier_adjustment_required || 0) === 1;
     },
     makeLineDraft(line, fallback) {
       const payload = line && typeof line.payload === "object" ? line.payload : {};
@@ -838,6 +1063,21 @@ export default {
       return this.lineRows.map((line) => ({
         line_id: line.id,
         item_code: line.item_code,
+        item_name: line.item_name || "",
+        ordered_qty: this.num(line.ordered_qty, 0),
+        ordered_uom: line.uom || "",
+        picked_qty: this.num(line.picked_qty, this.num(line.ordered_qty, 0)),
+        picked_uom: line.uom || "",
+        conversion_factor: this.num(line.conversion_factor, 1),
+        picked_stock_qty: this.num(line.picked_stock_qty, 0),
+        pick_status: String(line.pick_status || "").toUpperCase(),
+      }));
+    },
+    buildLineSnapshot() {
+      return this.lineRows.map((line) => ({
+        line_id: line.id,
+        item_code: line.item_code || "",
+        item_name: line.item_name || "",
         ordered_qty: this.num(line.ordered_qty, 0),
         ordered_uom: line.uom || "",
         picked_qty: this.num(line.picked_qty, this.num(line.ordered_qty, 0)),
@@ -892,14 +1132,24 @@ export default {
     },
     async releaseSale() {
       if (!this.selectedRef) return;
+      if (!this.dispatchProofValid) {
+        this.showMessage(__("Dispatch proof is required before release."), "warning");
+        return;
+      }
       this.actionLoading = true;
       try {
         const line_updates = this.buildLineUpdates();
+        const line_snapshot = this.buildLineSnapshot();
         const r = await this.postJson("/relay/dispatch/release", {
           local_sale_ref: this.selectedRef,
           dispatcher_user_id: (frappe.session && frappe.session.user) || "",
           allow_partial: !!this.allowPartialRelease,
           notes: this.dispatchNotes || "",
+          proof_ack_name: String(this.dispatchProofAckName || "").trim(),
+          proof_mode: String(this.dispatchProofMode || "").trim().toLowerCase(),
+          proof_ref_no: String(this.dispatchProofRefNo || "").trim(),
+          proof_notes: String(this.dispatchProofNotes || "").trim(),
+          line_snapshot,
           role: this.roleCode,
           line_summary: this.lineSummary(line_updates),
         });
@@ -908,6 +1158,42 @@ export default {
         await this.fetchQueue(false);
       } catch (e) {
         this.showMessage(`Dispatch failed: ${String(e.message || e)}`, "error");
+      } finally {
+        this.actionLoading = false;
+      }
+    },
+    async flagMismatch() {
+      if (!this.selectedRef) return;
+      const reasonCode = String(this.mismatchReasonCode || "").trim().toUpperCase();
+      const reasonText = String(this.mismatchReasonText || "").trim();
+      if (!reasonCode && !reasonText) {
+        this.showMessage(__("Mismatch reason is required."), "warning");
+        return;
+      }
+      this.actionLoading = true;
+      try {
+        const line_snapshot = this.buildLineSnapshot();
+        const payload = {
+          local_sale_ref: this.selectedRef,
+          dispatcher_user_id: (frappe.session && frappe.session.user) || "",
+          reason_code: reasonCode,
+          reason_text: reasonText,
+          requires_cashier_adjustment: !!this.mismatchRequiresCashierAdjustment,
+          pos_profile_id: this.profileName,
+          role: this.roleCode,
+          notes: this.dispatchNotes || reasonText,
+          line_snapshot,
+        };
+        const r = await this.postJson("/relay/dispatch/mismatch", payload);
+        this.showMessage(
+          `Dispatch mismatch flagged: ${r.dispatch_exception_state || "MISMATCH_RETURNED_TO_PICKER"}`,
+          "warning"
+        );
+        this.mismatchReasonText = "";
+        await this.fetchDetail(this.selectedRef);
+        await this.fetchQueue(false);
+      } catch (e) {
+        this.showMessage(`Dispatch mismatch failed: ${String(e.message || e)}`, "error");
       } finally {
         this.actionLoading = false;
       }

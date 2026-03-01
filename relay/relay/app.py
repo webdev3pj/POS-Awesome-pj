@@ -12,6 +12,7 @@ from .storage import (
     close_cashier_session,
     enqueue_event,
     enqueue_outbox_event,
+    flag_dispatch_mismatch,
     get_local_sale_detail,
     get_relay_monitor_board,
     get_pick_queue,
@@ -66,6 +67,7 @@ def create_app():
         "commit_invoice": ("cline-Cashier", "cline-Supervisor"),
         "pick_update": ("cline-Picker", "cline-Supervisor"),
         "dispatch_release": ("cline-Dispatch", "cline-Supervisor"),
+        "dispatch_mismatch": ("cline-Dispatch", "cline-Supervisor"),
         "token_void": ("cline-Supervisor",),
     }
 
@@ -978,6 +980,42 @@ def create_app():
         local_sale_ref = payload.get("local_sale_ref")
         if not local_sale_ref:
             return jsonify({"ok": False, "code": "LOCAL_SALE_REF_REQUIRED"}), 400
+        proof_ack_name = str(payload.get("proof_ack_name") or "").strip()
+        proof_mode = str(payload.get("proof_mode") or "").strip().lower()
+        line_snapshot = payload.get("line_snapshot") if isinstance(payload.get("line_snapshot"), list) else []
+        if not proof_ack_name:
+            return (
+                jsonify(
+                    {
+                        "ok": False,
+                        "code": "DISPATCH_PROOF_ACK_REQUIRED",
+                        "message": "proof_ack_name is required",
+                    }
+                ),
+                400,
+            )
+        if proof_mode not in ("counter", "delivery", "other"):
+            return (
+                jsonify(
+                    {
+                        "ok": False,
+                        "code": "DISPATCH_PROOF_MODE_REQUIRED",
+                        "message": "proof_mode must be one of counter|delivery|other",
+                    }
+                ),
+                400,
+            )
+        if not line_snapshot:
+            return (
+                jsonify(
+                    {
+                        "ok": False,
+                        "code": "DISPATCH_LINE_SNAPSHOT_REQUIRED",
+                        "message": "line_snapshot is required",
+                    }
+                ),
+                400,
+            )
 
         result = release_sale(
             local_sale_ref=local_sale_ref,
@@ -994,6 +1032,65 @@ def create_app():
                 payload,
                 local_ref=local_sale_ref,
                 source_meta=source_meta,
+            )
+            result["outbox_event_id"] = outbox_event_id
+        status_code = 200 if result.get("ok") else 409
+        return jsonify(result), status_code
+
+    @app.route("/relay/dispatch/mismatch", methods=["POST", "OPTIONS"])
+    def relay_dispatch_mismatch_v2():
+        if request.method == "OPTIONS":
+            return ("", 204)
+        auth_err = _require_relay_client_auth()
+        if auth_err:
+            return auth_err
+
+        payload = request.get_json(silent=True) or {}
+        role_err = _require_relay_role(payload, RELAY_ROLE_GROUPS["dispatch_mismatch"])
+        if role_err:
+            return role_err
+
+        local_sale_ref = str(payload.get("local_sale_ref") or "").strip()
+        if not local_sale_ref:
+            return jsonify({"ok": False, "code": "LOCAL_SALE_REF_REQUIRED"}), 400
+
+        reason_code = str(payload.get("reason_code") or "").strip().upper()
+        reason_text = str(payload.get("reason_text") or "").strip()
+        if not reason_code and not reason_text:
+            return (
+                jsonify(
+                    {
+                        "ok": False,
+                        "code": "MISMATCH_REASON_REQUIRED",
+                        "message": "reason_code or reason_text is required",
+                    }
+                ),
+                400,
+            )
+
+        result = flag_dispatch_mismatch(
+            local_sale_ref=local_sale_ref,
+            dispatcher_user_id=payload.get("dispatcher_user_id"),
+            reason_code=reason_code,
+            reason_text=reason_text,
+            requires_cashier_adjustment=bool(payload.get("requires_cashier_adjustment")),
+            payload=payload,
+            source_meta=_request_source_meta(),
+        )
+        if result.get("ok"):
+            outbox_payload = {
+                "local_sale_ref": local_sale_ref,
+                "sales_invoice": payload.get("sales_invoice") or payload.get("cloud_invoice_name") or "",
+                "pos_profile_id": payload.get("pos_profile_id") or payload.get("pos_profile") or "",
+                "picking_status": "PICK_EXCEPTION",
+                "notes": reason_text or payload.get("notes") or "",
+                "source": "dispatch_mismatch",
+            }
+            outbox_event_id = enqueue_outbox_event(
+                "PICK_EVENT",
+                outbox_payload,
+                local_ref=local_sale_ref,
+                source_meta=_request_source_meta(),
             )
             result["outbox_event_id"] = outbox_event_id
         status_code = 200 if result.get("ok") else 409

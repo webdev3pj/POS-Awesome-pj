@@ -274,6 +274,10 @@ function readShellChromeSnapshot(roleKey) {
       navbarExpand: $body.find(".navbar-expand").length,
       posAppBar: $body.find(".v-app-bar").length,
       vuetifyToolbar: $body.find(".v-toolbar").length,
+      fulfillmentViewMode: $body.find("[data-cy='fulfillment-view-mode']").length,
+      fulfillmentDetailedButton: $body.find("[data-cy='fulfillment-view-detailed']").length,
+      fulfillmentDetailedActive: $body.find("[data-cy='fulfillment-view-detailed'].v-btn--active").length,
+      fulfillmentSimpleActive: $body.find("[data-cy='fulfillment-view-simple'].v-btn--active").length,
     };
 
     const state = {
@@ -292,6 +296,9 @@ function readShellChromeSnapshot(roleKey) {
       desktopBreadcrumbVisible: visibleCount(".breadcrumb") > 0 || visibleCount(".no-breadcrumbs") > 0,
       posTopBarVisible: visibleCount(".v-app-bar") > 0,
       posBrandVisible: /POS AWESOME/i.test(($body.text() || "").trim()),
+      fulfillmentViewToggleVisible: visibleCount("[data-cy='fulfillment-view-mode']") > 0,
+      fulfillmentDetailedActive: visibleCount("[data-cy='fulfillment-view-detailed'].v-btn--active") > 0,
+      fulfillmentSimpleActive: visibleCount("[data-cy='fulfillment-view-simple'].v-btn--active") > 0,
       selectorCounts,
       markerElements,
     };
@@ -442,6 +449,13 @@ describe("UI shell consistency: ERPNext chrome hidden for all cline roles", () =
         .then((state) => {
           snapshots.push(state);
           expect(state.posBrandVisible, `${roleKey}: POS brand text visible`).to.eq(true);
+          if (["picker", "dispatch", "supervisor"].includes(roleKey)) {
+            expect(state.fulfillmentViewToggleVisible, `${roleKey}: fulfillment view toggle visible`).to.eq(
+              true
+            );
+            expect(state.fulfillmentDetailedActive, `${roleKey}: detailed mode active by default`).to.eq(true);
+            expect(state.fulfillmentSimpleActive, `${roleKey}: simple mode not active by default`).to.eq(false);
+          }
         });
     });
 

@@ -204,8 +204,8 @@ function startPosSessionForRole({ roleStorageValue, roleLabel, profileName }) {
   cy.get("body").should("contain.text", "Dispatch Queue");
 }
 
-describe("Dispatch workflow (watch mode)", () => {
-  it("releases a picked-ready local sale and verifies relay dispatch status", () => {
+describe("Dispatch mismatch returns row to picker flow (watch mode)", () => {
+  it("flags a mismatch and verifies relay sets PICK_EXCEPTION + cashier adjustment requirement", () => {
     const relayBase = "http://127.0.0.1:8787";
     const profileName = "PJ7 CASHIER";
     let targetLocalSaleRef = "";
@@ -219,124 +219,69 @@ describe("Dispatch workflow (watch mode)", () => {
 
     assertRelayUiAndActual({ relayBase, expectRelayOnline: true, expectCloudOnline: true });
 
-    cy.readFile("cypress/tmp/picker_dispatch_target.json", { timeout: 10000 }).then((data) => {
-      const fromFile = String((data && data.local_sale_ref) || "").trim();
-      if (fromFile) {
-        targetLocalSaleRef = fromFile;
+    cy.request(`${relayBase}/relay/pick-queue?pos_profile_id=${encodeURIComponent(profileName)}&limit=100`).then(
+      (qResp) => {
+        expect(qResp.status).to.eq(200);
+        const rows = Array.isArray(qResp.body && qResp.body.rows) ? qResp.body.rows : [];
+        const ready = [...rows]
+          .reverse()
+          .find(
+            (r) =>
+              String((r && r.dispatch_status) || "").toUpperCase() !== "RELEASED" &&
+              String((r && r.pick_status) || "").toUpperCase() === "PICKED_READY_FOR_RELEASE"
+          );
+        expect(ready, "dispatch-ready row for mismatch test").to.be.an("object");
+        targetLocalSaleRef = String(ready.local_sale_ref || "").trim();
       }
-    });
+    );
 
     cy.then(() => {
-      if (!targetLocalSaleRef) return null;
-      return cy.request({
-        url: `${relayBase}/api/transactions/${encodeURIComponent(targetLocalSaleRef)}`,
-        failOnStatusCode: false,
-      });
-    })
-      .then((resp) => {
-        if (!resp) return null;
-        if (resp.status === 200 && resp.body && resp.body.sale) {
-          return resp;
-        }
-        return null;
-      })
-      .then((maybeResp) => {
-        if (maybeResp && maybeResp.body && maybeResp.body.sale) {
-          const sale = maybeResp.body.sale;
-          if (String(sale.dispatch_status || "") !== "RELEASED" && String(sale.pick_status || "") === "PICKED_READY_FOR_RELEASE") {
-            return;
-          }
-        }
-        return cy
-          .request(`${relayBase}/relay/pick-queue?pos_profile_id=${encodeURIComponent(profileName)}&limit=100`)
-          .then((qResp) => {
-            expect(qResp.status).to.eq(200);
-            const rows = Array.isArray(qResp.body && qResp.body.rows) ? qResp.body.rows : [];
-            const ready = [...rows]
-              .reverse()
-              .find(
-                (r) =>
-                  String((r && r.dispatch_status) || "").toUpperCase() !== "RELEASED" &&
-                  String((r && r.pick_status) || "").toUpperCase() === "PICKED_READY_FOR_RELEASE"
-              );
-            expect(ready, "dispatch-ready row").to.be.an("object");
-            targetLocalSaleRef = String(ready.local_sale_ref || "").trim();
-            cy.log(`Dispatch target LSR: ${targetLocalSaleRef}`);
-          });
-      });
-
-    cy.then(() => {
-      expect(targetLocalSaleRef, "dispatch targetLocalSaleRef resolved").to.be.a("string").and.not.be.empty;
-      cy.get("body").should("contain.text", "Avg Wait (Ready)");
-      cy.get("body").should("contain.text", "Oldest Open");
-      cy.get("body").should("contain.text", "Over SLA");
+      expect(targetLocalSaleRef, "dispatch mismatch targetLocalSaleRef resolved").to.be.a("string").and.not.be.empty;
       cy.contains(".v-list-item", targetLocalSaleRef, { timeout: 60000 }).click({ force: true });
-      assertRelayUiAndActual({ relayBase, expectRelayOnline: true, expectCloudOnline: true });
       assertFulfillmentDetailSynced(targetLocalSaleRef);
-      cy.get("body", { timeout: 60000 }).should("contain.text", targetLocalSaleRef);
-      cy.get("body").should("contain.text", "Dispatch + Sync");
-      cy.get("body").should("contain.text", "Phase Timeline (Dispatch Monitor)");
-      cy.get("body").should("contain.text", "Current Phase");
-      cy.get("body").should("contain.text", "Current Phase Age");
-      cy.get("body").should("contain.text", "SLA");
-      cy.get("body").should(($body) => {
-        const text = ($body.text() || "").replace(/\s+/g, " ");
-        expect(/Paid -> Released \(Total\)|Open Age/i.test(text), "dispatch timing summary visible").to.eq(true);
-        expect(/SLA:\s*(OK|Watch|High)/i.test(text), "dispatch SLA label visible").to.eq(true);
-      });
-      cy.get("[data-cy='dispatch-release-button']", { timeout: 30000 }).should("be.visible").and("be.disabled");
-      cy.get("[data-cy='dispatch-proof-ack']", { timeout: 30000 })
-        .find("input")
-        .first()
-        .clear({ force: true })
-        .type("Dispatch QA", { force: true });
-      cy.get("[data-cy='dispatch-proof-mode']", { timeout: 30000 }).click({ force: true });
-      cy.contains(".v-menu__content .v-list-item", /Delivery handover/i, { timeout: 30000 }).click({
+      cy.get("[data-cy='dispatch-mismatch-code']", { timeout: 30000 }).click({ force: true });
+      cy.contains(".v-menu__content .v-list-item", /Qty mismatch/i, { timeout: 30000 }).click({
         force: true,
       });
-      cy.get("[data-cy='dispatch-proof-ref']")
-        .find("input")
-        .first()
-        .clear({ force: true })
-        .type(`DLV-${Date.now()}`, { force: true });
-      cy.get("[data-cy='dispatch-proof-notes']")
+      cy.get("[data-cy='dispatch-mismatch-text']")
         .find("textarea")
         .first()
         .clear({ force: true })
-        .type("Handover captured at dispatch desk.", { force: true });
-      cy.get("[data-cy='dispatch-release-button']").should("not.be.disabled").click({ force: true });
+        .type("Count mismatch at dispatch gate; return to picker.", { force: true });
+      cy.get("[data-cy='dispatch-mismatch-cashier-adjustment']")
+        .find("input[type='checkbox']")
+        .first()
+        .check({ force: true });
+      cy.get("[data-cy='dispatch-flag-mismatch']").should("be.visible").click({ force: true });
     })
       .then(() => cy.request(`${relayBase}/api/transactions/${encodeURIComponent(targetLocalSaleRef)}`))
-      .then((releasedResp) => {
-        expect(releasedResp.status).to.eq(200);
-        expect(releasedResp.body.ok).to.eq(true);
-        const sale = releasedResp.body.sale || {};
-        expect(String(sale.dispatch_status || ""), "dispatch_status after release").to.eq("RELEASED");
-        expect(String(sale.pick_status || ""), "pick_status remains ready").to.eq("PICKED_READY_FOR_RELEASE");
-        const proof = sale.dispatch_proof || sale.dispatch_proof_payload || {};
-        expect(proof, "dispatch proof saved on relay sale").to.be.an("object");
-        expect(String(proof.ack_name || "").trim(), "dispatch proof ack_name").to.not.equal("");
-        expect(String(proof.proof_mode || "").trim(), "dispatch proof mode").to.eq("delivery");
-        const latestDispatch = [...(releasedResp.body.dispatch_events || [])].pop();
-        expect(latestDispatch, "dispatch event created").to.be.an("object");
-        expect(String(latestDispatch.event_type || ""), "dispatch event type").to.eq(
-          "DISPATCH_RELEASED_WITH_PROOF"
+      .then((resp) => {
+        expect(resp.status).to.eq(200);
+        expect(resp.body.ok).to.eq(true);
+        const sale = resp.body.sale || {};
+        expect(String(sale.pick_status || ""), "pick_status after dispatch mismatch").to.eq("PICK_EXCEPTION");
+        expect(String(sale.dispatch_status || ""), "dispatch_status after mismatch").to.eq("PENDING");
+        expect(String(sale.dispatch_exception_state || ""), "dispatch_exception_state").to.eq(
+          "MISMATCH_RETURNED_TO_PICKER"
         );
-        expect(latestDispatch.payload, "dispatch event payload").to.be.an("object");
-        expect(Array.isArray(latestDispatch.payload.line_snapshot), "dispatch event line snapshot").to.eq(true);
-        expect(latestDispatch.payload.line_snapshot.length, "dispatch line snapshot length").to.be.greaterThan(0);
-        cy.writeFile("cypress/tmp/latest_dispatch_release.json", {
+        expect(Number(sale.cashier_adjustment_required || 0), "cashier_adjustment_required").to.eq(1);
+        const latestDispatch = [...(resp.body.dispatch_events || [])].pop();
+        expect(latestDispatch, "dispatch mismatch event exists").to.be.an("object");
+        expect(String(latestDispatch.event_type || ""), "dispatch mismatch event type").to.eq(
+          "DISPATCH_MISMATCH_FLAGGED"
+        );
+        expect(latestDispatch.payload, "dispatch mismatch payload").to.be.an("object");
+        expect(String(latestDispatch.payload.reason_code || ""), "reason code persisted").to.eq("QTY_MISMATCH");
+
+        cy.writeFile("cypress/tmp/latest_dispatch_mismatch.json", {
           local_sale_ref: targetLocalSaleRef,
-          dispatch_status: String(sale.dispatch_status || ""),
           pick_status: String(sale.pick_status || ""),
-          cloud_sync_status: String(sale.cloud_sync_status || ""),
-          released_by: String(sale.released_by || ""),
-          released_at: String(sale.released_at || ""),
-          dispatch_proof: proof,
-          dispatch_event_type: String(latestDispatch.event_type || ""),
+          dispatch_status: String(sale.dispatch_status || ""),
+          dispatch_exception_state: String(sale.dispatch_exception_state || ""),
+          cashier_adjustment_required: Number(sale.cashier_adjustment_required || 0),
+          latest_dispatch_event_type: String(latestDispatch.event_type || ""),
+          latest_dispatch_event_payload: latestDispatch.payload || {},
         });
-        cy.get("body").should("contain.text", "RELEASED");
-        cy.log(`Dispatch released ${targetLocalSaleRef}`);
       });
   });
 });
