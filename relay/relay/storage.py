@@ -3,7 +3,7 @@ import os
 import sqlite3
 import uuid
 from contextlib import contextmanager
-from datetime import datetime
+from datetime import datetime, timedelta
 
 
 ROOT_DIR = os.path.abspath(os.path.join(os.path.dirname(__file__), ".."))
@@ -313,6 +313,53 @@ def init_db():
 
         conn.execute(
             """
+            CREATE TABLE IF NOT EXISTS relay_quotes (
+                quote_id TEXT PRIMARY KEY,
+                cloud_quote_name TEXT,
+                pos_profile_id TEXT NOT NULL,
+                created_by TEXT,
+                customer_id TEXT,
+                customer_name TEXT,
+                currency TEXT,
+                base_total REAL NOT NULL DEFAULT 0,
+                latest_total REAL NOT NULL DEFAULT 0,
+                delta_total REAL NOT NULL DEFAULT 0,
+                valid_until TEXT,
+                status TEXT NOT NULL DEFAULT 'OPEN',
+                converted_token_id TEXT,
+                converted_local_sale_ref TEXT,
+                source_origin TEXT,
+                source_env TEXT,
+                source_user_agent TEXT,
+                payload TEXT,
+                created_at TEXT NOT NULL,
+                updated_at TEXT NOT NULL
+            )
+            """
+        )
+
+        conn.execute(
+            """
+            CREATE TABLE IF NOT EXISTS relay_quote_lines (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                quote_id TEXT NOT NULL,
+                item_code TEXT,
+                item_name TEXT,
+                qty REAL NOT NULL DEFAULT 0,
+                uom TEXT,
+                rate REAL NOT NULL DEFAULT 0,
+                amount REAL NOT NULL DEFAULT 0,
+                conversion_factor REAL NOT NULL DEFAULT 1,
+                payload TEXT,
+                created_at TEXT NOT NULL,
+                updated_at TEXT NOT NULL,
+                FOREIGN KEY(quote_id) REFERENCES relay_quotes(quote_id)
+            )
+            """
+        )
+
+        conn.execute(
+            """
             CREATE INDEX IF NOT EXISTS idx_relay_tokens_profile_status
             ON relay_tokens(pos_profile_id, status)
             """
@@ -335,6 +382,12 @@ def init_db():
             ON relay_outbox(status, next_attempt_at)
             """
         )
+        conn.execute(
+            """
+            CREATE INDEX IF NOT EXISTS idx_relay_quotes_profile_status
+            ON relay_quotes(pos_profile_id, status)
+            """
+        )
 
         # Backward-compatible schema upgrades for existing relay DBs.
         for table_name in ("relay_tokens", "relay_cashier_sessions", "relay_local_sales", "relay_pick_events", "relay_dispatch_events", "relay_outbox"):
@@ -344,6 +397,10 @@ def init_db():
         _ensure_column(conn, "relay_local_sales", "dispatch_proof_payload", "TEXT NOT NULL DEFAULT '{}'")
         _ensure_column(conn, "relay_local_sales", "dispatch_exception_state", "TEXT NOT NULL DEFAULT 'NONE'")
         _ensure_column(conn, "relay_local_sales", "cashier_adjustment_required", "INTEGER NOT NULL DEFAULT 0")
+        for table_name in ("relay_quotes", "relay_quote_lines"):
+            _ensure_column(conn, table_name, "source_origin", "TEXT")
+            _ensure_column(conn, table_name, "source_env", "TEXT")
+            _ensure_column(conn, table_name, "source_user_agent", "TEXT")
 
 
 def load_config():
@@ -522,6 +579,400 @@ def _generate_local_sale_ref(pos_profile_id=None):
     suffix = uuid.uuid4().hex[:6].upper()
     profile_code = (pos_profile_id or "POS")[:4].upper()
     return f"LSR-{profile_code}-{stamp}-{suffix}"
+
+
+def _generate_quote_id(pos_profile_id=None):
+    stamp = datetime.utcnow().strftime("%Y%m%d%H%M%S")
+    suffix = uuid.uuid4().hex[:6].upper()
+    profile_code = (pos_profile_id or "POS")[:4].upper()
+    return f"LQ-{profile_code}-{stamp}-{suffix}"
+
+
+def _sum_amount_from_lines(lines):
+    total = 0.0
+    for line in lines or []:
+        qty = float((line or {}).get("qty") or 0)
+        rate = float((line or {}).get("rate") or 0)
+        amount = (line or {}).get("amount")
+        total += float(amount if amount is not None else (qty * rate))
+    return total
+
+
+def _quote_line_rows(raw_lines):
+    rows = []
+    for raw in raw_lines or []:
+        if not isinstance(raw, dict):
+            continue
+        item_code = str(raw.get("item_code") or "").strip()
+        if not item_code:
+            continue
+        qty = float(raw.get("qty") or 0)
+        rate = float(raw.get("rate") or 0)
+        amount = raw.get("amount")
+        if amount is None:
+            amount = qty * rate
+        rows.append(
+            {
+                "item_code": item_code,
+                "item_name": str(raw.get("item_name") or "").strip(),
+                "qty": qty,
+                "uom": str(raw.get("uom") or "").strip(),
+                "rate": rate,
+                "amount": float(amount or 0),
+                "conversion_factor": float(raw.get("conversion_factor") or 1),
+                "payload": dict(raw),
+            }
+        )
+    return rows
+
+
+def upsert_local_quote(payload, source_meta=None):
+    payload = payload if isinstance(payload, dict) else {}
+    now = _now_iso()
+    source = _normalize_source_meta(source_meta)
+    pos_profile_id = str(payload.get("pos_profile_id") or "").strip()
+    if not pos_profile_id:
+        raise ValueError("pos_profile_id is required")
+
+    quote_id = str(payload.get("quote_id") or "").strip() or _generate_quote_id(pos_profile_id=pos_profile_id)
+    lines = _quote_line_rows(payload.get("items") or payload.get("lines") or [])
+    if not lines:
+        raise ValueError("At least one quote line is required")
+
+    customer_id = str(payload.get("customer_id") or "").strip()
+    customer_name = str(payload.get("customer_name") or customer_id).strip()
+    created_by = str(payload.get("created_by") or payload.get("cashier_user_id") or "").strip()
+    currency = str(payload.get("currency") or "").strip()
+    valid_until = str(payload.get("valid_until") or "").strip()
+    status = str(payload.get("status") or "OPEN").strip().upper()
+    if status not in ("OPEN", "EXPIRED", "CONVERTED", "VOID"):
+        status = "OPEN"
+
+    base_total = float(payload.get("base_total") or _sum_amount_from_lines(lines))
+    latest_total = float(payload.get("latest_total") or base_total)
+    delta_total = float(payload.get("delta_total") or (latest_total - base_total))
+    cloud_quote_name = str(payload.get("cloud_quote_name") or "").strip() or None
+
+    with get_db() as conn:
+        conn.execute(
+            """
+            INSERT INTO relay_quotes (
+                quote_id, cloud_quote_name, pos_profile_id, created_by, customer_id, customer_name,
+                currency, base_total, latest_total, delta_total, valid_until, status,
+                converted_token_id, converted_local_sale_ref,
+                source_origin, source_env, source_user_agent, payload, created_at, updated_at
+            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, NULL, NULL, ?, ?, ?, ?, ?, ?)
+            ON CONFLICT(quote_id) DO UPDATE SET
+                cloud_quote_name=excluded.cloud_quote_name,
+                pos_profile_id=excluded.pos_profile_id,
+                created_by=excluded.created_by,
+                customer_id=excluded.customer_id,
+                customer_name=excluded.customer_name,
+                currency=excluded.currency,
+                base_total=excluded.base_total,
+                latest_total=excluded.latest_total,
+                delta_total=excluded.delta_total,
+                valid_until=excluded.valid_until,
+                status=excluded.status,
+                source_origin=excluded.source_origin,
+                source_env=excluded.source_env,
+                source_user_agent=excluded.source_user_agent,
+                payload=excluded.payload,
+                updated_at=excluded.updated_at
+            """,
+            (
+                quote_id,
+                cloud_quote_name,
+                pos_profile_id,
+                created_by,
+                customer_id,
+                customer_name,
+                currency,
+                base_total,
+                latest_total,
+                delta_total,
+                valid_until,
+                status,
+                source["source_origin"],
+                source["source_env"],
+                source["source_user_agent"],
+                _dumps(payload),
+                now,
+                now,
+            ),
+        )
+        conn.execute("DELETE FROM relay_quote_lines WHERE quote_id = ?", (quote_id,))
+        for line in lines:
+            conn.execute(
+                """
+                INSERT INTO relay_quote_lines (
+                    quote_id, item_code, item_name, qty, uom, rate, amount, conversion_factor,
+                    payload, source_origin, source_env, source_user_agent, created_at, updated_at
+                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                """,
+                (
+                    quote_id,
+                    line["item_code"],
+                    line["item_name"],
+                    line["qty"],
+                    line["uom"],
+                    line["rate"],
+                    line["amount"],
+                    line["conversion_factor"],
+                    _dumps(line["payload"]),
+                    source["source_origin"],
+                    source["source_env"],
+                    source["source_user_agent"],
+                    now,
+                    now,
+                ),
+            )
+
+    return get_local_quote(quote_id)
+
+
+def get_local_quote(quote_id):
+    quote_id = str(quote_id or "").strip()
+    if not quote_id:
+        return None
+    with get_db() as conn:
+        row = conn.execute(
+            """
+            SELECT quote_id, cloud_quote_name, pos_profile_id, created_by, customer_id, customer_name,
+                   currency, base_total, latest_total, delta_total, valid_until, status,
+                   converted_token_id, converted_local_sale_ref,
+                   source_origin, source_env, source_user_agent, payload, created_at, updated_at
+            FROM relay_quotes
+            WHERE quote_id = ?
+            """,
+            (quote_id,),
+        ).fetchone()
+        if not row:
+            return None
+        line_rows = conn.execute(
+            """
+            SELECT id, quote_id, item_code, item_name, qty, uom, rate, amount, conversion_factor, payload, created_at, updated_at
+            FROM relay_quote_lines
+            WHERE quote_id = ?
+            ORDER BY id ASC
+            """,
+            (quote_id,),
+        ).fetchall()
+    out = dict(row)
+    out["payload"] = _loads(out.get("payload"))
+    out["lines"] = []
+    for line in line_rows:
+        item = dict(line)
+        item["payload"] = _loads(item.get("payload"))
+        out["lines"].append(item)
+    return out
+
+
+def list_local_quotes(
+    pos_profile_id=None,
+    search=None,
+    statuses=None,
+    limit=100,
+    max_age_days=7,
+    allow_stale=False,
+    history_days=30,
+):
+    max_age_days = max(0, int(max_age_days or 7))
+    allow_stale = bool(allow_stale)
+    history_days = max(max_age_days, int(history_days or 30))
+    lookback_days = history_days if allow_stale else max_age_days
+    cutoff = (datetime.utcnow() - timedelta(days=lookback_days)).isoformat(timespec="seconds") + "Z"
+
+    query = """
+        SELECT quote_id, cloud_quote_name, pos_profile_id, created_by, customer_id, customer_name,
+               currency, base_total, latest_total, delta_total, valid_until, status,
+               converted_token_id, converted_local_sale_ref,
+               source_origin, source_env, source_user_agent, payload, created_at, updated_at
+        FROM relay_quotes
+        WHERE created_at >= ?
+    """
+    params = [cutoff]
+    if pos_profile_id:
+        query += " AND pos_profile_id = ?"
+        params.append(pos_profile_id)
+    statuses = [str(s).strip().upper() for s in (statuses or []) if str(s).strip()]
+    if statuses:
+        query += " AND status IN ({})".format(",".join(["?"] * len(statuses)))
+        params.extend(statuses)
+    if search:
+        like = f"%{str(search).strip()}%"
+        query += """
+            AND (
+                quote_id LIKE ?
+                OR cloud_quote_name LIKE ?
+                OR customer_id LIKE ?
+                OR customer_name LIKE ?
+            )
+        """
+        params.extend([like, like, like, like])
+    query += " ORDER BY created_at DESC LIMIT ?"
+    params.append(int(limit))
+
+    with get_db() as conn:
+        rows = [dict(r) for r in conn.execute(query, tuple(params)).fetchall()]
+
+    now_dt = datetime.utcnow()
+    out = []
+    for row in rows:
+        created_dt = _parse_iso_utc(row.get("created_at"))
+        age_days = max(0, (now_dt - created_dt.replace(tzinfo=None)).days) if created_dt else 0
+        is_stale = 1 if age_days > max_age_days else 0
+        if (not allow_stale) and is_stale:
+            continue
+        valid_until = _parse_iso_utc(row.get("valid_until")) if row.get("valid_until") else None
+        is_expired = 1 if (valid_until and valid_until.replace(tzinfo=None).date() < datetime.utcnow().date()) else 0
+        row["order_age_days"] = age_days
+        row["is_stale"] = is_stale
+        row["is_expired"] = is_expired
+        row["stale_policy_allow"] = 1 if allow_stale else 0
+        row["stale_policy_max_age_days"] = max_age_days
+        row["stale_policy_history_days"] = history_days
+        out.append(row)
+    return out
+
+
+def preview_local_quote_reprice(quote_id):
+    quote = get_local_quote(quote_id)
+    if not quote:
+        return {"ok": False, "code": "QUOTE_NOT_FOUND"}
+    lines = quote.get("lines") or []
+    old_total = 0.0
+    new_total = 0.0
+    repriced_lines = []
+    with get_db() as conn:
+        for line in lines:
+            item_code = str(line.get("item_code") or "").strip()
+            qty = float(line.get("qty") or 0)
+            old_rate = float(line.get("rate") or 0)
+            old_amount = float(line.get("amount") or (qty * old_rate))
+            item_row = conn.execute(
+                "SELECT rate FROM relay_items_cache WHERE item_code = ?",
+                (item_code,),
+            ).fetchone()
+            latest_rate = float(item_row["rate"]) if item_row and item_row["rate"] is not None else old_rate
+            new_amount = float(qty * latest_rate)
+            old_total += old_amount
+            new_total += new_amount
+            repriced_lines.append(
+                {
+                    "line_id": line.get("id"),
+                    "item_code": item_code,
+                    "item_name": line.get("item_name") or "",
+                    "qty": qty,
+                    "uom": line.get("uom") or "",
+                    "old_rate": old_rate,
+                    "new_rate": latest_rate,
+                    "delta_rate": float(latest_rate - old_rate),
+                    "old_amount": old_amount,
+                    "new_amount": new_amount,
+                    "delta_amount": float(new_amount - old_amount),
+                }
+            )
+    return {
+        "ok": True,
+        "quote_id": quote.get("quote_id"),
+        "old_total": float(old_total),
+        "new_total": float(new_total),
+        "delta_total": float(new_total - old_total),
+        "valid_till": quote.get("valid_until") or "",
+        "is_expired": 1 if str(quote.get("status") or "").upper() == "EXPIRED" else 0,
+        "repriced_lines": repriced_lines,
+    }
+
+
+def convert_local_quote_to_token(
+    quote_id,
+    cashier_user_id=None,
+    role=None,
+    confirm_reprice=True,
+    source_meta=None,
+):
+    quote = get_local_quote(quote_id)
+    if not quote:
+        return {"ok": False, "code": "QUOTE_NOT_FOUND"}
+
+    if str(quote.get("status") or "").upper() == "CONVERTED":
+        token_id = str(quote.get("converted_token_id") or "").strip()
+        token = get_token(token_id) if token_id else None
+        return {"ok": True, "idempotent_replay": True, "token": token, "quote": quote}
+
+    valid_until = _parse_iso_utc(quote.get("valid_until"))
+    if valid_until and valid_until.replace(tzinfo=None).date() < datetime.utcnow().date():
+        with get_db() as conn:
+            conn.execute(
+                "UPDATE relay_quotes SET status = 'EXPIRED', updated_at = ? WHERE quote_id = ?",
+                (_now_iso(), quote_id),
+            )
+        return {"ok": False, "code": "QUOTE_EXPIRED", "message": "Quotation is expired"}
+
+    preview = preview_local_quote_reprice(quote_id)
+    if not preview.get("ok"):
+        return preview
+    if abs(float(preview.get("delta_total") or 0)) > 0.0001 and not bool(confirm_reprice):
+        return {"ok": False, "code": "QUOTE_REPRICE_CONFIRM_REQUIRED", "preview": preview}
+
+    line_rows = quote.get("lines") or []
+    new_rate_by_id = {int(r.get("line_id")): float(r.get("new_rate") or 0) for r in preview.get("repriced_lines") or []}
+    token_lines = []
+    for line in line_rows:
+        lid = int(line.get("id") or 0)
+        qty = float(line.get("qty") or 0)
+        new_rate = float(new_rate_by_id.get(lid, line.get("rate") or 0))
+        token_lines.append(
+            {
+                "item_code": line.get("item_code") or "",
+                "item_name": line.get("item_name") or "",
+                "qty": qty,
+                "uom": line.get("uom") or "",
+                "rate": new_rate,
+                "amount": float(qty * new_rate),
+                "conversion_factor": float(line.get("conversion_factor") or 1),
+            }
+        )
+
+    token_payload = {
+        "pos_profile_id": quote.get("pos_profile_id") or "",
+        "cashier_user_id": str(cashier_user_id or quote.get("created_by") or "").strip(),
+        "customer_id": quote.get("customer_id") or "",
+        "customer_name": quote.get("customer_name") or "",
+        "role": str(role or "").strip(),
+        "source_doctype": "Quotation",
+        "source_name": quote.get("cloud_quote_name") or quote.get("quote_id"),
+        "items": token_lines,
+    }
+    token = create_token(token_payload, source_meta=source_meta)
+
+    with get_db() as conn:
+        conn.execute(
+            """
+            UPDATE relay_quotes
+            SET status = 'CONVERTED',
+                converted_token_id = ?,
+                latest_total = ?,
+                delta_total = ?,
+                updated_at = ?
+            WHERE quote_id = ?
+            """,
+            (
+                token.get("token_id"),
+                float(preview.get("new_total") or 0),
+                float(preview.get("delta_total") or 0),
+                _now_iso(),
+                quote_id,
+            ),
+        )
+
+    return {
+        "ok": True,
+        "quote_id": quote_id,
+        "token": token,
+        "preview": preview,
+    }
 
 
 def create_token(payload, expiry_minutes=120, source_meta=None):
@@ -1771,7 +2222,31 @@ def get_pick_queue(pos_profile_id=None, limit=100):
         return [dict(r) for r in cur.fetchall()]
 
 
-def list_relay_tokens(pos_profile_id=None, search=None, statuses=None, limit=100):
+def _parse_iso_utc(value):
+    raw = str(value or "").strip()
+    if not raw:
+        return None
+    try:
+        return datetime.fromisoformat(raw.replace("Z", "+00:00"))
+    except Exception:
+        return None
+
+
+def list_relay_tokens(
+    pos_profile_id=None,
+    search=None,
+    statuses=None,
+    limit=100,
+    max_age_days=1,
+    allow_stale=False,
+    history_days=30,
+):
+    max_age_days = max(0, int(max_age_days or 1))
+    allow_stale = bool(allow_stale)
+    history_days = max(max_age_days, int(history_days or 30))
+    lookback_days = history_days if allow_stale else max_age_days
+    cutoff = (datetime.utcnow() - timedelta(days=lookback_days)).isoformat(timespec="seconds") + "Z"
+
     query = """
         SELECT token_id, pos_profile_id, cashier_user_id, customer_id, customer_name,
                source_origin, source_env, source_user_agent,
@@ -1790,6 +2265,9 @@ def list_relay_tokens(pos_profile_id=None, search=None, statuses=None, limit=100
     if statuses:
         query += " AND status IN ({})".format(",".join(["?"] * len(statuses)))
         params.extend(statuses)
+
+    query += " AND created_at >= ?"
+    params.append(cutoff)
 
     if search:
         like = f"%{str(search).strip()}%"
@@ -1828,6 +2306,7 @@ def list_relay_tokens(pos_profile_id=None, search=None, statuses=None, limit=100
                 line_map.setdefault(d["token_id"], []).append(d)
 
     rows = []
+    now_dt = datetime.utcnow().replace(tzinfo=None)
     for row in token_rows:
         items = line_map.get(row["token_id"], [])
         total = 0.0
@@ -1836,8 +2315,21 @@ def list_relay_tokens(pos_profile_id=None, search=None, statuses=None, limit=100
                 total += float(item.get("amount") or (float(item.get("qty") or 0) * float(item.get("rate") or 0)))
             except Exception:
                 pass
+        created_dt = _parse_iso_utc(row.get("created_at"))
+        if created_dt:
+            age_days = max(0, (now_dt - created_dt.replace(tzinfo=None)).days)
+        else:
+            age_days = 0
+        is_stale = 1 if age_days > max_age_days else 0
+        if (not allow_stale) and is_stale:
+            continue
         row["items"] = items
         row["grand_total"] = total
+        row["order_age_days"] = age_days
+        row["is_stale"] = is_stale
+        row["stale_policy_allow"] = 1 if allow_stale else 0
+        row["stale_policy_max_age_days"] = max_age_days
+        row["stale_policy_history_days"] = history_days
         rows.append(row)
 
     return rows
@@ -2093,6 +2585,23 @@ def set_local_sale_cloud_synced(local_sale_ref, cloud_invoice_name=None):
             WHERE local_sale_ref = ?
             """,
             (cloud_invoice_name, now, local_sale_ref),
+        )
+
+
+def set_local_quote_cloud_synced(quote_id, cloud_quote_name=None):
+    quote_id = str(quote_id or "").strip()
+    if not quote_id:
+        return
+    now = _now_iso()
+    with get_db() as conn:
+        conn.execute(
+            """
+            UPDATE relay_quotes
+            SET cloud_quote_name = COALESCE(?, cloud_quote_name),
+                updated_at = ?
+            WHERE quote_id = ?
+            """,
+            (str(cloud_quote_name or "").strip() or None, now, quote_id),
         )
 
 

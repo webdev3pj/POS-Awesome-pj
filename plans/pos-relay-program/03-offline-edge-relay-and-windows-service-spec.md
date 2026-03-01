@@ -298,6 +298,44 @@ Semantics:
 - Supports pick queue and line-level operational views.
 - `codex-4-picker-dispatch` extends line payload usage by persisting picker results inside `payload.picker` (for example `picked_qty`, `picked_uom`, `ordered_uom`, `conversion_factor`, `picked_stock_qty`, `pick_status`) so fulfillment edits survive refresh/offline sessions.
 
+### `relay_quotes`
+Purpose:
+- Store relay-local quotations for offline create/search/reprice/convert flows.
+
+Key fields:
+- `quote_id` (PK, relay local id)
+- `cloud_quote_name`
+- `pos_profile_id`
+- `created_by`
+- `customer_id`, `customer_name`
+- `currency`
+- `base_total`, `latest_total`, `delta_total`
+- `valid_until`
+- `status` (`OPEN|EXPIRED|CONVERTED|VOID`)
+- `converted_token_id`, `converted_local_sale_ref`
+- `payload`
+- `created_at`, `updated_at`
+
+Semantics:
+- Supports relay-local quote continuity while cloud is unavailable.
+- Conversion to token is local-first, then synced by outbox.
+- Cloud sync now stores cloud reference back to local quote (`cloud_quote_name`) when available.
+
+### `relay_quote_lines`
+Purpose:
+- Store line snapshots for relay-local quotations.
+
+Key fields:
+- `id`
+- `quote_id` (FK)
+- `item_code`, `item_name`
+- `qty`, `uom`, `rate`, `amount`, `conversion_factor`
+- `payload`
+- `created_at`, `updated_at`
+
+Semantics:
+- Used for repricing preview and conversion to token with preserved line context.
+
 ### `relay_idempotency`
 Purpose:
 - Persist request/reply mapping for idempotent commit replay behavior.
@@ -406,6 +444,7 @@ Current indices in `init_db()`:
 - `idx_relay_sessions_profile_status`
 - `idx_relay_sales_profile_pick_dispatch`
 - `idx_relay_outbox_status_next_attempt`
+- `idx_relay_quotes_profile_status`
 
 These support common dashboard/query paths and worker polling filters.
 
@@ -434,6 +473,7 @@ Examples present in branch:
 - `SALE_COMMITTED` -> cloud sync path exists (`Implemented` foundation; live dev-site relay-first cashier UAT verified)
 - `PICK_EVENT` -> local enqueue/outbox path verified and fresh cloud sync parity live-validated on `codex-4.1-picked-dispatch-relay` (`Implemented`/`Partial` because auth hardening still pending and historical rows may remain queued)
 - `RELEASE_EVENT` -> local enqueue/outbox path verified and fresh cloud sync parity live-validated on `codex-4.1-picked-dispatch-relay` (`Implemented`/`Partial` because auth hardening still pending and historical rows may remain queued)
+- `QUOTE_UPSERT` -> cloud quote upsert path now active; sync uses relay quote id and cloud-side dedupe key (`Quotation.custom_relay_quote_id`) to avoid duplicate quotation creation on retries
 - `TOKEN_CREATED`, `SESSION_OPEN`, `SESSION_CLOSE` -> currently intentional no-op cloud ack in worker (`Partial parity`)
 
 ## What Is NOT Stored on Relay (Current Model)
@@ -490,6 +530,10 @@ Examples present in branch:
 - `/relay/items/search`
 - `/relay/items/refresh`
 - `/relay/items/refresh-from-cloud`
+- `/relay/quote/create`
+- `/relay/quotes/search`
+- `/relay/quote/reprice-preview`
+- `/relay/quote/convert-to-token`
 - `/relay/commit-invoice`
 - `/relay/pick-queue`
 - `/relay/pick/update`

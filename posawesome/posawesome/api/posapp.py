@@ -2739,72 +2739,543 @@ def search_invoices_for_return(invoice_name, company):
     return data
 
 
-@frappe.whitelist()
-def search_orders(company, currency, order_name=None, pos_profile=None, days_back=None):
+def _age_days_from_date(raw_date):
+    try:
+        d = getdate(raw_date)
+        return max(0, (getdate(nowdate()) - d).days)
+    except Exception:
+        return 0
+
+
+def _resolve_pos_profile_for_lookup(pos_profile, company):
     pos_profile = cstr(pos_profile or "").strip()
+    if pos_profile:
+        return pos_profile
 
     # Fallback for older/stale frontend assets that do not send `pos_profile` yet.
-    # This keeps cashier Select S.O filtering working by inferring the active opening shift profile.
-    if not pos_profile:
-        active_shift = frappe.db.get_all(
-            "POS Opening Shift",
-            filters={
-                "user": frappe.session.user,
-                "pos_closing_shift": ["in", ["", None]],
-                "docstatus": 1,
-                "status": "Open",
-                "company": company,
-            },
-            fields=["pos_profile"],
-            order_by="period_start_date desc",
-            limit_page_length=1,
-        )
-        if active_shift:
-            pos_profile = cstr(active_shift[0].get("pos_profile") or "").strip()
+    active_shift = frappe.db.get_all(
+        "POS Opening Shift",
+        filters={
+            "user": frappe.session.user,
+            "pos_closing_shift": ["in", ["", None]],
+            "docstatus": 1,
+            "status": "Open",
+            "company": company,
+        },
+        fields=["pos_profile"],
+        order_by="period_start_date desc",
+        limit_page_length=1,
+    )
+    if active_shift:
+        return cstr(active_shift[0].get("pos_profile") or "").strip()
+    return ""
 
-    profile_days_back = 1
-    profile_so_naming_series = ""
+
+def _profile_so_policy(pos_profile):
+    max_age_days = 1
+    allow_stale = 0
+    history_days = 30
+    naming_series = ""
     if pos_profile:
-        profile_days_back = cint(
-            frappe.get_cached_value(
-                "POS Profile", pos_profile, "posa_sales_order_lookup_max_age_days"
-            )
-            or 1
+        max_age_days = max(
+            0,
+            cint(
+                frappe.get_cached_value(
+                    "POS Profile", pos_profile, "posa_sales_order_lookup_max_age_days"
+                )
+                or 1
+            ),
         )
-        profile_so_naming_series = cstr(
+        allow_stale = 1 if cint(
+            frappe.get_cached_value(
+                "POS Profile", pos_profile, "posa_allow_stale_sales_order_fetch"
+            )
+            or 0
+        ) else 0
+        history_days = max(
+            max_age_days,
+            cint(
+                frappe.get_cached_value(
+                    "POS Profile", pos_profile, "posa_stale_sales_order_history_days"
+                )
+                or 30
+            ),
+        )
+        naming_series = cstr(
             frappe.get_cached_value("POS Profile", pos_profile, "posa_sales_order_naming_series")
             or ""
         ).strip()
+    return {
+        "max_age_days": max_age_days,
+        "allow_stale": allow_stale,
+        "history_days": history_days,
+        "naming_series": naming_series,
+    }
+
+
+def _resolve_allow_stale(arg_allow_stale, default_allow_stale):
+    if arg_allow_stale in (None, ""):
+        return 1 if cint(default_allow_stale) else 0
+    return 1 if cint(arg_allow_stale) else 0
+
+
+def _require_quotation_permission(pos_profile, role):
+    role = cstr(role or "").strip()
+    if role not in ("cline-Sales Associate", "cline-Cashier"):
+        return
+    if not pos_profile:
+        frappe.throw(_("POS Profile is required for quotation permission checks."))
+    if role == "cline-Sales Associate":
+        allowed = cint(frappe.get_cached_value("POS Profile", pos_profile, "posa_allow_sa_quotation") or 1)
+        if not allowed:
+            frappe.throw(_("Sales Associate quotation is disabled in POS Profile {0}.").format(pos_profile))
+    if role == "cline-Cashier":
+        allowed = cint(
+            frappe.get_cached_value("POS Profile", pos_profile, "posa_allow_cashier_quotation") or 1
+        )
+        if not allowed:
+            frappe.throw(_("Cashier quotation is disabled in POS Profile {0}.").format(pos_profile))
+
+
+def _latest_item_rate_for_profile(item_code, pos_profile, company=None, customer=None, currency=None):
+    item_code = cstr(item_code or "").strip()
+    if not item_code:
+        return 0
+    price_list = cstr(frappe.get_cached_value("POS Profile", pos_profile, "selling_price_list") or "").strip()
+    if not price_list:
+        return 0
+
+    filters = {
+        "item_code": item_code,
+        "price_list": price_list,
+        "selling": 1,
+    }
+    if currency:
+        filters["currency"] = currency
+    row = frappe.get_all(
+        "Item Price",
+        filters=filters,
+        fields=["price_list_rate", "valid_from", "creation"],
+        order_by="valid_from desc, creation desc",
+        limit_page_length=1,
+    )
+    if row:
+        return flt(row[0].get("price_list_rate") or 0)
+    return 0
+
+
+@frappe.whitelist()
+def search_orders(
+    company,
+    currency,
+    order_name=None,
+    pos_profile=None,
+    days_back=None,
+    allow_stale=None,
+    history_days=None,
+):
+    pos_profile = _resolve_pos_profile_for_lookup(pos_profile, company)
+    policy = _profile_so_policy(pos_profile)
 
     try:
         if days_back in (None, ""):
-            days_back = profile_days_back
+            days_back = policy["max_age_days"]
         days_back = max(0, cint(days_back or 1))
     except Exception:
-        days_back = 1
+        days_back = max(0, cint(policy["max_age_days"] or 1))
 
+    allow_stale = _resolve_allow_stale(allow_stale, policy["allow_stale"])
+    try:
+        if history_days in (None, ""):
+            history_days = policy["history_days"]
+        history_days = max(days_back, cint(history_days or policy["history_days"] or 30))
+    except Exception:
+        history_days = max(days_back, cint(policy["history_days"] or 30))
+
+    lookback_days = history_days if allow_stale else days_back
     filters = {
         "billing_status": ["in", ["Not Billed", "Partly Billed"]],
         "docstatus": 1,
         "company": company,
         "currency": currency,
-        "transaction_date": [">=", add_days(nowdate(), -days_back)],
+        "transaction_date": [">=", add_days(nowdate(), -lookback_days)],
     }
-    if profile_so_naming_series:
-        filters["naming_series"] = profile_so_naming_series
+    if policy["naming_series"]:
+        filters["naming_series"] = policy["naming_series"]
     if order_name:
         filters["name"] = ["like", f"%{order_name}%"]
+
     orders_list = frappe.get_list(
         "Sales Order",
         filters=filters,
-        fields=["name"],
+        fields=["name", "transaction_date"],
         limit_page_length=0,
         order_by="transaction_date desc, creation desc",
     )
     data = []
     for order in orders_list:
-        data.append(frappe.get_doc("Sales Order", order["name"]))
+        age_days = _age_days_from_date(order.get("transaction_date"))
+        is_stale = 1 if age_days > days_back else 0
+        if not allow_stale and is_stale:
+            continue
+        doc = frappe.get_doc("Sales Order", order["name"]).as_dict()
+        doc["order_age_days"] = age_days
+        doc["is_stale"] = is_stale
+        doc["stale_policy_allow"] = 1 if allow_stale else 0
+        doc["stale_policy_max_age_days"] = days_back
+        doc["stale_policy_history_days"] = history_days
+        data.append(doc)
     return data
+
+
+@frappe.whitelist()
+def create_quotation_token(data):
+    role = _require_operational_role_for_action(
+        ("cline-Sales Associate", "cline-Cashier", "cline-Supervisor"),
+        "create quotations",
+        allow_relay_sync=True,
+    )
+
+    if isinstance(data, str):
+        data = json.loads(data or "{}")
+    data = data or {}
+
+    pos_profile = cstr(data.get("pos_profile") or data.get("pos_profile_id") or "").strip()
+    relay_quote_id = cstr(data.get("quote_id") or data.get("relay_quote_id") or "").strip()
+    company = cstr(data.get("company") or "").strip()
+    customer = cstr(data.get("customer") or data.get("customer_id") or "").strip()
+    items = data.get("items") or data.get("lines") or []
+
+    if not pos_profile:
+        frappe.throw(_("POS Profile is required to create quotation."))
+    if role != "__relay_sync__":
+        _require_quotation_permission(pos_profile, role)
+
+    if not company:
+        company = cstr(frappe.get_cached_value("POS Profile", pos_profile, "company") or "").strip()
+    if not company:
+        frappe.throw(_("Company is required to create quotation."))
+    if not customer:
+        frappe.throw(_("Customer is required to create quotation."))
+    if not items:
+        frappe.throw(_("At least one item is required to create quotation."))
+
+    quotation_meta = frappe.get_meta("Quotation")
+    relay_quote_fieldname = ""
+    for fieldname in ("custom_relay_quote_id", "relay_quote_id", "posa_relay_quote_id"):
+        if quotation_meta.has_field(fieldname):
+            relay_quote_fieldname = fieldname
+            break
+
+    if relay_quote_id and relay_quote_fieldname:
+        existing_quote_name = frappe.db.get_value(
+            "Quotation",
+            {relay_quote_fieldname: relay_quote_id},
+            "name",
+        )
+        if existing_quote_name:
+            existing_doc = frappe.get_doc("Quotation", existing_quote_name)
+            existing_valid_till = cstr(existing_doc.get("valid_till") or "")
+            existing_is_expired = (
+                1 if (existing_valid_till and getdate(existing_valid_till) < getdate(nowdate())) else 0
+            )
+            return {
+                "quote_name": existing_doc.name,
+                "quote_id": relay_quote_id,
+                "valid_till": existing_valid_till,
+                "is_expired": existing_is_expired,
+                "age_days": _age_days_from_date(existing_doc.get("transaction_date")),
+                "grand_total": existing_doc.grand_total,
+                "currency": existing_doc.currency,
+                "customer": cstr(existing_doc.get("customer") or existing_doc.get("party_name") or ""),
+                "quotation": existing_doc.as_dict(),
+                "idempotent_replay": 1,
+            }
+
+    validity_days = max(
+        1, cint(frappe.get_cached_value("POS Profile", pos_profile, "posa_quotation_validity_days") or 7)
+    )
+    transaction_date = cstr(data.get("posting_date") or nowdate())
+    valid_till = cstr(
+        data.get("valid_till") or data.get("valid_until") or add_days(transaction_date, validity_days)
+    )
+
+    quotation_doc = frappe.new_doc("Quotation")
+    quotation_doc.company = company
+    quotation_doc.transaction_date = transaction_date
+    if quotation_doc.meta.has_field("valid_till"):
+        quotation_doc.valid_till = valid_till
+    if quotation_doc.meta.has_field("quotation_to"):
+        quotation_doc.quotation_to = "Customer"
+    if quotation_doc.meta.has_field("party_name"):
+        quotation_doc.party_name = customer
+    if quotation_doc.meta.has_field("customer"):
+        quotation_doc.customer = customer
+    if data.get("currency"):
+        quotation_doc.currency = data.get("currency")
+    if data.get("campaign") and quotation_doc.meta.has_field("campaign"):
+        quotation_doc.campaign = data.get("campaign")
+    if relay_quote_id and relay_quote_fieldname and quotation_doc.meta.has_field(relay_quote_fieldname):
+        quotation_doc.set(relay_quote_fieldname, relay_quote_id)
+
+    selling_price_list = frappe.get_cached_value("POS Profile", pos_profile, "selling_price_list")
+    if selling_price_list and quotation_doc.meta.has_field("selling_price_list"):
+        quotation_doc.selling_price_list = selling_price_list
+
+    q_item_meta = frappe.get_meta("Quotation Item")
+    for raw in items:
+        item_code = cstr((raw or {}).get("item_code") or "").strip()
+        if not item_code:
+            continue
+        row = quotation_doc.append("items", {})
+        row.item_code = item_code
+        row.qty = flt((raw or {}).get("qty") or 0)
+        row.uom = (raw or {}).get("uom")
+        if (raw or {}).get("rate") is not None:
+            row.rate = flt((raw or {}).get("rate"))
+        if (raw or {}).get("conversion_factor") is not None:
+            row.conversion_factor = flt((raw or {}).get("conversion_factor") or 1) or 1
+        if q_item_meta.has_field("discount_percentage") and (raw or {}).get("discount_percentage") is not None:
+            row.discount_percentage = flt((raw or {}).get("discount_percentage") or 0)
+        if q_item_meta.has_field("discount_amount") and (raw or {}).get("discount_amount") is not None:
+            row.discount_amount = flt((raw or {}).get("discount_amount") or 0)
+        if q_item_meta.has_field("price_list_rate") and (raw or {}).get("price_list_rate") is not None:
+            row.price_list_rate = flt((raw or {}).get("price_list_rate") or 0)
+        if q_item_meta.has_field("warehouse") and (raw or {}).get("warehouse"):
+            row.warehouse = (raw or {}).get("warehouse")
+        if q_item_meta.has_field("delivery_date"):
+            row.delivery_date = (raw or {}).get("posa_delivery_date") or valid_till
+
+    if not quotation_doc.get("items"):
+        frappe.throw(_("No valid items were provided for quotation creation."))
+
+    if data.get("discount_amount") is not None and quotation_doc.meta.has_field("discount_amount"):
+        quotation_doc.discount_amount = flt(data.get("discount_amount") or 0)
+    if (
+        data.get("additional_discount_percentage") is not None
+        and quotation_doc.meta.has_field("additional_discount_percentage")
+    ):
+        quotation_doc.additional_discount_percentage = flt(data.get("additional_discount_percentage") or 0)
+
+    quotation_doc.flags.ignore_permissions = True
+    frappe.flags.ignore_account_permission = True
+    quotation_doc.run_method("set_missing_values")
+    if hasattr(quotation_doc, "calculate_taxes_and_totals"):
+        quotation_doc.calculate_taxes_and_totals()
+    quotation_doc.save()
+    quotation_doc.submit()
+
+    return {
+        "quote_name": quotation_doc.name,
+        "quote_id": relay_quote_id or quotation_doc.name,
+        "valid_till": cstr(quotation_doc.get("valid_till") or valid_till),
+        "is_expired": 0,
+        "age_days": _age_days_from_date(quotation_doc.get("transaction_date")),
+        "grand_total": quotation_doc.grand_total,
+        "currency": quotation_doc.currency,
+        "customer": customer,
+        "quotation": quotation_doc.as_dict(),
+    }
+
+
+@frappe.whitelist()
+def search_quotations(
+    company=None,
+    currency=None,
+    pos_profile=None,
+    quote_name=None,
+    allow_stale=None,
+    history_days=None,
+):
+    pos_profile = cstr(pos_profile or "").strip()
+    if not pos_profile:
+        frappe.throw(_("POS Profile is required"))
+    role = _require_operational_role_for_action(
+        ("cline-Sales Associate", "cline-Cashier", "cline-Supervisor"),
+        "search quotations",
+    )
+    _require_quotation_permission(pos_profile, role)
+
+    company = cstr(company or frappe.get_cached_value("POS Profile", pos_profile, "company") or "").strip()
+    currency = cstr(currency or frappe.get_cached_value("POS Profile", pos_profile, "currency") or "").strip()
+
+    so_policy = _profile_so_policy(pos_profile)
+    validity_days = max(
+        1, cint(frappe.get_cached_value("POS Profile", pos_profile, "posa_quotation_validity_days") or 7)
+    )
+    max_age_days = max(validity_days, cint(so_policy["max_age_days"] or 1))
+    allow_stale = _resolve_allow_stale(allow_stale, so_policy["allow_stale"])
+    if history_days in (None, ""):
+        history_days = max(cint(so_policy["history_days"] or 30), max_age_days)
+    history_days = max(max_age_days, cint(history_days or 30))
+
+    lookback_days = history_days if allow_stale else max_age_days
+    filters = {
+        "docstatus": 1,
+        "company": company,
+        "transaction_date": [">=", add_days(nowdate(), -lookback_days)],
+    }
+    if currency:
+        filters["currency"] = currency
+    if quote_name:
+        filters["name"] = ["like", f"%{quote_name}%"]
+
+    rows = frappe.get_list(
+        "Quotation",
+        filters=filters,
+        fields=["name", "transaction_date", "valid_till"],
+        limit_page_length=0,
+        order_by="transaction_date desc, creation desc",
+    )
+    out = []
+    for row in rows:
+        age_days = _age_days_from_date(row.get("transaction_date"))
+        is_stale = 1 if age_days > max_age_days else 0
+        if not allow_stale and is_stale:
+            continue
+        doc = frappe.get_doc("Quotation", row.get("name")).as_dict()
+        valid_till = cstr(doc.get("valid_till") or row.get("valid_till") or "")
+        is_expired = 1 if (valid_till and getdate(valid_till) < getdate(nowdate())) else 0
+        doc["quote_name"] = doc.get("name")
+        doc["order_age_days"] = age_days
+        doc["age_days"] = age_days
+        doc["is_stale"] = is_stale
+        doc["is_expired"] = is_expired
+        doc["stale_policy_allow"] = 1 if allow_stale else 0
+        doc["stale_policy_max_age_days"] = max_age_days
+        doc["stale_policy_history_days"] = history_days
+        out.append(doc)
+    return out
+
+
+@frappe.whitelist()
+def quotation_reprice_preview(quotation_name, pos_profile):
+    quotation_name = cstr(quotation_name or "").strip()
+    pos_profile = cstr(pos_profile or "").strip()
+    if not quotation_name:
+        frappe.throw(_("Quotation name is required"))
+    if not pos_profile:
+        frappe.throw(_("POS Profile is required"))
+
+    role = _require_operational_role_for_action(
+        ("cline-Sales Associate", "cline-Cashier", "cline-Supervisor"),
+        "preview quotation repricing",
+    )
+    _require_quotation_permission(pos_profile, role)
+
+    doc = frappe.get_doc("Quotation", quotation_name)
+    repriced_lines = []
+    old_total = 0.0
+    new_total = 0.0
+    for row in (doc.items or []):
+        qty = flt(row.qty or 0)
+        old_rate = flt(row.rate or 0)
+        old_amount = flt(row.amount or (qty * old_rate))
+        latest_rate = _latest_item_rate_for_profile(
+            row.item_code, pos_profile, company=doc.company, customer=doc.party_name, currency=doc.currency
+        )
+        if latest_rate <= 0:
+            latest_rate = old_rate
+        new_amount = flt(qty * latest_rate)
+        old_total += old_amount
+        new_total += new_amount
+        repriced_lines.append(
+            {
+                "item_code": row.item_code,
+                "item_name": row.item_name,
+                "qty": qty,
+                "uom": row.uom,
+                "old_rate": old_rate,
+                "new_rate": latest_rate,
+                "delta_rate": flt(latest_rate - old_rate),
+                "old_amount": old_amount,
+                "new_amount": new_amount,
+                "delta_amount": flt(new_amount - old_amount),
+            }
+        )
+
+    valid_till = cstr(doc.get("valid_till") or "")
+    is_expired = 1 if (valid_till and getdate(valid_till) < getdate(nowdate())) else 0
+    return {
+        "quote_name": doc.name,
+        "valid_till": valid_till,
+        "is_expired": is_expired,
+        "age_days": _age_days_from_date(doc.get("transaction_date")),
+        "old_total": flt(old_total),
+        "new_total": flt(new_total),
+        "delta_total": flt(new_total - old_total),
+        "repriced_lines": repriced_lines,
+    }
+
+
+@frappe.whitelist()
+def convert_quotation_to_sales_order_token(quotation_name, pos_profile, confirm_reprice=1):
+    quotation_name = cstr(quotation_name or "").strip()
+    pos_profile = cstr(pos_profile or "").strip()
+    if not quotation_name:
+        frappe.throw(_("Quotation name is required"))
+    if not pos_profile:
+        frappe.throw(_("POS Profile is required"))
+
+    role = _require_operational_role_for_action(
+        ("cline-Sales Associate", "cline-Cashier", "cline-Supervisor"),
+        "convert quotation to sales order token",
+    )
+    _require_quotation_permission(pos_profile, role)
+
+    doc = frappe.get_doc("Quotation", quotation_name)
+    validity_days = max(
+        1, cint(frappe.get_cached_value("POS Profile", pos_profile, "posa_quotation_validity_days") or 7)
+    )
+    valid_till = cstr(doc.get("valid_till") or add_days(doc.get("transaction_date") or nowdate(), validity_days))
+    if valid_till and getdate(valid_till) < getdate(nowdate()):
+        frappe.throw(_("Quotation {0} is expired and cannot be converted.").format(quotation_name))
+
+    preview = quotation_reprice_preview(quotation_name=quotation_name, pos_profile=pos_profile)
+    if flt(preview.get("delta_total")) != 0 and not cint(confirm_reprice):
+        frappe.throw(_("Price changed since quotation. Confirmation is required for conversion."))
+
+    line_rate_map = {}
+    for i, row in enumerate(preview.get("repriced_lines") or []):
+        line_rate_map[(cstr(row.get("item_code") or ""), i)] = flt(row.get("new_rate") or 0)
+
+    so_items = []
+    for i, row in enumerate(doc.items or []):
+        item_code = cstr(row.item_code or "").strip()
+        new_rate = line_rate_map.get((item_code, i), flt(row.rate or 0))
+        so_items.append(
+            {
+                "item_code": item_code,
+                "item_name": row.item_name,
+                "qty": flt(row.qty or 0),
+                "uom": row.uom,
+                "rate": new_rate,
+                "amount": flt(flt(row.qty or 0) * new_rate),
+                "conversion_factor": flt(row.conversion_factor or 1) or 1,
+                "discount_percentage": flt(row.discount_percentage or 0),
+                "discount_amount": flt(row.discount_amount or 0),
+                "price_list_rate": flt(row.price_list_rate or new_rate),
+                "warehouse": row.get("warehouse") if hasattr(row, "get") else None,
+                "posa_delivery_date": cstr(row.get("delivery_date") if hasattr(row, "get") else "") or "",
+            }
+        )
+
+    token = create_sales_order_token(
+        {
+            "pos_profile": pos_profile,
+            "company": cstr(doc.company or ""),
+            "customer": cstr(doc.customer or doc.party_name or ""),
+            "currency": cstr(doc.currency or ""),
+            "posting_date": cstr(nowdate()),
+            "items": so_items,
+            "discount_amount": flt(doc.get("discount_amount") or 0),
+            "additional_discount_percentage": flt(doc.get("additional_discount_percentage") or 0),
+        }
+    )
+    token["quote_name"] = quotation_name
+    token["quote_valid_till"] = valid_till
+    token["quote_reprice_preview"] = preview
+    return token
 
 
 def get_version():

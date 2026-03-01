@@ -23,6 +23,75 @@ Note:
 
 ---
 
+## 2026-03-01 - Sales-order age governance + quotation flow (role-aware, relay-compatible) implemented on branch
+- Branch: `codex-5-final`
+- Summary: Implemented profile-driven Sales Order age policy across cloud + relay lookup paths, added stale visibility in Cashier/Picker/Dispatch UI, and added quotation create/search/reprice/convert flows with relay-local offline mode and outbox sync.
+- What changed:
+  - POS Profile controls added:
+    - `posa_allow_stale_sales_order_fetch`
+    - `posa_stale_sales_order_history_days`
+    - `posa_allow_sa_quotation`
+    - `posa_allow_cashier_quotation`
+    - `posa_quotation_validity_days`
+    - plus quotation idempotency key field on `Quotation`:
+      - `custom_relay_quote_id`
+  - Cloud API updates (`posawesome/posawesome/api/posapp.py`):
+    - `search_orders(...)` now supports and returns stale-policy metadata:
+      - `allow_stale`, `history_days`, `order_age_days`, `is_stale`
+    - added quotation APIs:
+      - `create_quotation_token`
+      - `search_quotations`
+      - `quotation_reprice_preview`
+      - `convert_quotation_to_sales_order_token`
+    - conversion enforces expiry hard-stop and reprice-confirm behavior
+    - cloud quotation sync idempotency now keys on `custom_relay_quote_id` when present
+  - Relay updates:
+    - `relay/relay/storage.py`
+      - added `relay_quotes` + `relay_quote_lines` tables
+      - added quote list/reprice/convert helpers
+      - extended `list_relay_tokens(...)` with stale policy fields
+      - added `set_local_quote_cloud_synced(...)` cloud ref updater
+    - `relay/relay/app.py`
+      - extended `/relay/tokens/search` with stale params
+      - added:
+        - `POST /relay/quote/create`
+        - `GET /relay/quotes/search`
+        - `POST /relay/quote/reprice-preview`
+        - `POST /relay/quote/convert-to-token`
+    - `relay/relay/sync_worker.py`
+      - added `QUOTE_UPSERT` mapping to cloud quotation API
+      - captures `quote_name` cloud ref and updates local quote row
+  - POS UI updates:
+    - `Invoice.vue`: `Save Quote` + `Select Quote`, role/profile gating, relay fallback
+    - `SalesOrders.vue`: stale chips + age columns, stale-warning behavior
+    - `FulfillmentWorkspace.vue`: stale chip + age visibility in queue/detail (warn-only for picker/dispatch)
+    - `Pos.vue`: quotation dialog registration
+    - new `Quotations.vue`: quote search/select/reprice preview/convert path (cloud + relay fallback)
+  - Cypress additions:
+    - helper: `cypress/e2e/_helpers/pos_auth.js`
+    - cloud specs:
+      - `cashier_sales_order_age_policy_watch.cy.js`
+      - `fulfillment_stale_visibility_watch.cy.js`
+      - `quotation_role_visibility_watch.cy.js`
+      - `quotation_create_reprice_convert_watch.cy.js`
+      - `quotation_expiry_hard_stop_watch.cy.js`
+      - `quotation_relay_local_offline_sync_watch.cy.js`
+    - local staging wrappers under `cypress/e2e/local_staging/` for the same feature set
+- What was verified:
+  - Python compile checks passed for modified backend/relay modules.
+  - `custom_field.json` parsed successfully after fixture updates.
+  - Cloud Cypress rerun is pending deploy of this branch; pre-deploy run fails as expected when server response lacks new stale fields.
+- What remains:
+  - Deploy `codex-5-final` to cloud dev and run the new age/quotation specs in watch mode.
+  - Run local staging wrappers after local deploy parity.
+  - Publish final cloud/local UAT evidence and close production-go/no-go checklist.
+- Links:
+  - `posawesome/posawesome/api/posapp.py`
+  - `relay/relay/app.py`
+  - `relay/relay/storage.py`
+  - `posawesome/public/js/posapp/components/pos/Quotations.vue`
+  - `cypress/e2e/cashier_sales_order_age_policy_watch.cy.js`
+
 ## 2026-03-01 - Detailed-default fulfillment UX + dispatch proof/mismatch relay hardening
 - Branch: `codex-5-final`
 - Summary: Implemented dispatch completion proof capture on relay, added explicit dispatch mismatch return-to-picker flow, and kept fulfillment workspace default in detailed mode with a visible simple/detailed toggle.

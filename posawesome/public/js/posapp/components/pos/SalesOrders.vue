@@ -51,6 +51,19 @@
                       {{ currencySymbol(item.currency) }}
                       {{ formtCurrency(item.grand_total) }}
                     </template>
+                    <template v-slot:item.order_age_days="{ item }">
+                      <span>{{ Number(item.order_age_days || 0) }}</span>
+                    </template>
+                    <template v-slot:item.is_stale="{ item }">
+                      <v-chip
+                        x-small
+                        :color="orderIsStale(item) ? 'warning' : 'success'"
+                        :outlined="!orderIsStale(item)"
+                        text-color="white"
+                      >
+                        {{ orderIsStale(item) ? __("Stale") : __("Fresh") }}
+                      </v-chip>
+                    </template>
                   </v-data-table>
                 </template>
               </v-col>
@@ -117,10 +130,41 @@ export default {
         align: "end",
         sortable: false,
       },
+      {
+        text: __("Age (Days)"),
+        value: "order_age_days",
+        align: "center",
+        sortable: true,
+      },
+      {
+        text: __("Freshness"),
+        value: "is_stale",
+        align: "center",
+        sortable: true,
+      },
     ],
   }),
   watch: {},
   methods: {
+    soPolicy() {
+      const maxAge = Math.max(
+        0,
+        Number((this.pos_profile && this.pos_profile.posa_sales_order_lookup_max_age_days) || 1) || 1
+      );
+      const allowStale =
+        Number((this.pos_profile && this.pos_profile.posa_allow_stale_sales_order_fetch) || 0) === 1;
+      const historyDays = Math.max(
+        maxAge,
+        Number((this.pos_profile && this.pos_profile.posa_stale_sales_order_history_days) || 30) || 30
+      );
+      return { maxAge, allowStale, historyDays };
+    },
+    orderIsStale(item) {
+      if (Number(item && item.is_stale ? 1 : 0) === 1) return true;
+      const p = this.soPolicy();
+      const age = Number((item && item.order_age_days) || 0);
+      return age > p.maxAge;
+    },
     close_dialog() {
       this.draftsDialog = false;
     },
@@ -208,10 +252,14 @@ export default {
       if (!base) {
         throw new Error(__("Relay URL is not configured."));
       }
+      const policy = this.soPolicy();
       const params = new URLSearchParams();
       params.set("pos_profile_id", (this.pos_profile && this.pos_profile.name) || "");
       params.set("limit", "100");
       params.set("statuses_csv", "TOKEN_OPEN");
+      params.set("max_age_days", String(policy.maxAge));
+      params.set("allow_stale", policy.allowStale ? "1" : "0");
+      params.set("history_days", String(policy.historyDays));
       if (this.order_name) params.set("search", this.order_name);
       const resp = await fetch(`${base}/relay/tokens/search?${params.toString()}`, {
         method: "GET",
@@ -233,6 +281,7 @@ export default {
       const vm = this;
       return new Promise((resolve) => {
         let cloudFailed = false;
+        const policy = vm.soPolicy();
         frappe.call({
           method: "posawesome.posawesome.api.posapp.search_orders",
           args: {
@@ -240,6 +289,9 @@ export default {
             company: this.pos_profile.company,
             currency: this.pos_profile.currency,
             pos_profile: this.pos_profile.name,
+            days_back: policy.maxAge,
+            allow_stale: policy.allowStale ? 1 : 0,
+            history_days: policy.historyDays,
           },
           async: true,
           callback: async function (r) {
@@ -305,6 +357,12 @@ export default {
 
     async submit_dialog() {
       if (this.selected.length > 0) {
+        if (this.orderIsStale(this.selected[0])) {
+          evntBus.$emit("show_mesage", {
+            text: __("Selected Sales Order is stale based on POS profile policy."),
+            color: "warning",
+          });
+        }
         if (this.selected[0].relay_offline_order) {
           evntBus.$emit("load_order", this.selected[0]);
           this.draftsDialog = false;

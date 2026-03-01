@@ -134,6 +134,15 @@
                       >
                         {{ queueSlaLabel(row) }}
                       </v-chip>
+                      <v-chip
+                        x-small
+                        class="mr-1 mb-1"
+                        :color="queueRowIsStale(row) ? 'warning' : 'success'"
+                        :outlined="!queueRowIsStale(row)"
+                        :text-color="queueRowIsStale(row) ? 'white' : ''"
+                      >
+                        {{ queueRowIsStale(row) ? __('Stale') : __('Fresh') }}
+                      </v-chip>
                       <span class="caption grey--text">{{ money(row.total) }}</span>
                     </v-list-item-subtitle>
                     <v-list-item-subtitle class="caption mt-1" :class="queueSlaTextClass(row)">
@@ -197,6 +206,15 @@
                 >
                   {{ __('Cashier Adjustment Required') }}
                 </v-chip>
+                <v-chip
+                  small
+                  class="ml-1"
+                  :color="queueRowIsStale(detail.sale) ? 'warning' : 'success'"
+                  :outlined="!queueRowIsStale(detail.sale)"
+                  :text-color="queueRowIsStale(detail.sale) ? 'white' : ''"
+                >
+                  {{ queueRowIsStale(detail.sale) ? __('Stale') : __('Fresh') }}
+                </v-chip>
               </div>
             </div>
           </v-card-title>
@@ -233,6 +251,10 @@
 
               <v-alert v-if="hasDispatchProofOnSale && isDetailedView" dense outlined type="success" class="mt-2 mb-2">
                 <strong>{{ __('Dispatch Proof') }}:</strong> {{ dispatchProofSummaryText }}
+              </v-alert>
+              <v-alert v-if="queueRowIsStale(detail.sale)" dense outlined type="warning" class="mt-2 mb-2">
+                {{ __('Source Sales Order age exceeds profile max lookup age.') }}
+                {{ __('Age') }}: {{ queueOrderAgeDays(detail.sale) }} {{ __('day(s)') }}
               </v-alert>
 
               <v-card outlined class="mt-2 mb-2" v-if="isDetailedView && detailPhaseTimeline.length">
@@ -624,6 +646,13 @@ export default {
       if (!this.pos_profile) return "";
       if (typeof this.pos_profile === "string") return this.pos_profile;
       return (this.pos_profile.name || "").trim();
+    },
+    soAgeMaxDays() {
+      const raw =
+        this.pos_profile && typeof this.pos_profile === "object"
+          ? this.pos_profile.posa_sales_order_lookup_max_age_days
+          : 1;
+      return Math.max(0, Number(raw || 1) || 1);
     },
     relayBase() {
       const v =
@@ -1233,6 +1262,17 @@ export default {
     },
     queueAgeLabel(row) {
       return this.durationLabel(this.msSince(row && row.created_at));
+    },
+    queueOrderAgeDays(row) {
+      if (!row) return 0;
+      const explicit = Number(row.order_age_days);
+      if (!isNaN(explicit) && explicit >= 0) return explicit;
+      const createdMs = this.parseIsoMs(row.created_at);
+      if (!createdMs) return 0;
+      return Math.max(0, Math.floor((Date.now() - createdMs) / (24 * 60 * 60 * 1000)));
+    },
+    queueRowIsStale(row) {
+      return this.queueOrderAgeDays(row) > this.soAgeMaxDays;
     },
     queuePhaseAnchorAt(row) {
       if (!row) return "";

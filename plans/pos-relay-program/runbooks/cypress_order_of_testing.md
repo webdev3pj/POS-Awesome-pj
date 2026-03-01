@@ -36,26 +36,32 @@ $env:CYPRESS_baseUrl='https://devpjjamaica.v.frappe.cloud/'
 
 Run in this exact order:
 1. `cypress/e2e/admin_configure_pj7_cashier_profile.cy.js`
-2. `cypress/e2e/admin_set_cline_sa_only_role.cy.js`
-3. `cypress/e2e/sa_workflow_frontend_watch.cy.js`
-4. `cypress/e2e/token_print_pdf_and_cashier_retrieve_watch.cy.js`
-5. `cypress/e2e/relay_demo_sa_post_ui_watch.cy.js`
-6. `cypress/e2e/admin_set_cline_cashier_only_role.cy.js`
-7. `cypress/e2e/cashier_workflow_frontend_watch.cy.js`
-8. `cypress/e2e/relay_demo_postrun_ui_watch.cy.js`
-9. `cypress/e2e/admin_set_cline_picker_only_role.cy.js`
-10. `cypress/e2e/picker_workflow_frontend_watch.cy.js`
-11. `cypress/e2e/relay_demo_picker_post_ui_watch.cy.js`
-12. `cypress/e2e/admin_set_cline_dispatch_only_role.cy.js`
-13. `cypress/e2e/dispatch_workflow_frontend_watch.cy.js`
-14. `cypress/e2e/dispatch_mismatch_returns_to_picker_watch.cy.js`
-15. `cypress/e2e/relay_demo_dispatch_post_ui_watch.cy.js`
+2. `cypress/e2e/cashier_sales_order_age_policy_watch.cy.js`
+3. `cypress/e2e/quotation_role_visibility_watch.cy.js`
+4. `cypress/e2e/admin_set_cline_sa_only_role.cy.js`
+5. `cypress/e2e/sa_workflow_frontend_watch.cy.js`
+6. `cypress/e2e/quotation_create_reprice_convert_watch.cy.js`
+7. `cypress/e2e/quotation_expiry_hard_stop_watch.cy.js`
+8. `cypress/e2e/token_print_pdf_and_cashier_retrieve_watch.cy.js`
+9. `cypress/e2e/relay_demo_sa_post_ui_watch.cy.js`
+10. `cypress/e2e/admin_set_cline_cashier_only_role.cy.js`
+11. `cypress/e2e/cashier_workflow_frontend_watch.cy.js`
+12. `cypress/e2e/relay_demo_postrun_ui_watch.cy.js`
+13. `cypress/e2e/fulfillment_stale_visibility_watch.cy.js`
+14. `cypress/e2e/admin_set_cline_picker_only_role.cy.js`
+15. `cypress/e2e/picker_workflow_frontend_watch.cy.js`
+16. `cypress/e2e/relay_demo_picker_post_ui_watch.cy.js`
+17. `cypress/e2e/admin_set_cline_dispatch_only_role.cy.js`
+18. `cypress/e2e/dispatch_workflow_frontend_watch.cy.js`
+19. `cypress/e2e/dispatch_mismatch_returns_to_picker_watch.cy.js`
+20. `cypress/e2e/relay_demo_dispatch_post_ui_watch.cy.js`
 
 Optional hardening:
-16. `cypress/e2e/admin_set_cline_supervisor_only_role.cy.js`
-17. `cypress/e2e/supervisor_fulfillment_exception_watch.cy.js`
-18. `cypress/e2e/phase3_security_relay_role_guards_watch.cy.js`
-19. `cypress/e2e/ui_shell_chrome_role_consistency.cy.js`
+21. `cypress/e2e/admin_set_cline_supervisor_only_role.cy.js`
+22. `cypress/e2e/supervisor_fulfillment_exception_watch.cy.js`
+23. `cypress/e2e/quotation_relay_local_offline_sync_watch.cy.js`
+24. `cypress/e2e/phase3_security_relay_role_guards_watch.cy.js`
+25. `cypress/e2e/ui_shell_chrome_role_consistency.cy.js`
 
 Token print / retrieval signoff rule (after step 4):
 - Review:
@@ -92,24 +98,30 @@ $env:CYPRESS_baseUrl='http://pj.local:8080/'
 
 Run in this exact order:
 1. `cypress/e2e/local_staging/local_staging_parity_smoke_watch.cy.js`
-2. `cypress/e2e/admin_set_cline_sa_only_role.cy.js`
-3. `cypress/e2e/local_staging/local_staging_sa_workflow_frontend_watch.cy.js`
-4. `cypress/e2e/local_staging/local_staging_relay_demo_sa_post_ui_watch.cy.js`
-5. `cypress/e2e/admin_set_cline_cashier_only_role.cy.js`
-6. `cypress/e2e/local_staging/local_staging_cashier_workflow_frontend_watch.cy.js`
-7. `cypress/e2e/local_staging/local_staging_relay_demo_cashier_post_ui_watch.cy.js`
-8. `cypress/e2e/admin_set_cline_picker_only_role.cy.js`
-9. `cypress/e2e/local_staging/local_staging_picker_workflow_frontend_watch.cy.js`
-10. `cypress/e2e/local_staging/local_staging_relay_demo_picker_post_ui_watch.cy.js`
-11. `cypress/e2e/admin_set_cline_dispatch_only_role.cy.js`
-12. `cypress/e2e/local_staging/local_staging_dispatch_workflow_frontend_watch.cy.js`
-13. `cypress/e2e/local_staging/local_staging_dispatch_mismatch_returns_to_picker_watch.cy.js`
-14. `cypress/e2e/local_staging/local_staging_relay_demo_dispatch_post_ui_watch.cy.js`
+2. `cypress/e2e/local_staging/local_staging_cashier_sales_order_age_policy_watch.cy.js`
+3. `cypress/e2e/local_staging/local_staging_quotation_role_visibility_watch.cy.js`
+4. `cypress/e2e/admin_set_cline_sa_only_role.cy.js`
+5. `cypress/e2e/local_staging/local_staging_sa_workflow_frontend_watch.cy.js`
+6. `cypress/e2e/local_staging/local_staging_quotation_create_reprice_convert_watch.cy.js`
+7. `cypress/e2e/local_staging/local_staging_quotation_expiry_hard_stop_watch.cy.js`
+8. `cypress/e2e/local_staging/local_staging_relay_demo_sa_post_ui_watch.cy.js`
+9. `cypress/e2e/admin_set_cline_cashier_only_role.cy.js`
+10. `cypress/e2e/local_staging/local_staging_cashier_workflow_frontend_watch.cy.js`
+11. `cypress/e2e/local_staging/local_staging_relay_demo_cashier_post_ui_watch.cy.js`
+12. `cypress/e2e/local_staging/local_staging_fulfillment_stale_visibility_watch.cy.js`
+13. `cypress/e2e/admin_set_cline_picker_only_role.cy.js`
+14. `cypress/e2e/local_staging/local_staging_picker_workflow_frontend_watch.cy.js`
+15. `cypress/e2e/local_staging/local_staging_relay_demo_picker_post_ui_watch.cy.js`
+16. `cypress/e2e/admin_set_cline_dispatch_only_role.cy.js`
+17. `cypress/e2e/local_staging/local_staging_dispatch_workflow_frontend_watch.cy.js`
+18. `cypress/e2e/local_staging/local_staging_dispatch_mismatch_returns_to_picker_watch.cy.js`
+19. `cypress/e2e/local_staging/local_staging_relay_demo_dispatch_post_ui_watch.cy.js`
 
 Optional hardening:
-15. `cypress/e2e/admin_set_cline_supervisor_only_role.cy.js`
-16. `cypress/e2e/local_staging/local_staging_supervisor_fulfillment_exception_watch.cy.js`
-17. `cypress/e2e/local_staging/local_staging_phase3_security_relay_role_guards_watch.cy.js`
+20. `cypress/e2e/admin_set_cline_supervisor_only_role.cy.js`
+21. `cypress/e2e/local_staging/local_staging_supervisor_fulfillment_exception_watch.cy.js`
+22. `cypress/e2e/local_staging/local_staging_quotation_relay_local_offline_sync_watch.cy.js`
+23. `cypress/e2e/local_staging/local_staging_phase3_security_relay_role_guards_watch.cy.js`
 
 Supervisor reseed rule (important):
 - If step 15 fails with `pending unreleased queue row: expected undefined to be an object`, the queue was already fully released by dispatch.

@@ -149,6 +149,8 @@ Status tags in the last column reflect the current program branch family state; 
 | Add/remove items | Yes | Yes | Limited/No | No | Optional | `Partial` |
 | Select/update customer | Yes | Yes | Read-only | Read-only | Yes | `Partial` |
 | `Save/New` token/order | Yes | Optional | No | No | Optional | `Implemented` (SA SO token path live-tested; cashier/non-SA behavior still `Partial`) |
+| `Save Quote` | Yes (profile toggle) | Yes (profile toggle) | No | No | Optional | `Implemented` (new quotation flow with role/profile gate) |
+| `Select Quote` | Yes (profile toggle) | Yes (profile toggle) | No | No | Optional | `Implemented` (quote search + convert-to-token path) |
 | `PAY` button visible | Visible but disabled | Visible enabled | Hidden/disabled | Hidden/disabled | Optional | `Partial` (SA disable exists locally; full role gating pending) |
 | `Select S.O` | No (preferred hidden) | Yes | No | No | Optional | `Partial` (Phase 2 role visibility) |
 | Held invoices | No (preferred hidden) | Yes | No | No | Optional | `Planned` (Phase 2) |
@@ -167,6 +169,16 @@ Status tags in the last column reflect the current program branch family state; 
 |---|---|---|---|---|---|---|
 | Search submitted unbilled Sales Orders | No (preferred hidden) | Yes | No | No | Optional | `Partial` (exists; role visibility pending) |
 | Load SO into POS for payment conversion | No | Yes | No | No | Optional | `Implemented` (cashier workflow support exists) |
+| Show stale age + freshness chips | Warn-only | Warn-only | N/A | N/A | Warn-only | `Implemented` (profile-driven stale policy fields surfaced in list rows) |
+
+### `Quotations.vue`
+| Capability | SA | Cashier | Picker | Dispatch | Supervisor | Status |
+|---|---|---|---|---|---|---|
+| Search quotations (cloud with relay fallback) | Yes (profile toggle) | Yes (profile toggle) | No | No | Yes | `Implemented` |
+| Show quote freshness + expiry state | Yes | Yes | No | No | Yes | `Implemented` |
+| Reprice preview before conversion | Yes | Yes | No | No | Yes | `Implemented` |
+| Convert quote -> SO token (confirm on delta) | Yes | Yes | No | No | Yes | `Implemented` |
+| Block expired quote conversion | Yes | Yes | No | No | Yes | `Implemented` |
 
 ### `Customer.vue` / `UpdateCustomer.vue`
 | Capability | SA | Cashier | Picker | Dispatch | Supervisor | Status |
@@ -198,7 +210,20 @@ Status tags in the last column reflect the current program branch family state; 
 | Pick update | No | No | Yes | No | Yes | `Implemented` (shared-shell relay path live-validated on `codex-4-picker-dispatch` / `codex-4.1-picked-dispatch-relay`) | `Partial` (auth/trust pending; cloud parity now verified for fresh events) |
 | Dispatch release (with proof) | No | No | No | Yes | Yes | `Implemented` (detailed-default fulfillment UI; release gated by proof fields) | `Partial` (auth/trust pending; cloud parity now verified for fresh events) |
 | Dispatch flag mismatch (return to picker) | No | No | No | Yes | Yes | `Implemented` (dispatch/supervisor mismatch action in shared shell) | `Partial` (new relay endpoint + outbox sync path; live rerun pending) |
+| Create quotation | Yes (profile toggle) | Yes (profile toggle) | No | No | Yes | `Implemented` | `Partial` (role trust still in Phase 3 closure scope) |
+| Convert quotation -> SO token | Yes (profile toggle) | Yes (profile toggle) | No | No | Yes | `Implemented` | `Partial` (final negative matrix signoff pending) |
 | Override exceptions | No | No | No | Limited | Yes | `Planned` | `Planned` |
+
+## Sales-Order Age Governance (Current)
+- Profile field `posa_sales_order_lookup_max_age_days` remains the base max-age rule.
+- If `posa_allow_stale_sales_order_fetch = 0`:
+  - stale rows are excluded from cloud search and relay fallback search.
+- If `posa_allow_stale_sales_order_fetch = 1`:
+  - stale rows may appear up to `posa_stale_sales_order_history_days` with warning chips.
+- Cashier list behavior:
+  - `Select S.O` now includes `Age` + `Freshness` columns.
+- Picker/Dispatch behavior:
+  - stale state is warn-only in fulfillment queue/detail (no workflow block).
 
 ## Current Implementation Notes by Role
 ### Sales Associate (`cline-Sales Associate`)
@@ -209,6 +234,7 @@ What exists:
 - SA payment block in UI is implemented and dev-site UAT verified.
 - SA SO token API + frontend save path are implemented and dev-site UAT verified.
 - SA can see cross-role workflow monitor rail and track status/timing for profile/date-scoped pending orders (`Implemented`, dev-site UAT verified).
+- SA quotation actions are now profile-gated (`Save Quote`, `Select Quote`) with quote reprice preview + convert-to-token flow.
 
 What is missing:
 - Full cashier/picker/dispatch lifecycle integration and relay-enabled proof for the same order (next phases / relay testing).
@@ -229,6 +255,8 @@ What exists:
 - Direct cloud fallback disabled when relay-enabled commit fails (`Implemented`).
 - SO selection and SO -> SI conversion support exists (`Implemented`).
 - Workflow monitor rail can surface pending order status/timing (read-only) for profile/date scope (`Implemented`, dev-site UAT verified).
+- Cashier now gets profile-driven stale-order governance in `Select S.O` (strict block or stale warning mode).
+- Cashier quotation path is now available when profile allows it (create/search/reprice/convert to SO token).
 - Dedicated token slip retrieval validation now proves the current cashier intake behavior on cloud dev:
   - raw QR payload lookup is not supported by current cashier search
   - barcode/Sales Order lookup works

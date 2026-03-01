@@ -8,20 +8,24 @@ from flask import Flask, flash, jsonify, redirect, render_template, request
 
 from .storage import (
     commit_invoice_atomic,
+    convert_local_quote_to_token,
     create_token,
     close_cashier_session,
     enqueue_event,
     enqueue_outbox_event,
     flag_dispatch_mismatch,
+    get_local_quote,
     get_local_sale_detail,
     get_relay_monitor_board,
     get_pick_queue,
     get_token,
     init_db,
+    list_local_quotes,
     list_local_sales,
     list_relay_tokens,
     list_outbox,
     list_queue,
+    preview_local_quote_reprice,
     cleanup_outbox_rows,
     load_config,
     open_cashier_session,
@@ -31,6 +35,7 @@ from .storage import (
     queue_counts,
     search_items_cache,
     save_config,
+    upsert_local_quote,
     update_pick_status,
     upsert_customer,
     void_token,
@@ -63,6 +68,7 @@ def create_app():
             "cline-Supervisor",
         ),
         "token_create": ("cline-Sales Associate", "cline-Cashier", "cline-Supervisor"),
+        "quote_action": ("cline-Sales Associate", "cline-Cashier", "cline-Supervisor"),
         "session_cashier": ("cline-Cashier", "cline-Supervisor"),
         "commit_invoice": ("cline-Cashier", "cline-Supervisor"),
         "pick_update": ("cline-Picker", "cline-Supervisor"),
@@ -604,13 +610,224 @@ def create_app():
                 raw_statuses.extend(csv.split(","))
         statuses = [str(s).strip() for s in raw_statuses if str(s).strip()]
 
+        try:
+            max_age_days = max(0, int(request.args.get("max_age_days") or 1))
+        except Exception:
+            max_age_days = 1
+        try:
+            history_days = max(max_age_days, int(request.args.get("history_days") or 30))
+        except Exception:
+            history_days = max(max_age_days, 30)
+        allow_stale = str(request.args.get("allow_stale") or "").strip().lower() in (
+            "1",
+            "true",
+            "yes",
+            "on",
+        )
+
         rows = list_relay_tokens(
             pos_profile_id=pos_profile_id,
             search=search,
             statuses=statuses,
             limit=limit,
+            max_age_days=max_age_days,
+            allow_stale=allow_stale,
+            history_days=history_days,
         )
-        return jsonify({"ok": True, "rows": rows, "count": len(rows)})
+        return jsonify(
+            {
+                "ok": True,
+                "rows": rows,
+                "count": len(rows),
+                "policy": {
+                    "max_age_days": max_age_days,
+                    "allow_stale": 1 if allow_stale else 0,
+                    "history_days": history_days,
+                },
+            }
+        )
+
+    @app.route("/relay/quote/create", methods=["POST", "OPTIONS"])
+    def relay_quote_create_v2():
+        if request.method == "OPTIONS":
+            return ("", 204)
+        auth_err = _require_relay_client_auth()
+        if auth_err:
+            return auth_err
+        payload = request.get_json(silent=True) or {}
+        role_err = _require_relay_role(payload, RELAY_ROLE_GROUPS["quote_action"])
+        if role_err:
+            return role_err
+
+        valid_until = str(payload.get("valid_until") or "").strip()
+        if not valid_until:
+            try:
+                validity_days = max(1, int(payload.get("validity_days") or 7))
+            except Exception:
+                validity_days = 7
+            from datetime import datetime as _dt, timedelta as _td
+
+            valid_until = (_dt.utcnow() + _td(days=validity_days)).date().isoformat()
+            payload["valid_until"] = valid_until
+        try:
+            quote = upsert_local_quote(payload, source_meta=_request_source_meta())
+        except Exception as exc:
+            return jsonify({"ok": False, "code": "QUOTE_CREATE_FAILED", "message": str(exc)}), 400
+
+        outbox_event_id = enqueue_outbox_event(
+            "QUOTE_UPSERT",
+            {
+                "quote_id": quote.get("quote_id"),
+                "payload": payload,
+            },
+            local_ref=quote.get("quote_id"),
+            source_meta=_request_source_meta(),
+        )
+        return jsonify({"ok": True, "quote": quote, "outbox_event_id": outbox_event_id})
+
+    @app.route("/relay/quotes/search", methods=["GET"])
+    def relay_quotes_search_v2():
+        auth_err = _require_relay_client_auth()
+        if auth_err:
+            return auth_err
+        pos_profile_id = (request.args.get("pos_profile_id") or "").strip() or None
+        search = (request.args.get("q") or request.args.get("search") or "").strip() or None
+        limit = int(request.args.get("limit") or 100)
+        limit = max(1, min(500, limit))
+
+        raw_statuses = []
+        raw_statuses.extend(request.args.getlist("status"))
+        raw_statuses.extend(request.args.getlist("statuses"))
+        if not raw_statuses:
+            csv = (request.args.get("statuses_csv") or request.args.get("statuses") or "").strip()
+            if csv:
+                raw_statuses.extend(csv.split(","))
+        statuses = [str(s).strip() for s in raw_statuses if str(s).strip()]
+
+        try:
+            max_age_days = max(0, int(request.args.get("max_age_days") or 7))
+        except Exception:
+            max_age_days = 7
+        try:
+            history_days = max(max_age_days, int(request.args.get("history_days") or 30))
+        except Exception:
+            history_days = max(max_age_days, 30)
+        allow_stale = str(request.args.get("allow_stale") or "").strip().lower() in (
+            "1",
+            "true",
+            "yes",
+            "on",
+        )
+
+        rows = list_local_quotes(
+            pos_profile_id=pos_profile_id,
+            search=search,
+            statuses=statuses,
+            limit=limit,
+            max_age_days=max_age_days,
+            allow_stale=allow_stale,
+            history_days=history_days,
+        )
+        return jsonify(
+            {
+                "ok": True,
+                "rows": rows,
+                "count": len(rows),
+                "policy": {
+                    "max_age_days": max_age_days,
+                    "allow_stale": 1 if allow_stale else 0,
+                    "history_days": history_days,
+                },
+            }
+        )
+
+    @app.route("/relay/quote/reprice-preview", methods=["POST", "OPTIONS"])
+    def relay_quote_reprice_preview_v2():
+        if request.method == "OPTIONS":
+            return ("", 204)
+        auth_err = _require_relay_client_auth()
+        if auth_err:
+            return auth_err
+        payload = request.get_json(silent=True) or {}
+        role_err = _require_relay_role(payload, RELAY_ROLE_GROUPS["quote_action"])
+        if role_err:
+            return role_err
+        quote_id = str(payload.get("quote_id") or "").strip()
+        if not quote_id:
+            return jsonify({"ok": False, "code": "QUOTE_ID_REQUIRED"}), 400
+        result = preview_local_quote_reprice(quote_id)
+        if not result.get("ok"):
+            return jsonify(result), 404 if result.get("code") == "QUOTE_NOT_FOUND" else 409
+        return jsonify(result)
+
+    @app.route("/relay/quote/convert-to-token", methods=["POST", "OPTIONS"])
+    def relay_quote_convert_to_token_v2():
+        if request.method == "OPTIONS":
+            return ("", 204)
+        auth_err = _require_relay_client_auth()
+        if auth_err:
+            return auth_err
+        payload = request.get_json(silent=True) or {}
+        role_err = _require_relay_role(payload, RELAY_ROLE_GROUPS["quote_action"])
+        if role_err:
+            return role_err
+        quote_id = str(payload.get("quote_id") or "").strip()
+        if not quote_id:
+            return jsonify({"ok": False, "code": "QUOTE_ID_REQUIRED"}), 400
+
+        result = convert_local_quote_to_token(
+            quote_id=quote_id,
+            cashier_user_id=payload.get("cashier_user_id"),
+            role=payload.get("role"),
+            confirm_reprice=payload.get("confirm_reprice"),
+            source_meta=_request_source_meta(),
+        )
+        if not result.get("ok"):
+            code = result.get("code")
+            if code == "QUOTE_NOT_FOUND":
+                return jsonify(result), 404
+            if code == "QUOTE_REPRICE_CONFIRM_REQUIRED":
+                return jsonify(result), 409
+            if code == "QUOTE_EXPIRED":
+                return jsonify(result), 409
+            return jsonify(result), 400
+
+        quote = get_local_quote(quote_id)
+        token = result.get("token") or {}
+        token_outbox_event_id = enqueue_outbox_event(
+            "TOKEN_CREATED",
+            {
+                "token_id": token.get("token_id"),
+                "payload": {
+                    "pos_profile_id": (quote or {}).get("pos_profile_id"),
+                    "customer_id": (quote or {}).get("customer_id"),
+                    "customer_name": (quote or {}).get("customer_name"),
+                },
+            },
+            local_ref=token.get("token_id"),
+            source_meta=_request_source_meta(),
+        )
+        quote_outbox_event_id = enqueue_outbox_event(
+            "QUOTE_UPSERT",
+            {
+                "quote_id": quote_id,
+                "payload": (quote or {}).get("payload") or {},
+            },
+            local_ref=quote_id,
+            source_meta=_request_source_meta(),
+        )
+
+        return jsonify(
+            {
+                "ok": True,
+                "quote_id": quote_id,
+                "quote": quote,
+                "token": token,
+                "preview": result.get("preview") or {},
+                "outbox_event_id": token_outbox_event_id,
+                "quote_outbox_event_id": quote_outbox_event_id,
+            }
+        )
 
     @app.route("/relay/token/<token_id>/void", methods=["POST", "OPTIONS"])
     def relay_token_void_v2(token_id):

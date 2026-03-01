@@ -14,6 +14,7 @@ from .storage import (
     mark_failed,
     mark_processing,
     outbox_counts,
+    set_local_quote_cloud_synced,
     set_local_sale_cloud_synced,
     set_local_sale_sync_error,
 )
@@ -32,6 +33,7 @@ OUTBOX_ENDPOINTS = {
     "CUSTOMER_UPSERT": "api/resource/Customer",
     "PICK_EVENT": "api/method/posawesome.posawesome.api.posapp.update_relay_picking_status",
     "RELEASE_EVENT": "api/method/posawesome.posawesome.api.posapp.release_relay_dispatch",
+    "QUOTE_UPSERT": "api/method/posawesome.posawesome.api.posapp.create_quotation_token",
     # Phase-1 local-first tracking events - keep as no-op cloud ack to avoid blocking queue
     "TOKEN_CREATED": None,
     "SESSION_OPEN": None,
@@ -129,6 +131,15 @@ def _build_request_payload(event_type, payload):
             "tax_id": payload.get("tax_id") or "",
         }
 
+    if event_type == "QUOTE_UPSERT":
+        quote_payload = payload.get("payload") if isinstance(payload.get("payload"), dict) else payload
+        quote_payload = dict(quote_payload or {})
+        if payload.get("quote_id") and not quote_payload.get("quote_id"):
+            quote_payload["quote_id"] = payload.get("quote_id")
+        return {
+            "data": dumps(quote_payload, ensure_ascii=False),
+        }
+
     return payload
 
 
@@ -154,7 +165,7 @@ def _build_outbox_request(outbox_event):
             )
 
     request_payload = _build_request_payload(event_type, payload)
-    if event_type in ("SALE_COMMITTED", "PICK_EVENT", "RELEASE_EVENT"):
+    if event_type in ("SALE_COMMITTED", "PICK_EVENT", "RELEASE_EVENT", "QUOTE_UPSERT"):
         return {
             "skip_cloud": False,
             "endpoint": endpoint,
@@ -251,10 +262,16 @@ def sync_outbox_once():
         if isinstance(response_json, dict):
             message = response_json.get("message")
             if isinstance(message, dict):
-                cloud_ref = message.get("name") or message.get("sales_invoice")
+                cloud_ref = (
+                    message.get("name")
+                    or message.get("sales_invoice")
+                    or message.get("quote_name")
+                )
 
         if event_type == "SALE_COMMITTED" and local_ref:
             set_local_sale_cloud_synced(local_ref, cloud_invoice_name=cloud_ref)
+        if event_type == "QUOTE_UPSERT" and local_ref:
+            set_local_quote_cloud_synced(local_ref, cloud_quote_name=cloud_ref)
 
         mark_outbox_done(event["event_id"], cloud_ref=cloud_ref)
         return {
