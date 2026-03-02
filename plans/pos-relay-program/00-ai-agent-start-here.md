@@ -4,6 +4,7 @@
 - This branch family is building a role-based store workflow: SA creates orders/tokens, cashier takes payment, then picker and dispatch complete fulfillment.
 - SA/Cashier relay-first flow and Picker/Dispatch relay-first flow are now live-tested on the dev site + OptiPlex relay, including cloud parity for picker/dispatch fulfillment status sync.
 - The current focus has moved to relay hardening (auth/authorization), local-staging parity/offline continuity validation, and dispatch monitoring/timing UX.
+- A POS Profile toggle now exists to simplify SA/Cashier action buttons (`posa_simplified_sa_cashier_ui`), with cloud Cypress coverage committed.
 - SA must not open/close cash shifts; cashier owns money-related opening/closing.
 - The ticket sidebar monitor is now planned to use `POS Profile + business date` (not only opening shift), so SA orders appear even before a cashier opens shift.
 - Sales Order series per POS Profile is implemented and used for cashier `Select S.O` filtering (for `PJ7 CASHIER`, tested with `SAL-ORD-PJ7-.YYYY.-`).
@@ -77,6 +78,9 @@ Key business rules currently agreed:
   - `cypress/e2e/picker_workflow_frontend_watch.cy.js` now records final persisted picker qty after ready-state transitions
   - `cypress/e2e/ui_shell_chrome_role_consistency.cy.js` hardened to avoid 15s timeout traps on long `frappe.call` chains
   - strict full reruns completed on both cloud (`devpjjamaica`) and local staging (`pj.local`) using relay proof specs after each role stage
+  - simplified SA/Cashier toggle shipped and validated:
+    - `768573f` adds POS Profile field `posa_simplified_sa_cashier_ui`
+    - `06d4bd5` adds `cypress/e2e/simplified_sa_cashier_ui_toggle_watch.cy.js` and runbook/changelog updates
 - Inherited validated work:
   - `kilo-codex-v3`: SA Sales Order token flow, no-cash SA session, monitor rail foundation
   - `codex-2-cashier`: cashier `Select S.O` filtering (naming series + age), cashier live E2E coverage, token-disabled regression coverage
@@ -131,6 +135,9 @@ Key business rules currently agreed:
 - Cashier prompted cloud fallback when relay is down but cloud is up is implemented (POS Profile toggle controlled).
 - Local sale reference display exists.
 - Cashier `Select S.O` filtering by POS Profile Sales Order naming series + age is implemented and live-tested.
+- SA/Cashier simplified UI policy is now profile-driven (`posa_simplified_sa_cashier_ui`):
+  - toggle `1`: SA hides `Held`/`Return`/`PAY`, cashier keeps standard payment controls
+  - toggle `0`: existing SA/Cashier button behavior remains
 - Relay-first cashier submit is live-validated end-to-end on the dev site with local relay transaction/outbox evidence and cloud sync completion.
 
 ### POS Picker/Dispatch fulfillment workspace (`Implemented`/`Partial`)

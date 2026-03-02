@@ -102,6 +102,9 @@ This stores local relay credentials/settings (`frappe_base_url`, `api_key`, `api
 - OptiPlex LAN HTTPS relay (`https://192.168.50.168`) works locally after certificate trust (Caddy reverse proxy)
 - `PJ7 CASHIER` expected SO series for tests: `SAL-ORD-PJ7-.YYYY.-`
 - `PJ7 CASHIER` expected `Select S.O Max Age (Days)`: `1`
+- `PJ7 CASHIER` simplified UI toggle is now available:
+  - `posa_simplified_sa_cashier_ui = 1` simplifies SA actions (`Held`/`Return`/`PAY` hidden), cashier unchanged
+  - `posa_simplified_sa_cashier_ui = 0` restores default SA/Cashier actions
 - Cypress specs exist for:
   - role switching (`cline`)
   - profile preflight/config
@@ -175,6 +178,7 @@ On the dev site, verify/set:
 - `custom_allow_select_sales_order = 1`
 - `posa_sales_order_naming_series = SAL-ORD-PJ7-.YYYY.-`
 - `posa_sales_order_lookup_max_age_days = 1`
+- `posa_simplified_sa_cashier_ui = 0` (default) or `1` (simplified SA action set)
 - `custom_edge_relay_url = <reachable relay URL>`
 
 Where to set this in the site frontend (ERPNext/Frappe Desk):
@@ -319,6 +323,7 @@ Choose `Chrome`.
 7. `cypress/e2e/relay_demo_postrun_ui_watch.cy.js` (cashier relay proof)
 8. `cypress/e2e/cashier_relay_down_cloud_fallback_watch.cy.js`
 9. `cypress/e2e/cashier_token_disabled_profile_smoke.cy.js` (regression)
+10. `cypress/e2e/simplified_sa_cashier_ui_toggle_watch.cy.js`
 
 Relay UI/API sync checks expected during these runs:
 - `sa_workflow_frontend_watch.cy.js`: SA UI state aligns with token creation + relay outbox `TOKEN_CREATED` evidence

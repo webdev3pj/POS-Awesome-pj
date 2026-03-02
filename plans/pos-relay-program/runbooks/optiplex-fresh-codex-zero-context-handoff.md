@@ -26,6 +26,8 @@
 - `ce5f84d` - navbar relay-status fast-boot race fix (missed `register_pos_profile`)
 - `6cf64aa` - navbar relay poll recovery if profile event is missed (self-recovers via `check_opening_shift`)
 - `df1ac0c` - offline continuity relay token/monitor fallback paths (local cloud-off validation complete; cloud-dev rerun pending)
+- `768573f` - adds POS Profile toggle `posa_simplified_sa_cashier_ui`
+- `06d4bd5` - adds cloud regression spec `simplified_sa_cashier_ui_toggle_watch.cy.js` and docs/runbook updates
 
 ## What Is Already Working (Verified)
 - SA flow on live dev site:
@@ -38,6 +40,9 @@
   - loading SA-created SO into cashier payment screen
   - payment mode rows render from POS Profile (Cash/Credit Card/Cheque/Bank Transfer)
 - POS Profile SO naming series and max-age config fields exist and are in use.
+- POS Profile simplified SA/Cashier toggle is implemented and cloud-validated:
+  - `posa_simplified_sa_cashier_ui = 1` => SA hides `Held`/`Return`/`PAY`
+  - Cashier action set remains unchanged
 - Cypress watch-mode automation exists for:
   - login + OTP
   - role switching (`cline`)
@@ -179,6 +184,7 @@ Set/verify on the dev site:
 - `custom_allow_select_sales_order = 1`
 - `posa_sales_order_naming_series = SAL-ORD-PJ7-.YYYY.-`
 - `posa_sales_order_lookup_max_age_days = 1`
+- `posa_simplified_sa_cashier_ui = 0` (default) or `1` for simplified SA action set
 - `custom_edge_relay_url = https://192.168.50.168`
 - `posa_edge_relay_connectivity_mode = lan_only_browser_checked`
 - `posa_allow_cloud_fallback_when_relay_down = 1`

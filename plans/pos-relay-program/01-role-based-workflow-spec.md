@@ -151,7 +151,8 @@ Status tags in the last column reflect the current program branch family state; 
 | `Save/New` token/order | Yes | Optional | No | No | Optional | `Implemented` (SA SO token path live-tested; cashier/non-SA behavior still `Partial`) |
 | `Save Quote` | Yes (profile toggle) | Yes (profile toggle) | No | No | Optional | `Implemented` (new quotation flow with role/profile gate) |
 | `Select Quote` | Yes (profile toggle) | Yes (profile toggle) | No | No | Optional | `Implemented` (quote search + convert-to-token path) |
-| `PAY` button visible | Visible but disabled | Visible enabled | Hidden/disabled | Hidden/disabled | Optional | `Partial` (SA disable exists locally; full role gating pending) |
+| `Simplified SA/Cashier UI` profile toggle (`posa_simplified_sa_cashier_ui`) | Controls SA button set | Cashier actions unaffected | N/A | N/A | N/A | `Implemented` (toggle ON hides SA `Held`/`Return`/`PAY`; toggle OFF restores default behavior) |
+| `PAY` button visible | Toggle-dependent: hidden in simplified mode, otherwise visible+disabled | Visible enabled | Hidden/disabled | Hidden/disabled | Optional | `Implemented` for SA/Cashier toggle behavior, `Partial` for broader non-cashier role gating |
 | `Select S.O` | No (preferred hidden) | Yes | No | No | Optional | `Partial` (Phase 2 role visibility) |
 | Held invoices | No (preferred hidden) | Yes | No | No | Optional | `Planned` (Phase 2) |
 
