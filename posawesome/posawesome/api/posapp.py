@@ -3263,9 +3263,9 @@ def convert_quotation_to_sales_order_token(quotation_name, pos_profile, confirm_
     token = create_sales_order_token(
         {
             "pos_profile": pos_profile,
-            "company": cstr(doc.company or ""),
-            "customer": cstr(doc.customer or doc.party_name or ""),
-            "currency": cstr(doc.currency or ""),
+            "company": cstr(doc.get("company") or ""),
+            "customer": cstr(doc.get("customer") or doc.get("party_name") or ""),
+            "currency": cstr(doc.get("currency") or ""),
             "posting_date": cstr(nowdate()),
             "items": so_items,
             "discount_amount": flt(doc.get("discount_amount") or 0),

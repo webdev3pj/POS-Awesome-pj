@@ -151,12 +151,48 @@ function loginWithOtp() {
 function frappeCall(method, args, options = {}) {
   const timeout = Number(options.timeout || 60000);
   return cy.window({ timeout: 30000 }).then({ timeout }, (win) => {
+    const toMessage = (payload) => {
+      if (!payload) return "frappe.call failed";
+      if (typeof payload === "string") return payload;
+      const direct =
+        payload.message ||
+        payload.exc ||
+        payload.exception ||
+        payload._error_message ||
+        payload.server_messages ||
+        payload._server_messages;
+      if (typeof direct === "string" && direct.trim()) return direct;
+      try {
+        return JSON.stringify(payload);
+      } catch (_e) {
+        return String(payload);
+      }
+    };
+
     return new Cypress.Promise((resolve, reject) => {
       win.frappe.call({
         method,
         args: args || {},
-        callback: (r) => resolve(r),
-        error: (err) => reject(err),
+        callback: (r) => {
+          if (r && (r.exc || r._server_messages || r._error_message)) {
+            const err = new Error(
+              `frappe.call ${method} failed: ${toMessage(
+                r._error_message || r._server_messages || r.exc || r.message || r
+              )}`
+            );
+            err.name = "FrappeCallError";
+            err.frappePayload = r;
+            reject(err);
+            return;
+          }
+          resolve(r);
+        },
+        error: (errPayload) => {
+          const err = new Error(`frappe.call ${method} failed: ${toMessage(errPayload)}`);
+          err.name = "FrappeCallError";
+          err.frappePayload = errPayload;
+          reject(err);
+        },
       });
     });
   });
@@ -166,4 +202,3 @@ module.exports = {
   loginWithOtp,
   frappeCall,
 };
-

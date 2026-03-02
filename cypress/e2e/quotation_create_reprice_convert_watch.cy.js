@@ -31,7 +31,7 @@ describe("Quotation create/reprice/convert", () => {
         });
       });
 
-    resolveProfile()
+    return resolveProfile()
       .then((resolvedProfile) => {
         profile = resolvedProfile || {};
         expect(profile.name, "profile name").to.be.a("string").and.not.be.empty;
