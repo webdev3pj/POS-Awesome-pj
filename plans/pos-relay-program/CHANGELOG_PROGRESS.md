@@ -23,6 +23,39 @@ Note:
 
 ---
 
+## 2026-03-02 - Simplified SA/Cashier UI toggle added and validated on cloud
+- Branch: `codex-5-final`
+- Summary: Added a POS Profile toggle to simplify SA action buttons without reducing cashier capabilities, and validated the behavior in headed Cypress on cloud dev.
+- What changed:
+  - POS Profile field added:
+    - `posa_simplified_sa_cashier_ui` (`Simplified SA and Cashier UI`, default `0`)
+    - file: `posawesome/fixtures/custom_field.json`
+  - POS UI role-aware button behavior:
+    - file: `posawesome/public/js/posapp/components/pos/Invoice.vue`
+    - when toggle = `1`:
+      - SA hides `Held`, `Return`, `PAY`
+      - SA keeps `Save/New`
+      - Cashier keeps normal payment actions
+    - when toggle = `0`:
+      - existing SA/Cashier behavior unchanged
+  - Added cloud regression spec:
+    - `cypress/e2e/simplified_sa_cashier_ui_toggle_watch.cy.js`
+    - verifies ON/OFF toggle behavior and resets toggle to `0` after run
+- What was verified:
+  - Cloud run passed (headed Chrome watch mode):
+    - `cypress/e2e/simplified_sa_cashier_ui_toggle_watch.cy.js`
+  - Verified outcomes:
+    - Toggle ON: SA simplified buttons enforced; cashier unchanged
+    - Toggle OFF: SA buttons restored (including disabled `PAY` visibility)
+- What remains:
+  - Include this spec in regular cloud regression cadence with role setup runs.
+  - Optional: add local staging wrapper equivalent if local staging parity testing is required for this toggle.
+- Links:
+  - `posawesome/fixtures/custom_field.json`
+  - `posawesome/public/js/posapp/components/pos/Invoice.vue`
+  - `cypress/e2e/simplified_sa_cashier_ui_toggle_watch.cy.js`
+  - implementation commit: `768573f`
+
 ## 2026-03-01 - Sales-order age governance + quotation flow (role-aware, relay-compatible) implemented on branch
 - Branch: `codex-5-final`
 - Summary: Implemented profile-driven Sales Order age policy across cloud + relay lookup paths, added stale visibility in Cashier/Picker/Dispatch UI, and added quotation create/search/reprice/convert flows with relay-local offline mode and outbox sync.

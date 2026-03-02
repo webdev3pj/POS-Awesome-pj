@@ -62,6 +62,7 @@ Optional hardening:
 23. `cypress/e2e/quotation_relay_local_offline_sync_watch.cy.js`
 24. `cypress/e2e/phase3_security_relay_role_guards_watch.cy.js`
 25. `cypress/e2e/ui_shell_chrome_role_consistency.cy.js`
+26. `cypress/e2e/simplified_sa_cashier_ui_toggle_watch.cy.js`
 
 Token print / retrieval signoff rule (after step 4):
 - Review:
@@ -122,6 +123,7 @@ Optional hardening:
 21. `cypress/e2e/local_staging/local_staging_supervisor_fulfillment_exception_watch.cy.js`
 22. `cypress/e2e/local_staging/local_staging_quotation_relay_local_offline_sync_watch.cy.js`
 23. `cypress/e2e/local_staging/local_staging_phase3_security_relay_role_guards_watch.cy.js`
+24. `cypress/e2e/simplified_sa_cashier_ui_toggle_watch.cy.js` (only if local site has latest toggle field + fixtures)
 
 Supervisor reseed rule (important):
 - If step 15 fails with `pending unreleased queue row: expected undefined to be an object`, the queue was already fully released by dispatch.
