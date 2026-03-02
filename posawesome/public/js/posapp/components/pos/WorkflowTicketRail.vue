@@ -11,8 +11,9 @@
     >
       <div class="workflow-ticket-rail-handle">
         <v-badge
+          :class="{ 'workflow-ticket-badge-empty': !hasPending }"
           :content="String(pendingCount)"
-          :value="pendingCount > 0"
+          :value="true"
           color="error"
           overlap
         >
@@ -189,6 +190,9 @@ export default {
     },
     pendingCount() {
       return parseInt((this.summary && this.summary.pending_count) || this.rows.length || 0, 10) || 0;
+    },
+    hasPending() {
+      return this.pendingCount > 0;
     },
     isMobile() {
       return this.viewportWidth < 960;
@@ -540,15 +544,16 @@ export default {
 
 .workflow-ticket-rail {
   position: fixed;
-  left: 68px;
-  top: 86px;
+  left: 14px;
+  top: 124px;
   z-index: 90;
   display: flex;
   align-items: flex-start;
 }
 
 .workflow-ticket-rail.desktop {
-  left: 72px;
+  left: 14px;
+  top: 124px;
 }
 
 .workflow-ticket-rail.mobile {
@@ -565,24 +570,31 @@ export default {
 }
 
 .workflow-ticket-rail.desktop .workflow-ticket-rail-handle {
-  width: 40px;
-  min-height: 48px;
-  padding: 6px 0;
-  border-radius: 14px;
-  background: rgba(255, 255, 255, 0.94);
-  box-shadow: 0 8px 20px rgba(15, 23, 42, 0.12);
+  width: 36px;
+  min-height: 42px;
+  padding: 4px 0;
+  border-radius: 10px;
+  border: 1px solid rgba(8, 82, 148, 0.16);
+  background: rgba(255, 255, 255, 0.85);
+  box-shadow: 0 4px 12px rgba(15, 23, 42, 0.1);
+  backdrop-filter: blur(3px);
 }
 
 .workflow-ticket-rail.desktop .workflow-ticket-rail-handle :deep(.v-badge__badge) {
-  min-width: 18px;
-  height: 18px;
-  font-size: 10px;
-  line-height: 18px;
+  min-width: 16px;
+  height: 16px;
+  font-size: 9px;
+  line-height: 16px;
+}
+
+.workflow-ticket-rail.desktop .workflow-ticket-badge-empty :deep(.v-badge__badge) {
+  background-color: #94a3b8 !important;
+  color: #f8fafc !important;
 }
 
 .workflow-ticket-rail.desktop .workflow-ticket-rail-handle :deep(.v-btn) {
-  width: 32px !important;
-  height: 32px !important;
+  width: 28px !important;
+  height: 28px !important;
 }
 
 .workflow-ticket-rail-label {
@@ -599,7 +611,7 @@ export default {
   width: min(380px, calc(100vw - 70px));
   max-height: calc(100vh - 110px);
   overflow: hidden;
-  margin-left: 8px;
+  margin-left: 6px;
   display: flex;
   flex-direction: column;
   border-radius: 16px;

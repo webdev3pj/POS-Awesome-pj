@@ -255,6 +255,10 @@ function readShellChromeSnapshot(roleKey) {
       $body
         .find(selector)
         .filter((_, el) => Cypress.$(el).is(":visible")).length;
+    const visibleButtonCountByText = (labelRegex) => {
+      const buttons = [...$body.find("button")].filter((el) => Cypress.$(el).is(":visible"));
+      return buttons.filter((el) => labelRegex.test(String((el.textContent || "").trim()))).length;
+    };
     const bodyText = ($body.text() || "").replace(/\s+/g, " ").trim();
     const markerElements = [...$body.find("*")]
       .filter((el) => /Search or type a command/i.test((el.textContent || "").trim()))
@@ -278,7 +282,31 @@ function readShellChromeSnapshot(roleKey) {
       fulfillmentDetailedButton: $body.find("[data-cy='fulfillment-view-detailed']").length,
       fulfillmentDetailedActive: $body.find("[data-cy='fulfillment-view-detailed'].v-btn--active").length,
       fulfillmentSimpleActive: $body.find("[data-cy='fulfillment-view-simple'].v-btn--active").length,
+      fallbackDetailedButtonByText: visibleButtonCountByText(/detailed/i),
+      fallbackSimpleButtonByText: visibleButtonCountByText(/simple/i),
+      fallbackDetailedActiveByText: (() => {
+        const activeButtons = [...$body.find("button.v-btn--active")].filter((el) =>
+          Cypress.$(el).is(":visible")
+        );
+        return activeButtons.filter((el) => /detailed/i.test(String((el.textContent || "").trim()))).length;
+      })(),
+      fallbackSimpleActiveByText: (() => {
+        const activeButtons = [...$body.find("button.v-btn--active")].filter((el) =>
+          Cypress.$(el).is(":visible")
+        );
+        return activeButtons.filter((el) => /simple/i.test(String((el.textContent || "").trim()))).length;
+      })(),
     };
+
+    const fulfillmentViewToggleVisible =
+      visibleCount("[data-cy='fulfillment-view-mode']") > 0 ||
+      (selectorCounts.fallbackDetailedButtonByText > 0 && selectorCounts.fallbackSimpleButtonByText > 0);
+    const fulfillmentDetailedActive =
+      visibleCount("[data-cy='fulfillment-view-detailed'].v-btn--active") > 0 ||
+      selectorCounts.fallbackDetailedActiveByText > 0;
+    const fulfillmentSimpleActive =
+      visibleCount("[data-cy='fulfillment-view-simple'].v-btn--active") > 0 ||
+      selectorCounts.fallbackSimpleActiveByText > 0;
 
     const state = {
       role: roleKey,
@@ -296,9 +324,9 @@ function readShellChromeSnapshot(roleKey) {
       desktopBreadcrumbVisible: visibleCount(".breadcrumb") > 0 || visibleCount(".no-breadcrumbs") > 0,
       posTopBarVisible: visibleCount(".v-app-bar") > 0,
       posBrandVisible: /POS AWESOME/i.test(($body.text() || "").trim()),
-      fulfillmentViewToggleVisible: visibleCount("[data-cy='fulfillment-view-mode']") > 0,
-      fulfillmentDetailedActive: visibleCount("[data-cy='fulfillment-view-detailed'].v-btn--active") > 0,
-      fulfillmentSimpleActive: visibleCount("[data-cy='fulfillment-view-simple'].v-btn--active") > 0,
+      fulfillmentViewToggleVisible,
+      fulfillmentDetailedActive,
+      fulfillmentSimpleActive,
       selectorCounts,
       markerElements,
     };
