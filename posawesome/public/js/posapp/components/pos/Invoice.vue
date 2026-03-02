@@ -743,7 +743,7 @@
         </v-col>
         <v-col cols="5">
           <v-row no-gutters class="pa-1 pt-2 pl-0">
-            <v-col cols="6" class="pa-1">
+            <v-col v-if="show_held_button" cols="6" class="pa-1">
               <v-btn
                 block
                 class="pa-0"
@@ -797,7 +797,7 @@
                 {{ __("Select Quote") }}
               </v-btn>
             </v-col>
-            <v-col cols="6" class="pa-1">
+            <v-col v-if="show_return_button" cols="6" class="pa-1">
               <v-btn
                 block
                 class="pa-0"
@@ -828,7 +828,7 @@
                 >{{ __("Save/New") }}</v-btn
               >
             </v-col>
-            <v-col class="pa-1">
+            <v-col v-if="show_pay_button" class="pa-1">
               <v-btn
                 block
                 class="pa-0"
@@ -931,6 +931,20 @@ export default {
     },
     is_cashier_role() {
       return (this.current_role || "") === "cline-Cashier";
+    },
+    simplified_sa_cashier_ui_enabled() {
+      return (
+        parseInt((this.pos_profile && this.pos_profile.posa_simplified_sa_cashier_ui) || 0, 10) === 1
+      );
+    },
+    show_held_button() {
+      return !(this.simplified_sa_cashier_ui_enabled && this.is_sales_associate_role);
+    },
+    show_return_button() {
+      return !(this.simplified_sa_cashier_ui_enabled && this.is_sales_associate_role);
+    },
+    show_pay_button() {
+      return !(this.simplified_sa_cashier_ui_enabled && this.is_sales_associate_role);
     },
     can_use_quotation_actions() {
       const role = (this.current_role || "").trim();
