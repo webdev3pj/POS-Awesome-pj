@@ -23,6 +23,30 @@ Note:
 
 ---
 
+## 2026-03-02 - Role-based employee training manuals added
+- Branch: `codex-5-final`
+- Summary: Added staff-ready training manuals for each POS role plus a trainer quickstart guide so managers can onboard employees with a standard script.
+- What changed:
+  - New training docs folder:
+    - `plans/pos-relay-program/training/README.md`
+    - `plans/pos-relay-program/training/sales-associate-manual.md`
+    - `plans/pos-relay-program/training/cashier-manual.md`
+    - `plans/pos-relay-program/training/picker-manual.md`
+    - `plans/pos-relay-program/training/dispatch-manual.md`
+    - `plans/pos-relay-program/training/supervisor-manual.md`
+    - `plans/pos-relay-program/training/trainer-quickstart.md`
+  - Linked training pack in:
+    - `plans/pos-relay-program/README.md`
+- What was verified:
+  - Manuals align with current role workflow model in `01-role-based-workflow-spec.md`.
+  - Included latest simplified SA/Cashier toggle behavior and current relay-first operational expectations.
+- What remains:
+  - Run one live manager-led training dry run and capture feedback (wording/layout tweaks).
+  - Optionally add screenshot-based PDF handouts for each role.
+- Links:
+  - `plans/pos-relay-program/training/README.md`
+  - `plans/pos-relay-program/training/trainer-quickstart.md`
+
 ## 2026-03-02 - Simplified SA/Cashier UI toggle added and validated on cloud
 - Branch: `codex-5-final`
 - Summary: Added a POS Profile toggle to simplify SA action buttons without reducing cashier capabilities, and validated the behavior in headed Cypress on cloud dev.

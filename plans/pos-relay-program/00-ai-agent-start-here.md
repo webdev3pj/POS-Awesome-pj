@@ -16,6 +16,7 @@
 - `runbooks/cypress_order_of_testing.md`
 - `runbooks/shop-pc-lan-relay-setup-non-technical.md`
 - `runbooks/new-shop-one-click-setup.md`
+- `training/README.md`
 - `01-role-based-workflow-spec.md`
 - `02-master-implementation-plan.md`
 - `03-offline-edge-relay-and-windows-service-spec.md`

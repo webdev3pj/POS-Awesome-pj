@@ -47,6 +47,7 @@ It consolidates:
 6. Append progress to `CHANGELOG_PROGRESS.md` after each meaningful implementation or verification pass.
 7. On the OptiPlex relay host, use `runbooks/optiplex-edge-relay-next-session.md` as the local operator/AI handoff entry point.
 8. For shop PC one-time setup (non-technical), use `runbooks/shop-pc-lan-relay-setup-non-technical.md`.
+9. For employee onboarding manuals by role, use `training/README.md`.
 
 ## Document Map
 - `00-ai-agent-start-here.md`: AI coding agent handoff, status snapshot, file map, next steps.
@@ -63,6 +64,13 @@ It consolidates:
 - `runbooks/optiplex-edge-relay-next-session.md`: zero-context startup guide for relay-host sessions (OptiPlex).
 - `runbooks/optiplex-fresh-codex-zero-context-handoff.md`: full zero-context Codex takeover guide with exact branch/commit/env-var requirements.
 - `runbooks/shop-pc-lan-relay-setup-non-technical.md`: one-time certificate trust steps for shop PCs (plain-English operator guide).
+- `training/README.md`: role manuals and trainer guide for employee onboarding.
+- `training/sales-associate-manual.md`: SA daily workflow training.
+- `training/cashier-manual.md`: cashier payment and fallback training.
+- `training/picker-manual.md`: picker queue and quantity update training.
+- `training/dispatch-manual.md`: dispatch release + proof training.
+- `training/supervisor-manual.md`: supervisor exception and override training.
+- `training/trainer-quickstart.md`: 30-minute manager-led training script.
 
 ## Phase Map (High Level)
 - Phase 0: Baseline and completed work documentation (branch-family snapshot + explicit historical/current labeling)
@@ -110,3 +118,4 @@ It consolidates:
 - `runbooks/optiplex-edge-relay-next-session.md`
 - `runbooks/optiplex-fresh-codex-zero-context-handoff.md`
 - `runbooks/shop-pc-lan-relay-setup-non-technical.md`
+- `training/README.md`
