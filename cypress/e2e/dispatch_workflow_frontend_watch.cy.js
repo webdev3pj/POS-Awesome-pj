@@ -284,9 +284,15 @@ describe("Dispatch workflow (watch mode)", () => {
         expect(/Paid -> Released \(Total\)|Open Age/i.test(text), "dispatch timing summary visible").to.eq(true);
         expect(/SLA:\s*(OK|Watch|High)/i.test(text), "dispatch SLA label visible").to.eq(true);
       });
+      cy.get("body").then(($body) => {
+        const detailedBtn = $body.find("[data-cy='fulfillment-view-detailed']").get(0);
+        if (detailedBtn) {
+          cy.wrap(detailedBtn).click({ force: true });
+        }
+      });
       cy.get("[data-cy='dispatch-release-button']", { timeout: 30000 }).should("be.visible").and("be.disabled");
       cy.get("[data-cy='dispatch-proof-ack']", { timeout: 30000 })
-        .find("input")
+        .find("input,textarea")
         .first()
         .clear({ force: true })
         .type("Dispatch QA", { force: true });
@@ -295,12 +301,12 @@ describe("Dispatch workflow (watch mode)", () => {
         force: true,
       });
       cy.get("[data-cy='dispatch-proof-ref']")
-        .find("input")
+        .find("input,textarea")
         .first()
         .clear({ force: true })
         .type(`DLV-${Date.now()}`, { force: true });
       cy.get("[data-cy='dispatch-proof-notes']")
-        .find("textarea")
+        .find("textarea,input")
         .first()
         .clear({ force: true })
         .type("Handover captured at dispatch desk.", { force: true });

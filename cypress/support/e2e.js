@@ -249,6 +249,7 @@ afterEach(function () {
   const events = Array.isArray(__browserRuntimeEvents) ? [...__browserRuntimeEvents] : [];
   const baseUrl = String(Cypress.config("baseUrl") || "");
   const isLocalStaging = /pj\.local(?::\d+)?/i.test(baseUrl);
+  const alwaysScreenshot = /^(1|true|yes)$/i.test(String(Cypress.env("alwaysScreenshot") || ""));
 
   // Persist artifacts even on passing tests so we can inspect local runtime issues.
   cy.task(
@@ -286,6 +287,15 @@ afterEach(function () {
       );
     }
   });
+
+  if (alwaysScreenshot && this.currentTest && this.currentTest.state === "passed") {
+    const safeTitle = String(testTitle)
+      .replace(/[\\/]/g, "__")
+      .replace(/[^a-zA-Z0-9._ -]/g, "_")
+      .replace(/\s+/g, "_")
+      .slice(0, 160);
+    cy.screenshot(`passed__${safeTitle}`, { capture: "runner" });
+  }
 });
 
 Cypress.on("uncaught:exception", (err) => {

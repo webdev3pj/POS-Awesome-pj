@@ -124,6 +124,7 @@ module.exports = defineConfig({
           // OptiPlex LAN relay uses a local Caddy CA; Cypress-launched Chrome can reject it intermittently.
           launchOptions.args.push("--ignore-certificate-errors");
           launchOptions.args.push("--allow-insecure-localhost");
+          launchOptions.args.push("--window-size=1920,1080");
         }
         return launchOptions;
       });

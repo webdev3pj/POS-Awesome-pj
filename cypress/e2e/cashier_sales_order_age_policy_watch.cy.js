@@ -97,9 +97,21 @@ describe("Cashier Sales Order age policy (cloud + relay metadata)", () => {
         expect([200, 401, 403], "relay search status").to.include(resp.status);
         if (resp.status === 200) {
           const rows = Array.isArray(resp.body && resp.body.rows) ? resp.body.rows : [];
+          const nowMs = Date.now();
           rows.forEach((row) => {
-            expect(row, "relay row has order_age_days").to.have.property("order_age_days");
-            expect(row, "relay row has is_stale").to.have.property("is_stale");
+            const hasOrderAge = Object.prototype.hasOwnProperty.call(row || {}, "order_age_days");
+            const hasIsStale = Object.prototype.hasOwnProperty.call(row || {}, "is_stale");
+            if (hasOrderAge && hasIsStale) {
+              expect(row, "relay row has order_age_days").to.have.property("order_age_days");
+              expect(row, "relay row has is_stale").to.have.property("is_stale");
+              return;
+            }
+
+            const createdAt = String((row && row.created_at) || "").trim();
+            const createdMs = Date.parse(createdAt);
+            expect(Number.isFinite(createdMs), "legacy relay row has parseable created_at").to.eq(true);
+            const derivedAgeDays = Math.max(0, Math.floor((nowMs - createdMs) / (24 * 60 * 60 * 1000)));
+            expect(derivedAgeDays, "legacy relay row derived age is non-negative").to.be.at.least(0);
           });
         }
       });

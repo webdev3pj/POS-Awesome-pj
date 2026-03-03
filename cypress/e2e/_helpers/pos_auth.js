@@ -113,19 +113,7 @@ function submitOtpCodeWithRetry(totpUri, maxRetries = 2) {
   return attempt(0);
 }
 
-function loginWithOtp() {
-  const username = Cypress.env("username");
-  const password = Cypress.env("password");
-  const totpUri = Cypress.env("totpUri");
-
-  expect(Cypress.config("baseUrl"), "CYPRESS_baseUrl").to.be.a("string").and.not.be.empty;
-  expect(username, "CYPRESS_username").to.be.a("string").and.not.be.empty;
-  expect(password, "CYPRESS_password").to.be.a("string").and.not.be.empty;
-  expect(totpUri, "CYPRESS_totpUri").to.be.a("string").and.not.be.empty;
-
-  cy.clearCookies();
-  cy.clearLocalStorage();
-  cy.visit("/login");
+function runLoginSequence(username, password, totpUri) {
   typeIntoFirstAvailable(
     ["#login_email", "input[name='usr']", "input[name='login_email']", "input[type='email']"],
     username
@@ -145,6 +133,33 @@ function loginWithOtp() {
     ]);
     if (otpField) submitOtpCodeWithRetry(totpUri, 2);
   });
+}
+
+function loginWithOtp() {
+  const username = Cypress.env("username");
+  const password = Cypress.env("password");
+  const totpUri = Cypress.env("totpUri");
+
+  expect(Cypress.config("baseUrl"), "CYPRESS_baseUrl").to.be.a("string").and.not.be.empty;
+  expect(username, "CYPRESS_username").to.be.a("string").and.not.be.empty;
+  expect(password, "CYPRESS_password").to.be.a("string").and.not.be.empty;
+  expect(totpUri, "CYPRESS_totpUri").to.be.a("string").and.not.be.empty;
+
+  cy.clearCookies();
+  cy.clearLocalStorage();
+  cy.visit("/login");
+  runLoginSequence(username, password, totpUri);
+
+  cy.location("pathname", { timeout: 15000 }).then((pathname) => {
+    if (/^\/app(\/|$)/.test(pathname)) {
+      return;
+    }
+
+    cy.log(`Login did not reach /app (path=${pathname}); retrying once.`);
+    cy.visit("/login");
+    runLoginSequence(username, password, totpUri);
+  });
+
   cy.location("pathname", { timeout: 90000 }).should("match", /^\/app(\/|$)/);
 }
 

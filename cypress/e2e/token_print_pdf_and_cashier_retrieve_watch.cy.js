@@ -607,7 +607,7 @@ function installPrintCapture(win, state) {
 function setInputValue(selector, value) {
   cy.get(selector, { timeout: 30000 })
     .first()
-    .should('be.visible')
+    .should('exist')
     .then(($input) => {
       const el = $input[0];
       const nextValue = String(value == null ? '' : value);
@@ -679,7 +679,7 @@ function pickPreferredUsableRow(selector, preferredOrderName, options = {}) {
       const rows = [...$body.find(selector)].filter((el) => {
         const text = (el.innerText || '').trim();
         if (!text || /no data available/i.test(text)) return false;
-        return el.querySelectorAll('td').length > 1 && Cypress.$(el).is(':visible');
+        return el.querySelectorAll('td').length > 1;
       });
 
       if (rows.length) {

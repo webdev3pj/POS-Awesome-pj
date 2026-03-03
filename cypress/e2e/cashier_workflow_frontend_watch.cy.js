@@ -386,11 +386,13 @@ function closeOrderMonitorPanelIfOpen() {
 
 function waitForNewRelaySaleAfterBaseline({
   beforeCount,
+  beforeRefs = [],
   posProfile = 'PJ7 CASHIER',
   minTotal = 0,
   maxRetries = 12,
   delayMs = 1500,
 }) {
+  const baselineRefs = new Set((beforeRefs || []).map((v) => String(v || '').trim()).filter(Boolean));
   const attempt = (retryIndex = 0) => {
     return cy
       .request({
@@ -406,10 +408,16 @@ function waitForNewRelaySaleAfterBaseline({
 
         const candidate = rows.find((row) => {
           const total = Number(row?.total || 0);
-          return total >= Number(minTotal || 0) && String(row?.pos_profile_id || '').trim() === posProfile;
+          const ref = String(row?.local_sale_ref || '').trim();
+          return (
+            total >= Number(minTotal || 0) &&
+            String(row?.pos_profile_id || '').trim() === posProfile &&
+            ref &&
+            !baselineRefs.has(ref)
+          );
         });
 
-        if (count > Number(beforeCount || 0) && candidate) {
+        if (candidate) {
           return {
             count,
             row: candidate,
@@ -418,12 +426,12 @@ function waitForNewRelaySaleAfterBaseline({
 
         if (retryIndex >= maxRetries) {
           throw new Error(
-            `No new relay local sale appeared after cashier submit (beforeCount=${beforeCount}, currentCount=${count}).`
+            `No new relay local sale appeared after cashier submit (beforeCount=${beforeCount}, currentCount=${count}, baselineRefs=${baselineRefs.size}).`
           );
         }
 
         cy.log(
-          `Waiting for new relay local sale row (retry ${retryIndex + 1}/${maxRetries}); count=${count}, before=${beforeCount}`
+          `Waiting for new relay local sale row (retry ${retryIndex + 1}/${maxRetries}); count=${count}, before=${beforeCount}, baselineRefs=${baselineRefs.size}`
         );
         cy.wait(delayMs);
         return attempt(retryIndex + 1);
@@ -530,6 +538,7 @@ describe('Cashier frontend workflow (watch mode)', () => {
     let expectedLatestSaOrder = '';
     let relayCommitLocalSaleRef = '';
     let relayTxCountBeforeSubmit = 0;
+    let relayTxRefsBeforeSubmit = [];
 
     cy.intercept('POST', '**/api/method/posawesome.posawesome.api.posapp.get_items').as('getItems');
     cy.intercept('POST', '**/api/method/posawesome.posawesome.api.posapp.search_orders').as('searchOrders');
@@ -794,7 +803,11 @@ describe('Cashier frontend workflow (watch mode)', () => {
       timeout: 60000,
     }).then((resp) => {
       expect(resp.status, 'relay baseline /api/transactions status').to.eq(200);
-      relayTxCountBeforeSubmit = Number(resp.body?.count || (Array.isArray(resp.body?.rows) ? resp.body.rows.length : 0) || 0);
+      const baselineRows = Array.isArray(resp.body?.rows) ? resp.body.rows : [];
+      relayTxCountBeforeSubmit = Number(resp.body?.count || baselineRows.length || 0);
+      relayTxRefsBeforeSubmit = baselineRows
+        .map((row) => String(row?.local_sale_ref || '').trim())
+        .filter(Boolean);
       cy.log(`Relay baseline transaction count for ${profileName}: ${relayTxCountBeforeSubmit}`);
     });
 
@@ -890,6 +903,7 @@ describe('Cashier frontend workflow (watch mode)', () => {
     cy.then(() => {
       return waitForNewRelaySaleAfterBaseline({
         beforeCount: relayTxCountBeforeSubmit,
+        beforeRefs: relayTxRefsBeforeSubmit,
         posProfile: profileName,
         minTotal: 1,
       }).then(({ row }) => {
