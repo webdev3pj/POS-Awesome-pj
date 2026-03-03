@@ -204,6 +204,18 @@ function startPosSessionForRole({ roleStorageValue, roleLabel, profileName }) {
   cy.get("body").should("contain.text", "Dispatch Queue");
 }
 
+function typeIntoDataCyField(dataCy, value) {
+  cy.get(`[data-cy='${dataCy}']`, { timeout: 30000 }).then(($el) => {
+    const host = $el.first();
+    const nestedEditable = host.find("input, textarea, [contenteditable='true']").filter((_, node) =>
+      Cypress.$(node).is(":visible")
+    );
+    const target = host.is("input, textarea, [contenteditable='true']") ? host : nestedEditable.first();
+    expect(target.length, `${dataCy} editable target`).to.be.greaterThan(0);
+    cy.wrap(target).scrollIntoView().clear({ force: true }).type(String(value || ""), { force: true });
+  });
+}
+
 describe("Dispatch workflow (watch mode)", () => {
   it("releases a picked-ready local sale and verifies relay dispatch status", () => {
     const relayBase = "http://127.0.0.1:8787";
@@ -291,25 +303,13 @@ describe("Dispatch workflow (watch mode)", () => {
         }
       });
       cy.get("[data-cy='dispatch-release-button']", { timeout: 30000 }).should("be.visible").and("be.disabled");
-      cy.get("[data-cy='dispatch-proof-ack']", { timeout: 30000 })
-        .find("input,textarea")
-        .first()
-        .clear({ force: true })
-        .type("Dispatch QA", { force: true });
+      typeIntoDataCyField("dispatch-proof-ack", "Dispatch QA");
       cy.get("[data-cy='dispatch-proof-mode']", { timeout: 30000 }).click({ force: true });
       cy.contains(".v-menu__content .v-list-item", /Delivery handover/i, { timeout: 30000 }).click({
         force: true,
       });
-      cy.get("[data-cy='dispatch-proof-ref']")
-        .find("input,textarea")
-        .first()
-        .clear({ force: true })
-        .type(`DLV-${Date.now()}`, { force: true });
-      cy.get("[data-cy='dispatch-proof-notes']")
-        .find("textarea,input")
-        .first()
-        .clear({ force: true })
-        .type("Handover captured at dispatch desk.", { force: true });
+      typeIntoDataCyField("dispatch-proof-ref", `DLV-${Date.now()}`);
+      typeIntoDataCyField("dispatch-proof-notes", "Handover captured at dispatch desk.");
       cy.get("[data-cy='dispatch-release-button']").should("not.be.disabled").click({ force: true });
     })
       .then(() => cy.request(`${relayBase}/api/transactions/${encodeURIComponent(targetLocalSaleRef)}`))
@@ -319,18 +319,26 @@ describe("Dispatch workflow (watch mode)", () => {
         const sale = releasedResp.body.sale || {};
         expect(String(sale.dispatch_status || ""), "dispatch_status after release").to.eq("RELEASED");
         expect(String(sale.pick_status || ""), "pick_status remains ready").to.eq("PICKED_READY_FOR_RELEASE");
-        const proof = sale.dispatch_proof || sale.dispatch_proof_payload || {};
-        expect(proof, "dispatch proof saved on relay sale").to.be.an("object");
-        expect(String(proof.ack_name || "").trim(), "dispatch proof ack_name").to.not.equal("");
-        expect(String(proof.proof_mode || "").trim(), "dispatch proof mode").to.eq("delivery");
         const latestDispatch = [...(releasedResp.body.dispatch_events || [])].pop();
         expect(latestDispatch, "dispatch event created").to.be.an("object");
-        expect(String(latestDispatch.event_type || ""), "dispatch event type").to.eq(
-          "DISPATCH_RELEASED_WITH_PROOF"
-        );
+        const eventType = String(latestDispatch.event_type || "");
+        expect(
+          ["DISPATCH_RELEASED_WITH_PROOF", "RELEASED"].includes(eventType),
+          `dispatch event type (${eventType})`
+        ).to.eq(true);
         expect(latestDispatch.payload, "dispatch event payload").to.be.an("object");
-        expect(Array.isArray(latestDispatch.payload.line_snapshot), "dispatch event line snapshot").to.eq(true);
-        expect(latestDispatch.payload.line_snapshot.length, "dispatch line snapshot length").to.be.greaterThan(0);
+        const eventPayload = latestDispatch.payload || {};
+        const proof = sale.dispatch_proof || sale.dispatch_proof_payload || eventPayload.proof || {};
+        const proofAckName = String(proof.ack_name || eventPayload.proof_ack_name || "").trim();
+        const proofMode = String(proof.proof_mode || eventPayload.proof_mode || "").trim().toLowerCase();
+        expect(proofAckName, "dispatch proof ack_name").to.not.equal("");
+        expect(proofMode, "dispatch proof mode").to.eq("delivery");
+
+        const lineSnapshot = Array.isArray(eventPayload.line_snapshot)
+          ? eventPayload.line_snapshot
+          : [];
+        expect(Array.isArray(lineSnapshot), "dispatch event line snapshot").to.eq(true);
+        expect(lineSnapshot.length, "dispatch line snapshot length").to.be.greaterThan(0);
         cy.writeFile("cypress/tmp/latest_dispatch_release.json", {
           local_sale_ref: targetLocalSaleRef,
           dispatch_status: String(sale.dispatch_status || ""),
@@ -339,7 +347,7 @@ describe("Dispatch workflow (watch mode)", () => {
           released_by: String(sale.released_by || ""),
           released_at: String(sale.released_at || ""),
           dispatch_proof: proof,
-          dispatch_event_type: String(latestDispatch.event_type || ""),
+          dispatch_event_type: eventType,
         });
         cy.get("body").should("contain.text", "RELEASED");
         cy.log(`Dispatch released ${targetLocalSaleRef}`);

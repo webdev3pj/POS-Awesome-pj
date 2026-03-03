@@ -1,9 +1,13 @@
 # Cashier Manual (Stupid Simple)
 
+## Role sanity (must be true)
+- Your only operational role is `cline-Cashier`.
+- If you see "multiple operational roles", stop and call supervisor/admin.
+
 ## Your job
-- Open cash shift.
-- Load Sales Order from token.
-- Take payment.
+- Open cash session.
+- Pull Sales Order from token with `Select S.O`.
+- Collect payment.
 - Submit invoice.
 
 ![Cashier main screen](../images/cashier-ui.png)
@@ -12,115 +16,60 @@
 
 ![Payment screen](../images/payment-screen.png)
 
-## When you do what
+## When to do what
 1. Start of shift:
-- Open POS.
-- Cashier opening dialog appears.
-- Enter opening amount per payment mode.
-- Click `Submit`.
+- Open POS as cashier.
+- Complete opening cash amounts if opening dialog appears.
+- Enter POS with `Submit`.
 
 2. During shift:
 - Click `Select S.O`.
-- Find and load customer order.
+- Choose correct order row.
 - Click `PAY`.
-- Enter payment.
-- Click `Submit` (or `Submit & Print`).
+- Enter payment and click `Submit` or `Submit & Print`.
 
 3. End of shift:
-- Clear pending invoices.
-- Close shift by store process.
+- Finish pending payments.
+- Close shift as per store process.
 
-## Opening dialog fields/buttons (cashier)
-1. `Company`:
-- Company for this POS session.
+## Every visible button/field (main cashier screen)
+1. `Search Items`: manual item search.
+2. `Customer`: buyer.
+3. `Type`: document type selector.
+4. `Select S.O`: open Sales Order list from token flow.
+5. `Held`: open held draft bills.
+6. `Save Quote`: save quote (if enabled).
+7. `Select Quote`: load quote (if enabled).
+8. `Return`: start return flow.
+9. `Cancel`: clear current cart.
+10. `Save/New`: save/reset draft bill.
+11. `PAY`: open payment panel.
+12. `Print Draft`: print draft copy.
+13. Left ticket icon: open Order Monitor.
+14. Order Monitor `All` / `Mine` / refresh: workflow visibility controls.
 
-2. `POS Profile`:
-- Profile for terminal/workflow.
+## Every visible button/field (Select Sales Orders dialog)
+1. `Order ID`: type token/order id filter.
+2. `SEARCH`: run lookup.
+3. Row checkbox: choose order to load.
+4. Columns: Customer, Date, Order, Amount, Age, Freshness.
+5. Pagination controls: change page/rows per page.
+6. `CLOSE`: close dialog without loading.
 
-3. Opening amount table (`Mode of Payment`, `Opening Amount`):
-- Enter starting cash/amounts for accountability.
+## Every visible button/field (Payment screen)
+1. `Paid Amount`: total paid so far.
+2. `To Be Paid`: remaining balance.
+3. Payment amount rows (`Cash`, `Credit Card`, `Cheque`, `Bank Transfer`): enter per mode.
+4. Payment mode buttons (`CASH`, `CREDIT CARD`, etc.): auto-fill selected mode.
+5. Totals fields (`Net Total`, `Tax and Charges`, `Total Amount`, `Grand Total`, `Rounded Total`): verify totals.
+6. `Additional Notes`: optional payment note.
+7. `Use Customer Credit`: apply credit if allowed.
+8. `Submit`: post invoice.
+9. `Submit & Print`: post and print.
+10. `Cancel Payment`: exit payment panel.
 
-4. `Cancel`:
-- Exit without opening shift.
-
-5. `Submit`:
-- Create opening shift and enter POS.
-
-## Main screen buttons/fields
-1. `Search Items`:
-- Item search.
-
-2. `Customer`:
-- Set buyer/customer.
-
-3. `Select S.O`:
-- Open Sales Order picker (normal token flow).
-
-4. `Held`:
-- Open held drafts.
-
-5. `Save Quote` / `Select Quote`:
-- Quote flow if enabled by profile.
-
-6. `Return`:
-- Return process.
-
-7. `Cancel`:
-- Clear current cart.
-
-8. `Save/New`:
-- Save/reset invoice draft flow.
-
-9. `PAY`:
-- Open payment panel.
-
-10. `Print Draft`:
-- Print draft if needed.
-
-11. Left ticket icon + monitor panel controls:
-- Live workflow visibility (`All (date)`, `Mine`, refresh).
-
-## Select Sales Orders dialog fields/buttons
-1. `Order ID`:
-- Type token/SO number.
-
-2. `Search`:
-- Run lookup.
-
-3. Row checkbox:
-- Select one order.
-
-4. Table columns:
-- Customer, Date, Order, Amount, Age, Freshness.
-
-5. Bottom `Close`:
-- Exit dialog without loading.
-
-## Payment screen fields/buttons
-1. Payment rows (`Cash`, `Credit Card`, `Cheque`, `Bank Transfer`, etc.):
-- Enter amount or click mode button to set full amount.
-
-2. Payment mode buttons (`CASH`, `CREDIT CARD`, etc.):
-- Fill the selected mode with full payable amount quickly.
-
-3. Totals fields:
-- `Paid Amount`, `To Be Paid`, `Net Total`, `Tax and Charges`, `Total Amount`, `Grand Total`, etc.
-
-4. `Additional Notes`:
-- Optional payment note.
-
-5. `Use Customer Credit` toggle:
-- Apply available customer credit if allowed.
-
-6. `Submit`:
-- Submit paid invoice.
-
-7. `Submit & Print`:
-- Submit + print immediately.
-
-8. `Cancel Payment`:
-- Back to invoice screen.
-
-## Non-negotiable rules
-- Cashier owns opening/closing cash accountability.
-- Do not release goods from fulfillment screen.
+## Edge cases you must follow
+1. If `Select S.O` shows no rows, check age filter policy and token/order id, then escalate if still empty.
+2. If token workflow is disabled for profile, use normal item sale and pay flow.
+3. If relay/cloud warning appears during submit, follow prompt and call supervisor if not resolved.
+4. Cashier never releases goods. Dispatch/supervisor handles release.

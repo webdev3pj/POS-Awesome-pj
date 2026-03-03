@@ -1,74 +1,54 @@
 # Dispatch Manual (Stupid Simple)
 
+## Role sanity (must be true)
+- Your only operational role is `cline-Dispatch`.
+- If you see "multiple operational roles", stop and call supervisor/admin.
+
 ## Your job
-- Verify picked-ready orders.
+- Verify picked-ready rows.
 - Capture release proof.
-- Release goods, or flag mismatch.
+- Release goods or flag mismatch.
 
 ![Dispatch screen](../images/dispatch-ui.png)
 
-## When you do what
+## When to do what
 1. Start of shift:
 - Open dispatch queue.
-- Prioritize `Dispatch Ready` and SLA-high rows.
+- Prioritize oldest and SLA-high rows.
 
 2. During shift:
 - Open row.
 - Fill proof fields.
-- Release goods.
-- If mismatch: flag mismatch with reason.
+- Click `RELEASE GOODS`.
+- If mismatch: fill mismatch reason and click `FLAG MISMATCH`.
 
 3. End of shift:
-- No release without proof.
-- Hand over unresolved mismatches.
+- No row released without proof.
+- Escalate unresolved mismatches.
 
-## Every button/field on dispatch screen
-1. Refresh icon:
-- Reload queue and details.
-
-2. `DETAILED` / `SIMPLE`:
-- `DETAILED` recommended.
-
-3. Search field `Search LSR / SO / customer`:
-- Filter queue.
-
-4. Filter chips (`All`, `Dispatch Ready`, etc.):
-- Focus correct rows.
-
-5. Queue row:
-- Load order in detail pane.
-
-6. Queue metrics cards (`Ready`, `Picking`, `Exceptions`, `Avg Wait`, `Oldest Open`, `Over SLA`):
-- Prioritization dashboard.
-
-7. `RELEASE GOODS`:
-- Final dispatch action.
-- Enabled only when release gate passes.
-
-8. `FLAG MISMATCH`:
-- Return row to picker exception flow.
-
-9. `Allow partial/exception release` checkbox:
-- Allow release from exception states per supervisor policy.
-
-10. Dispatch Release Proof fields:
+## Every visible button/field on dispatch screen
+1. Refresh icon: refresh queue/detail.
+2. `DETAILED` / `SIMPLE`: view mode.
+3. Queue search `Search LSR / SO / customer`.
+4. Filter chips (`All`, `Dispatch Ready`, `Pending`, etc.).
+5. Queue metrics cards (`Ready`, `Picking`, `Exceptions`, `Avg Wait`, `Oldest Open`, `Over SLA`).
+6. Queue row card: load selected order.
+7. `RELEASE GOODS`: final release action.
+8. `FLAG MISMATCH`: return row to mismatch/exception flow.
+9. `Allow partial/exception release`: allows release of exception rows (policy controlled).
+10. Release proof fields:
 - `Acknowledged By (required)`
 - `Proof Mode (required)`
 - `Reference No (optional)`
 - `Proof Notes (optional)`
-
-11. Dispatch Mismatch fields:
+11. Mismatch fields:
 - `Reason Code`
 - `Reason Details`
 - `Requires cashier adjustment`
+12. `Dispatch notes`: audit notes.
+13. Dispatch + Sync history: event/outbox visibility.
 
-12. `Dispatch notes`:
-- Add action notes for audit.
-
-13. Left ticket icon + monitor controls:
-- Read-only workflow visibility.
-
-## Non-negotiable rules
-- Never release goods without proof.
-- Never bypass mismatch reason capture.
-- Dispatch does not take payment.
+## Edge cases you must follow
+1. `RELEASE GOODS` stays disabled until required proof fields are filled.
+2. If `FLAG MISMATCH` does not update status within a few seconds, escalate to supervisor immediately.
+3. Dispatch never takes payment and never edits opening cash.

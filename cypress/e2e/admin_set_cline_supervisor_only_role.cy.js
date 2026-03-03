@@ -240,7 +240,7 @@ describe("Admin preflight: set cline to Supervisor-only operational role", () =>
       );
       const fuzzy = clineRoles.find((r) => {
         const t = r.toLowerCase();
-        return t.includes("dispatch");
+        return t.includes("supervisor");
       });
 
       const resolved = exact || caseInsensitive || fuzzy || "";
