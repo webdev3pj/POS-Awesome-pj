@@ -1,107 +1,126 @@
-# Cashier Manual (Very Simple)
+# Cashier Manual (Stupid Simple)
 
-## What your job is
-
-Your job is:
-- Find the Sales Order token from customer.
+## Your job
+- Open cash shift.
+- Load Sales Order from token.
 - Take payment.
 - Submit invoice.
 
-![Cashier screen](../images/cashier-ui.png)
-
-## When you do work
-
-- Start of shift: open cashier session and cash opening amounts.
-- During shift: process payments and submit invoices.
-- End of shift: complete pending payments and close with supervisor.
+![Cashier main screen](../images/cashier-ui.png)
 
 ![Select Sales Order dialog](../images/select-sales-order.png)
 
 ![Payment screen](../images/payment-screen.png)
 
-## Exact buttons you need to know
+## When you do what
+1. Start of shift:
+- Open POS.
+- Cashier opening dialog appears.
+- Enter opening amount per payment mode.
+- Click `Submit`.
 
-1. `Select S.O`
-- What it does: opens Sales Order selection.
-- When to click: first step when customer gives token.
+2. During shift:
+- Click `Select S.O`.
+- Find and load customer order.
+- Click `PAY`.
+- Enter payment.
+- Click `Submit` (or `Submit & Print`).
 
-2. `PAY`
-- What it does: opens payment panel.
-- When to click: after loading correct Sales Order/cart.
+3. End of shift:
+- Clear pending invoices.
+- Close shift by store process.
 
-3. Payment mode buttons (example: `Cash`, `Card`, `Cheque`, `Bank`, or configured mode names)
-- What they do: set the full amount to that payment mode row.
-- When to click: choose how customer is paying.
+## Opening dialog fields/buttons (cashier)
+1. `Company`:
+- Company for this POS session.
 
-4. `Request` (phone payment mode only, if configured)
-- What it does: sends payment request to customer phone.
-- When to click: only for phone payment process.
+2. `POS Profile`:
+- Profile for terminal/workflow.
 
-5. `Get Payments <Mode>` (M-Pesa style mode only, if configured)
-- What it does: fetches mobile payments.
-- When to click: only for that payment integration.
+3. Opening amount table (`Mode of Payment`, `Opening Amount`):
+- Enter starting cash/amounts for accountability.
 
-6. `Submit`
-- What it does: submits invoice without auto-print.
-- When to click: normal completion when payment is correct.
+4. `Cancel`:
+- Exit without opening shift.
 
-7. `Submit & Print`
-- What it does: submits invoice and prints.
-- When to click: if customer needs printed slip now.
+5. `Submit`:
+- Create opening shift and enter POS.
 
-8. `Cancel Payment`
-- What it does: exits payment panel and returns to invoice/cart view.
-- When to click: wrong amount entered or wrong order loaded.
+## Main screen buttons/fields
+1. `Search Items`:
+- Item search.
 
-9. `Cancel`
-- What it does: cancels current cart.
-- When to click: wrong order loaded and you want to restart.
+2. `Customer`:
+- Set buyer/customer.
 
-10. `Save/New`
-- What it does: saves and starts a new cart/token style flow.
-- When to click: only for approved direct sale flow.
+3. `Select S.O`:
+- Open Sales Order picker (normal token flow).
 
-11. `Held`
-- What it does: opens held drafts.
-- When to click: only if manager asks to resume held draft.
+4. `Held`:
+- Open held drafts.
 
-12. `Return`
-- What it does: opens return invoice flow.
-- When to click: when processing approved customer return.
+5. `Save Quote` / `Select Quote`:
+- Quote flow if enabled by profile.
 
-13. `Print Draft`
-- What it does: prints draft invoice.
-- When to click: only if store process asks.
+6. `Return`:
+- Return process.
 
-14. Order Monitor ticket icon
-- What it does: opens order monitor panel.
-- When to click: check pending queue and handoff status.
+7. `Cancel`:
+- Clear current cart.
 
-15. `All (date)` / `Mine` / refresh in order monitor
-- What they do: filter and refresh queue rows.
-- When to click: use after submit to confirm flow moved forward.
+8. `Save/New`:
+- Save/reset invoice draft flow.
 
-## Step-by-step (daily token flow)
+9. `PAY`:
+- Open payment panel.
 
-1. Ask customer for token slip.
-2. Click `Select S.O`.
-3. Search and load correct order.
-4. Click `PAY`.
-5. Click payment mode button.
-6. Check `To Be Paid` is zero.
-7. Click `Submit` or `Submit & Print`.
-8. Confirm success message and invoice number.
-9. Direct order to picker/dispatch process.
+10. `Print Draft`:
+- Print draft if needed.
 
-## Do not do these
+11. Left ticket icon + monitor panel controls:
+- Live workflow visibility (`All (date)`, `Mine`, refresh).
 
-- Do not bypass payment mismatch.
-- Do not release goods.
-- Do not override exception without supervisor.
+## Select Sales Orders dialog fields/buttons
+1. `Order ID`:
+- Type token/SO number.
 
-## If something breaks
+2. `Search`:
+- Run lookup.
 
-1. Do not click submit many times.
-2. Copy order number and timestamp.
-3. Call supervisor immediately.
+3. Row checkbox:
+- Select one order.
 
+4. Table columns:
+- Customer, Date, Order, Amount, Age, Freshness.
+
+5. Bottom `Close`:
+- Exit dialog without loading.
+
+## Payment screen fields/buttons
+1. Payment rows (`Cash`, `Credit Card`, `Cheque`, `Bank Transfer`, etc.):
+- Enter amount or click mode button to set full amount.
+
+2. Payment mode buttons (`CASH`, `CREDIT CARD`, etc.):
+- Fill the selected mode with full payable amount quickly.
+
+3. Totals fields:
+- `Paid Amount`, `To Be Paid`, `Net Total`, `Tax and Charges`, `Total Amount`, `Grand Total`, etc.
+
+4. `Additional Notes`:
+- Optional payment note.
+
+5. `Use Customer Credit` toggle:
+- Apply available customer credit if allowed.
+
+6. `Submit`:
+- Submit paid invoice.
+
+7. `Submit & Print`:
+- Submit + print immediately.
+
+8. `Cancel Payment`:
+- Back to invoice screen.
+
+## Non-negotiable rules
+- Cashier owns opening/closing cash accountability.
+- Do not release goods from fulfillment screen.

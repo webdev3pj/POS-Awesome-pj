@@ -1,93 +1,74 @@
-# Dispatch Manual (Very Simple)
+# Dispatch Manual (Stupid Simple)
 
-## What your job is
-
-Your job is:
+## Your job
 - Verify picked-ready orders.
 - Capture release proof.
-- Release goods correctly.
+- Release goods, or flag mismatch.
 
 ![Dispatch screen](../images/dispatch-ui.png)
 
-## When you do work
+## When you do what
+1. Start of shift:
+- Open dispatch queue.
+- Prioritize `Dispatch Ready` and SLA-high rows.
 
-- Start of shift: open dispatch queue and check oldest rows.
-- During shift: release only after proof fields are complete.
-- End of shift: no release without proof; hand off unresolved mismatches.
+2. During shift:
+- Open row.
+- Fill proof fields.
+- Release goods.
+- If mismatch: flag mismatch with reason.
 
-## Exact buttons and fields you need
+3. End of shift:
+- No release without proof.
+- Hand over unresolved mismatches.
 
-1. Refresh icon
-- What it does: reloads queue and detail.
-- When to click: at shift start and between orders.
+## Every button/field on dispatch screen
+1. Refresh icon:
+- Reload queue and details.
 
-2. `Detailed` / `Simple`
-- What they do: switch view level.
-- When to click: keep `Detailed` for release work.
+2. `DETAILED` / `SIMPLE`:
+- `DETAILED` recommended.
 
-3. Search box
-- What it does: filters by LSR, SO, customer.
-- When to click: find one order fast.
+3. Search field `Search LSR / SO / customer`:
+- Filter queue.
 
-4. Filter chips `All`, `Dispatch Ready`
-- What they do: queue filter.
-- When to click: use `Dispatch Ready` for releasable orders.
+4. Filter chips (`All`, `Dispatch Ready`, etc.):
+- Focus correct rows.
 
-5. Queue row click
-- What it does: opens detail panel for selected order.
-- When to click: before any release action.
+5. Queue row:
+- Load order in detail pane.
 
-6. Dispatch proof fields
-- `Acknowledged By (required)`: name of receiver.
-- `Proof Mode (required)`: `Counter pickup`, `Delivery handover`, or `Other`.
-- `Reference No (optional)`: receipt, route, package ref.
-- `Proof Notes (optional)`: extra handover notes.
+6. Queue metrics cards (`Ready`, `Picking`, `Exceptions`, `Avg Wait`, `Oldest Open`, `Over SLA`):
+- Prioritization dashboard.
 
-7. `Release Goods`
-- What it does: final dispatch release.
-- When to click: only when proof is complete and row is ready.
+7. `RELEASE GOODS`:
+- Final dispatch action.
+- Enabled only when release gate passes.
 
-8. `Flag Mismatch`
-- What it does: sends row to mismatch flow.
-- When to click: picked goods do not match what should be released.
+8. `FLAG MISMATCH`:
+- Return row to picker exception flow.
 
-9. `Allow partial/exception release` checkbox
-- What it does: allows release from exception state.
-- When to click: only with supervisor policy approval.
+9. `Allow partial/exception release` checkbox:
+- Allow release from exception states per supervisor policy.
 
-10. Dispatch mismatch fields
+10. Dispatch Release Proof fields:
+- `Acknowledged By (required)`
+- `Proof Mode (required)`
+- `Reference No (optional)`
+- `Proof Notes (optional)`
+
+11. Dispatch Mismatch fields:
 - `Reason Code`
 - `Reason Details`
 - `Requires cashier adjustment`
-- Use them before `Flag Mismatch`.
 
-11. `Dispatch notes`
-- What it does: saves context for dispatch action.
-- When to use: whenever mismatch or special handover happened.
+12. `Dispatch notes`:
+- Add action notes for audit.
 
-12. Order Monitor ticket icon and panel controls
-- What they do: quick global queue visibility.
-- When to click: for cross-role coordination.
+13. Left ticket icon + monitor controls:
+- Read-only workflow visibility.
 
-## Step-by-step
-
-1. Click `Dispatch Ready` filter.
-2. Open one row.
-3. Fill dispatch proof.
-4. Re-check customer/order details.
-5. Click `Release Goods`.
-6. Confirm status is `RELEASED`.
-7. If mismatch, use mismatch fields and click `Flag Mismatch`.
-
-## Do not do these
-
-- Do not release without proof.
-- Do not edit picker data silently.
-- Do not collect payment.
-
-## If something breaks
-
-1. Refresh.
-2. Reopen row.
-3. If still blocked, report LSR + message to supervisor.
-
+## Non-negotiable rules
+- Never release goods without proof.
+- Never bypass mismatch reason capture.
+- Dispatch does not take payment.

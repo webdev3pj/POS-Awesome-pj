@@ -1,92 +1,77 @@
-# Supervisor Manual (Very Simple)
+# Supervisor Manual (Stupid Simple)
 
-## What your job is
-
-Your job is:
-- Resolve exception rows.
-- Approve or reject partial/exception release.
-- Keep clean notes and audit trail.
+## Your job
+- Run fulfillment exceptions safely.
+- Approve controlled partial/exception releases.
+- Keep clear notes and auditability.
 
 ![Supervisor screen](../images/supervisor-ui.png)
 
-## When you do work
+## When you do what
+1. Start of shift:
+- Check `Exception` and SLA-high rows first.
 
-- Start of shift: check exception queue first.
-- During shift: support picker/dispatch when blocked.
-- End of shift: no open exception without clear note.
+2. During shift:
+- Review picker/dispatch details.
+- Decide: return to picker, mismatch route, or controlled release.
 
-## Exact buttons and controls you need
+3. End of shift:
+- No unresolved exception without documented next action.
 
-You can see both picker and dispatch controls.
+## Every button/field on supervisor screen
+Supervisor sees both picker and dispatch controls.
 
-1. Refresh icon
-- Reloads queue and detail.
+1. Refresh icon:
+- Reload queue/detail.
 
-2. `Detailed` / `Simple`
-- Switches detail depth.
+2. `DETAILED` / `SIMPLE`:
+- `DETAILED` for full context.
 
-3. Search box and filter chips
-- `All`, `Pending`, `In Progress`, `Exception`, `Picked Ready`, `Dispatch Ready`.
+3. Search + filter chips (`All`, `Pending`, `In Progress`, `Exception`, `Picked Ready`, `Dispatch Ready`):
+- Find workload and exception states.
 
-4. Picker action buttons
-- `Mark All Picked`
-- `Start/Save Picking`
-- `Mark Picked Ready`
-- `Flag Exception`
+4. Picker action buttons:
+- `MARK ALL PICKED`
+- `START/SAVE PICKING`
+- `MARK PICKED READY`
+- `FLAG EXCEPTION`
 
-5. Dispatch action buttons
-- `Release Goods`
-- `Flag Mismatch`
-- `Allow partial/exception release` (checkbox)
+5. Dispatch action buttons:
+- `RELEASE GOODS`
+- `FLAG MISMATCH`
+- `Allow partial/exception release` checkbox
 
-6. Dispatch proof and mismatch fields
+6. Dispatch Release Proof fields:
 - `Acknowledged By (required)`
 - `Proof Mode (required)`
 - `Reference No (optional)`
 - `Proof Notes (optional)`
+
+7. Dispatch Mismatch fields:
 - `Reason Code`
 - `Reason Details`
 - `Requires cashier adjustment`
 
-7. Notes fields
+8. Notes fields:
 - `Picker notes`
 - `Dispatch notes`
 
-8. Order Monitor ticket icon and panel controls
-- Monitor all pending rows and handoff progress.
+9. Left ticket icon + monitor controls:
+- Cross-role pending-order visibility.
 
-## Supervisor decision rules (simple)
+## Simple decision rules
+1. Full good pick:
+- Normal `RELEASE GOODS` with proof.
 
-1. Full pick, no mismatch:
-- allow normal dispatch release.
-
-2. Pick exception, but release is still acceptable by policy:
-- check `Allow partial/exception release`, then release with full notes.
+2. Pick exception but acceptable release:
+- Enable `Allow partial/exception release`, then release with full notes.
 
 3. Financial mismatch:
-- require cashier adjustment first.
+- Flag mismatch and require cashier adjustment.
 
 4. Missing proof:
-- do not release.
+- No release.
 
-## Step-by-step for exception row
-
-1. Filter `Exception`.
-2. Open row.
-3. Read line qty and notes.
-4. Decide: return to picker or allow controlled release.
-5. Record clear note and reason.
-6. Confirm final status in detail panel.
-
-## Do not do these
-
-- Do not approve exception with no reason.
-- Do not ignore mismatch details.
-- Do not leave row unresolved with no handoff note.
-
-## If something breaks
-
-1. Refresh and re-open row.
-2. Record LSR and error text.
-3. Escalate to IT/Codex support path.
-
+## Non-negotiable rules
+- No override without reason and notes.
+- No release without proof capture.

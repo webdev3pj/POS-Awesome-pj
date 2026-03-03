@@ -1,92 +1,77 @@
-# Sales Associate Manual (Very Simple)
+# Sales Associate Manual (Stupid Simple)
 
-## What your job is
+## Your job
+- Build the customer cart.
+- Create the Sales Order token.
+- Hand the customer to Cashier.
 
-Your only main job is:
-- Build the customer order.
-- Save the order as a Sales Order token.
-- Hand the customer to the cashier.
-
-You do not take payment.
+## You NEVER do
+- You do not enter opening cash amounts.
+- You do not close shifts.
+- You do not take payment.
+- You do not release goods.
 
 ![Sales Associate screen](../images/sa-ui.png)
 
-## When you do work
+## When you do what
+1. Start of shift:
+- Open POS.
+- If the start dialog appears, you only pick `Company` and `POS Profile`, then click `Submit`.
+- SA starts a non-cash session. No opening amount entry.
 
-- Start of shift: log in, open POS session.
-- During shift: create tokens fast and correctly.
-- End of shift: make sure no customer is waiting without a token.
+2. During shift:
+- Select customer.
+- Add items.
+- Confirm total with customer.
+- Click `Save/New` to create token.
 
-![Opening dialog](../images/opening-dialog.png)
+3. End of shift:
+- Make sure no waiting customer is missing a token.
+- Escalate blocked orders to supervisor.
 
-## Exact buttons you need to know
+## Every button/field you use (SA)
+1. `Search Items` field:
+- Type item name/code.
 
-1. `Save/New`
-- What it does: saves the cart and creates a Sales Order token.
-- When to click: after customer confirms items and total.
+2. Item list row:
+- Click row to add item to cart.
 
-2. `Save Quote` (if your manager enabled quotations)
-- What it does: saves the cart as a quotation.
-- When to click: customer is not ready to buy now.
+3. `Customer` field (right panel top):
+- Set the customer for the sale.
 
-3. `Select Quote` (if enabled)
-- What it does: loads a saved quotation.
-- When to click: customer returns with a quotation.
+4. `Type` field:
+- Usually `Invoice`/`Order` mode control.
+- SA should keep normal order-taking flow for token handoff.
 
-4. `Cancel`
-- What it does: clears the current cart.
-- When to click: wrong customer or wrong items loaded.
+5. `Held`:
+- Open held drafts (only if your store process uses this).
 
-5. `PAY`
-- What it does: opens payment page.
-- When to click: do not click as Sales Associate.
+6. `Save Quote`:
+- Save current cart as quote (if enabled in profile).
 
-6. `Held`
-- What it does: opens held draft invoices.
-- When to click: only if manager told you to resume a held draft.
+7. `Select Quote`:
+- Load an existing quote (if enabled).
 
-7. `Return`
-- What it does: opens return flow.
-- When to click: normally cashier or manager handles returns.
+8. `Return`:
+- Return flow (usually cashier/supervisor process).
 
-8. `Print Draft`
-- What it does: prints a draft invoice copy.
-- When to click: only if store process asks for draft copy.
+9. `Cancel`:
+- Clear current invoice/cart.
 
-9. Order Monitor ticket icon (small round button)
-- What it does: opens order monitor side panel.
-- When to click: to confirm your token/order appears in queue.
+10. `Save/New`:
+- Main SA action. Creates Sales Order token and resets for next customer.
 
-10. `All (date)` and `Mine` (inside order monitor)
-- What they do: filter queue rows.
-- When to click: use `Mine` to see only your orders.
+11. `Print Draft`:
+- Print draft copy only when store policy requires it.
 
-11. Refresh icon inside order monitor
-- What it does: reloads monitor rows.
-- When to click: after creating token and you need to confirm it showed up.
+12. Left ticket icon (Order Monitor):
+- Open monitor panel to view pending order flow.
 
-12. Item row icons: delete, minus, plus
-- What they do: remove line, lower qty, increase qty.
-- When to click: when customer changes order line.
+13. In monitor panel: `All (date)`, `Mine`, refresh icon:
+- `All (date)`: all pending orders for profile/date.
+- `Mine`: only orders linked to your user.
+- Refresh: reload monitor list.
 
-## Step-by-step (daily)
-
-1. Select customer.
-2. Add item(s).
-3. Check qty and total with customer.
-4. Click `Save/New`.
-5. In token popup, print token slip.
-6. Tell customer: "Take this token to cashier."
-
-## Do not do these
-
-- Do not collect payment.
-- Do not release goods.
-- Do not override mismatch or exception.
-
-## If something breaks
-
-1. Try refresh once.
-2. Keep order number/token number.
-3. Tell supervisor and cashier immediately.
-
+## Important sanity rule
+- If anyone asks SA to enter opening shift money, that is wrong.
+- Opening cash is cashier-only.
