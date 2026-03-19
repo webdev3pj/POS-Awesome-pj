@@ -37,8 +37,12 @@
             :label="frappe._('QTY')"
             background-color="white"
             hide-details
-            v-model.number="qty"
+            :value="qty_input"
             type="number"
+            step="0.01"
+            @input="setManualQtyInput"
+            @blur="normalizeManualQty"
+            @change="normalizeManualQty"
             @keydown.enter="enter_event"
             @keydown.esc="esc_event"
           ></v-text-field>
@@ -191,6 +195,7 @@ export default {
     customer: null,
     new_line: false,
     qty: 1,
+    qty_input: "1.00",
   }),
 
   watch: {
@@ -332,21 +337,25 @@ export default {
       if (item.has_variants) {
         evntBus.$emit("open_variants_model", item, this.items);
       } else {
-        if (!item.qty || item.qty === 1) {
-          item.qty = Math.abs(this.qty);
-        }
+        const baseQty =
+          item.qty === undefined || item.qty === null || item.qty === "" || item.qty === 1
+            ? this.qty
+            : item.qty;
+        item.qty = this.normalizeFixedPrecisionNumber(baseQty, 2, true, 1);
         evntBus.$emit("add_item", item);
         this.qty = 1;
+        this.qty_input = this.formtFloat(1, 2);
       }
     },
     enter_event() {
+      this.normalizeManualQty();
       let match = false;
       if (!this.filtred_items.length || !this.first_search) {
         return;
       }
       const qty = this.get_item_qty(this.first_search);
       const new_item = { ...this.filtred_items[0] };
-      new_item.qty = flt(qty);
+      new_item.qty = this.normalizeFixedPrecisionNumber(qty, 2, true, 1);
       new_item.item_barcode.forEach((element) => {
         if (this.search == element.barcode) {
           new_item.uom = element.posa_uom;
@@ -392,6 +401,7 @@ export default {
         this.flags.serial_no = null;
         this.flags.batch_no = null;
         this.qty = 1;
+        this.qty_input = this.formtFloat(1, 2);
         this.$refs.debounce_search.focus();
       }
     },
@@ -402,6 +412,18 @@ export default {
       } else {
         vm.enter_event();
       }
+    },
+    setManualQtyInput(value) {
+      this.qty_input = value;
+      const parsedValue = parseFloat(value);
+      if (!isNaN(parsedValue)) {
+        this.qty = parsedValue;
+      }
+    },
+    normalizeManualQty() {
+      this.qty = this.normalizeFixedPrecisionNumber(this.qty_input, 2, true, 1);
+      this.qty_input = this.formtFloat(this.qty, 2);
+      return this.qty;
     },
     get_item_qty(first_search) {
       let scal_qty = Math.abs(this.qty);
@@ -423,7 +445,7 @@ export default {
         }
         scal_qty = pesokg;
       }
-      return scal_qty;
+      return this.normalizeFixedPrecisionNumber(scal_qty, 2, true, 1);
     },
     get_search(first_search) {
       let search_term = "";

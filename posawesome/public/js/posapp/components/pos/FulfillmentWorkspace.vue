@@ -1034,9 +1034,13 @@ export default {
       const picker = payload && typeof payload.picker === "object" ? payload.picker : {};
       const fb = fallback || {};
       const orderedQty = this.num(line.qty, 0);
+      const normalizedOrderedQty = this.normalizeQtyInput(orderedQty, orderedQty);
       const conv = this.lineConversion(line);
       const ordStock = this.num(payload.stock_qty, orderedQty * conv);
-      const pickedQty = this.num(picker.picked_qty != null ? picker.picked_qty : fb.picked_qty, orderedQty);
+      const pickedQty = this.normalizeQtyInput(
+        picker.picked_qty != null ? picker.picked_qty : fb.picked_qty,
+        normalizedOrderedQty
+      );
       const pickedStock = this.num(
         picker.picked_stock_qty != null ? picker.picked_stock_qty : fb.picked_stock_qty,
         pickedQty * conv
@@ -1053,7 +1057,7 @@ export default {
         picked_qty: pickedQty,
         picked_qty_input: String(pickedQty),
         picked_stock_qty: pickedStock,
-        pick_status: String(picker.pick_status || fb.pick_status || line.pick_status || "").toUpperCase() || (Math.abs(pickedQty - orderedQty) < 1e-9 ? "PICKED" : "PARTIAL"),
+        pick_status: String(picker.pick_status || fb.pick_status || line.pick_status || "").toUpperCase() || (Math.abs(pickedQty - normalizedOrderedQty) < 1e-9 ? "PICKED" : "PARTIAL"),
       };
     },
     lineConversion(line) {
@@ -1069,19 +1073,23 @@ export default {
       const n = parseFloat(v);
       return isNaN(n) ? (fb == null ? 0 : fb) : n;
     },
+    normalizeQtyInput(value, fallback) {
+      return this.normalizeFixedPrecisionNumber(value, 2, true, fallback == null ? 0 : fallback);
+    },
     onQtyChange(line) {
-      const q = Math.max(0, this.num(line.picked_qty_input, line.ordered_qty));
+      const q = this.normalizeQtyInput(line.picked_qty_input, line.ordered_qty);
+      const normalizedOrderedQty = this.normalizeQtyInput(line.ordered_qty, line.ordered_qty);
       line.picked_qty = q;
       line.picked_qty_input = String(q);
       line.picked_stock_qty = q * this.num(line.conversion_factor, 1);
       if (line.pick_status !== "EXCEPTION") {
-        line.pick_status = Math.abs(q - line.ordered_qty) < 1e-9 ? "PICKED" : q > 0 ? "PARTIAL" : "NOT_PICKED";
+        line.pick_status = Math.abs(q - normalizedOrderedQty) < 1e-9 ? "PICKED" : q > 0 ? "PARTIAL" : "NOT_PICKED";
       }
       this.$set(this.lineDrafts, line.id, { ...line });
     },
     markAllPicked() {
       this.lineRows.forEach((line) => {
-        line.picked_qty = this.num(line.ordered_qty, 0);
+        line.picked_qty = this.normalizeQtyInput(line.ordered_qty, 0);
         line.picked_qty_input = String(line.picked_qty);
         line.picked_stock_qty = line.picked_qty * this.num(line.conversion_factor, 1);
         if (line.pick_status !== "EXCEPTION") line.pick_status = "PICKED";
@@ -1095,7 +1103,7 @@ export default {
         item_name: line.item_name || "",
         ordered_qty: this.num(line.ordered_qty, 0),
         ordered_uom: line.uom || "",
-        picked_qty: this.num(line.picked_qty, this.num(line.ordered_qty, 0)),
+        picked_qty: this.normalizeQtyInput(line.picked_qty, this.num(line.ordered_qty, 0)),
         picked_uom: line.uom || "",
         conversion_factor: this.num(line.conversion_factor, 1),
         picked_stock_qty: this.num(line.picked_stock_qty, 0),
@@ -1109,7 +1117,7 @@ export default {
         item_name: line.item_name || "",
         ordered_qty: this.num(line.ordered_qty, 0),
         ordered_uom: line.uom || "",
-        picked_qty: this.num(line.picked_qty, this.num(line.ordered_qty, 0)),
+        picked_qty: this.normalizeQtyInput(line.picked_qty, this.num(line.ordered_qty, 0)),
         picked_uom: line.uom || "",
         conversion_factor: this.num(line.conversion_factor, 1),
         picked_stock_qty: this.num(line.picked_stock_qty, 0),

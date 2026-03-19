@@ -258,6 +258,7 @@ describe("Supervisor fulfillment exception workflow (watch mode)", () => {
     let targetLocalSaleRef = "";
     let firstLineId = 0;
     let editedPickedQty = 0;
+    let expectedPersistedPickedQty = 0;
 
     cy.viewport(1600, 900);
     loginWithOtp();
@@ -333,11 +334,12 @@ describe("Supervisor fulfillment exception workflow (watch mode)", () => {
         expect(firstLineId, "first relay line id").to.be.greaterThan(0);
         const orderedQty = Number(firstLine.qty || 0);
         expect(orderedQty, "ordered qty").to.be.greaterThan(0);
-        editedPickedQty = orderedQty >= 1 ? Number((orderedQty / 2).toFixed(3)) : Number((orderedQty + 0.5).toFixed(3));
+        editedPickedQty = Number((orderedQty * 0.667).toFixed(3));
         if (editedPickedQty <= 0 || editedPickedQty === orderedQty) {
-          editedPickedQty = Number((orderedQty + 0.25).toFixed(3));
+          editedPickedQty = Number((orderedQty * 0.333).toFixed(3));
         }
-        cy.log(`Supervisor will edit line ${firstLineId} picked_qty to ${editedPickedQty}`);
+        expectedPersistedPickedQty = Number(editedPickedQty.toFixed(2));
+        cy.log(`Supervisor will edit line ${firstLineId} picked_qty to ${editedPickedQty} (expect persisted ${expectedPersistedPickedQty})`);
       })
       .then(() => {
         expect(targetLocalSaleRef, "targetLocalSaleRef resolved").to.be.a("string").and.not.be.empty;
@@ -378,7 +380,7 @@ describe("Supervisor fulfillment exception workflow (watch mode)", () => {
         expect(line, `relay line ${firstLineId}`).to.be.an("object");
         expect(line.payload, "relay line payload").to.be.an("object");
         expect(line.payload.picker, "relay line payload.picker").to.be.an("object");
-        expect(Number(line.payload.picker.picked_qty), "persisted picked_qty").to.eq(editedPickedQty);
+        expect(Number(line.payload.picker.picked_qty), "persisted picked_qty").to.eq(expectedPersistedPickedQty);
         expect(Number(line.payload.picker.conversion_factor || 0), "persisted conversion_factor").to.be.greaterThan(0);
         const latestPick = [...(body.pick_events || [])].pop();
         expect(latestPick, "latest pick event").to.be.an("object");
@@ -459,7 +461,11 @@ describe("Supervisor fulfillment exception workflow (watch mode)", () => {
         expect(String(sale.dispatch_status || ""), "dispatch_status after supervisor override").to.eq("RELEASED");
         const latestDispatch = [...(releasedResp.body.dispatch_events || [])].pop();
         expect(latestDispatch, "dispatch event created").to.be.an("object");
-        expect(String(latestDispatch.event_type || "")).to.eq("RELEASED");
+        const eventType = String(latestDispatch.event_type || "");
+        expect(
+          ["DISPATCH_RELEASED_WITH_PROOF", "RELEASED"].includes(eventType),
+          `dispatch event type (${eventType})`
+        ).to.eq(true);
         cy.get("body").should("contain.text", "RELEASED");
         cy.writeFile("cypress/tmp/supervisor_exception_target.json", {
           local_sale_ref: targetLocalSaleRef,

@@ -167,18 +167,18 @@
             hide-default-footer
           >
             <template v-slot:item.qty="{ item }">{{
-              formtFloat(item.qty)
+              formtFloat(item.qty, 2)
             }}</template>
             <template v-slot:item.rate="{ item }"
               >{{ currencySymbol(pos_profile.currency) }}
-              {{ formtCurrency(item.rate) }}</template
+              {{ formtCurrency(item.rate, 2) }}</template
             >
             <template v-slot:item.amount="{ item }"
               >{{ currencySymbol(pos_profile.currency) }}
               {{
                 formtCurrency(
-                  flt(item.qty, float_precision) *
-                    flt(item.rate, currency_precision)
+                  flt(item.qty, 2) *
+                    flt(item.rate, 2)
                 )
               }}</template
             >
@@ -245,13 +245,8 @@
                       :label="frappe._('QTY')"
                       background-color="white"
                       hide-details
-                      :value="formtFloat(item.qty)"
-                      @change="
-                        [
-                          setFormatedFloat(item, 'qty', null, false, $event),
-                          calc_stock_qty(item, $event),
-                        ]
-                      "
+                      :value="formtFloat(item.qty, 2)"
+                      @change="updateItemQty(item, $event)"
                       :rules="[isNumber]"
                       :disabled="!!item.posa_is_offer || !!item.posa_is_replace"
                     ></v-text-field>
@@ -285,19 +280,8 @@
                       background-color="white"
                       hide-details
                       :prefix="currencySymbol(pos_profile.currency)"
-                      :value="formtCurrency(item.rate)"
-                      @change="
-                        [
-                          setFormatedCurrency(
-                            item,
-                            'rate',
-                            null,
-                            false,
-                            $event
-                          ),
-                          calc_prices(item, $event),
-                        ]
-                      "
+                      :value="formtCurrency(item.rate, 2)"
+                      @change="updateItemRate(item, $event)"
                       :rules="[isNumber]"
                       id="rate"
                       :disabled="
@@ -329,7 +313,7 @@
                             true,
                             $event
                           ),
-                          calc_prices(item, $event),
+                          calc_prices(item, $event, 'discount_percentage'),
                         ]
                       "
                       :rules="[isNumber]"
@@ -366,7 +350,7 @@
                             $event
                           ),
                           ,
-                          calc_prices(item, $event),
+                          calc_prices(item, $event, 'discount_amount'),
                         ]
                       "
                       :prefix="currencySymbol(pos_profile.currency)"
@@ -3179,8 +3163,23 @@ export default {
       }
     },
 
-    calc_prices(item, value, $event) {
-      if (event.target.id === "rate") {
+    updateItemQty(item, value) {
+      const normalized = this.normalizeFixedPrecisionNumber(value, 2, false, flt(item.qty || 0));
+      this.setFormatedFloat(item, "qty", 2, false, normalized);
+      this.calc_stock_qty(item, normalized);
+    },
+
+    updateItemRate(item, value) {
+      const normalized = this.normalizeFixedPrecisionNumber(value, 2, false, flt(item.rate || 0));
+      this.setFormatedCurrency(item, "rate", 2, false, normalized);
+      this.calc_prices(item, normalized, "rate");
+    },
+
+    calc_prices(item, value, fieldName) {
+      const activeField =
+        fieldName ||
+        (((typeof event !== "undefined" && event && event.target) || {}).id ? event.target.id : "");
+      if (activeField === "rate") {
         item.discount_percentage = 0;
         if (value < item.price_list_rate) {
           item.discount_amount = this.flt(
@@ -3193,7 +3192,7 @@ export default {
         } else if (value > item.price_list_rate) {
           item.discount_amount = 0;
         }
-      } else if (event.target.id === "discount_amount") {
+      } else if (activeField === "discount_amount") {
         if (value < 0) {
           item.discount_amount = 0;
           item.discount_percentage = 0;
@@ -3201,7 +3200,7 @@ export default {
           item.rate = flt(item.price_list_rate) - flt(value);
           item.discount_percentage = 0;
         }
-      } else if (event.target.id === "discount_percentage") {
+      } else if (activeField === "discount_percentage") {
         if (value < 0) {
           item.discount_amount = 0;
           item.discount_percentage = 0;
