@@ -5,7 +5,15 @@ import frappe
 from frappe.permissions import add_permission, update_permission_property
 
 
-HELPER_ROLE_NAME = "cline helper"
+ROLE_SPECS = (
+    {"role_name": "cline helper", "desk_access": 1},
+    {"role_name": "cline-Sales Associate", "desk_access": 1},
+    {"role_name": "cline-Cashier", "desk_access": 1},
+    {"role_name": "cline-Picker", "desk_access": 1},
+    {"role_name": "cline-Dispatch", "desk_access": 1},
+    {"role_name": "cline-Supervisor", "desk_access": 1},
+)
+HELPER_ROLE_NAME = ROLE_SPECS[0]["role_name"]
 POS_PAGE_NAME = "posapp"
 STANDARD_PERMISSION_FIELDS = (
     "select",
@@ -33,30 +41,39 @@ HELPER_DOCTYPE_PERMISSIONS = {
 
 
 def execute():
-    _ensure_helper_role()
+    _ensure_cline_roles()
     _ensure_helper_page_access(POS_PAGE_NAME)
     for doctype, permissions in HELPER_DOCTYPE_PERMISSIONS.items():
         _ensure_helper_doctype_permissions(doctype, permissions)
     frappe.clear_cache()
 
 
-def _ensure_helper_role():
-    existing_name = frappe.db.get_value("Role", {"role_name": HELPER_ROLE_NAME}, "name")
-    if not existing_name:
-        frappe.get_doc(
-            {
-                "doctype": "Role",
-                "role_name": HELPER_ROLE_NAME,
-                "desk_access": 1,
-                "disabled": 0,
-                "is_custom": 1,
-                "two_factor_auth": 0,
-            }
-        ).insert(ignore_permissions=True)
-        return
+def _ensure_cline_roles():
+    for spec in ROLE_SPECS:
+        role_name = spec["role_name"]
+        existing_name = frappe.db.get_value("Role", {"role_name": role_name}, "name")
+        if not existing_name:
+            frappe.get_doc(
+                {
+                    "doctype": "Role",
+                    "role_name": role_name,
+                    "desk_access": spec.get("desk_access", 1),
+                    "disabled": 0,
+                    "is_custom": 1,
+                    "two_factor_auth": 0,
+                }
+            ).insert(ignore_permissions=True)
+            continue
 
-    frappe.db.set_value("Role", existing_name, "desk_access", 1, update_modified=False)
-    frappe.db.set_value("Role", existing_name, "disabled", 0, update_modified=False)
+        frappe.db.set_value(
+            "Role",
+            existing_name,
+            {
+                "desk_access": spec.get("desk_access", 1),
+                "disabled": 0,
+            },
+            update_modified=False,
+        )
 
 
 def _ensure_helper_page_access(page_name):
