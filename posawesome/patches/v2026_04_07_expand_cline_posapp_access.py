@@ -30,14 +30,20 @@ PAGE_ACCESS_ROLES = (
     "cline-Dispatch",
     "cline-Supervisor",
 )
-PAGE_DOCTYPE_PERMISSIONS = {"select": 1, "read": 1}
+CLINE_DOCTYPE_PERMISSIONS = {
+    "Page": {"select": 1, "read": 1},
+    "POS Settings": {"select": 1, "read": 1},
+    "Customer Group": {"select": 1, "read": 1},
+    "Territory": {"select": 1, "read": 1},
+}
 
 
 def execute():
     _ensure_pos_page_roles(POS_PAGE_NAME, PAGE_ACCESS_ROLES)
     for role_name in PAGE_ACCESS_ROLES:
         if frappe.db.exists("Role", role_name):
-            _ensure_doctype_permissions("Page", role_name, PAGE_DOCTYPE_PERMISSIONS)
+            for doctype, permissions in CLINE_DOCTYPE_PERMISSIONS.items():
+                _ensure_doctype_permissions(doctype, role_name, permissions)
     frappe.clear_cache()
 
 
