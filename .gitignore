@@ -3,6 +3,7 @@
 *.egg-info
 *.swp
 tags
+.env.*.local
 posawesome/docs/current
 node_modules
 posawesome/public/dist

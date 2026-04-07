@@ -76,6 +76,20 @@ Available in GitHub [discussions](https://github.com/yrestom/POS-Awesome/discuss
 
 ---
 
+### PJ Environment Notes
+
+This fork is actively used against the PJ Frappe Cloud dev site on branch `codex-7`.
+
+Start here for local environment details:
+
+- [docs/00-start-here.md](docs/00-start-here.md)
+- [docs/01-pj-environment-map.md](docs/01-pj-environment-map.md)
+- [docs/02-local-site-status.md](docs/02-local-site-status.md)
+
+Real credentials are stored only in local `.env.*.local` files in the repo root and are gitignored.
+
+---
+
 ### New Features and Bug report:
 
 - Please Create Github Issue from [here](https://github.com/yrestom/POS-Awesome/issues/new/choose) after checking the existing issues
