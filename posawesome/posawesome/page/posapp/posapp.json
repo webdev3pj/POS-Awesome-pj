@@ -25,6 +25,24 @@
   },
   {
    "role": "Accounts User"
+  },
+  {
+   "role": "cline-Sales Associate"
+  },
+  {
+   "role": "cline-Cashier"
+  },
+  {
+   "role": "cline-Picker"
+  },
+  {
+   "role": "cline-Dispatch"
+  },
+  {
+   "role": "cline-Supervisor"
+  },
+  {
+   "role": "cline helper"
   }
  ],
  "script": null,
