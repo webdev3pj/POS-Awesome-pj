@@ -1029,6 +1029,11 @@ def get_item_detail(item, doc=None, warehouse=None, price_list=None):
     item = json.loads(item)
     today = nowdate()
     item_code = item.get("item_code")
+    uoms = frappe.get_all(
+        "UOM Conversion Detail",
+        filters={"parent": item_code},
+        fields=["uom", "conversion_factor"],
+    )
     batch_no_data = []
     if warehouse and item.get("has_batch_no"):
         batch_list = get_batch_qty(warehouse=warehouse, item_code=item_code)
@@ -1061,6 +1066,7 @@ def get_item_detail(item, doc=None, warehouse=None, price_list=None):
     if item.get("is_stock_item") and warehouse:
         res["actual_qty"] = get_stock_availability(item_code, warehouse)
     res["max_discount"] = max_discount
+    res["item_uoms"] = uoms or []
     res["batch_no_data"] = batch_no_data
     return res
 

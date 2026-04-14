@@ -1895,6 +1895,7 @@ export default {
             item.conversion_factor = data.conversion_factor;
             item.stock_qty = data.stock_qty;
             item.actual_qty = data.actual_qty;
+            item.item_uoms = data.item_uoms;
             item.stock_uom = data.stock_uom;
             (item.has_serial_no = data.has_serial_no),
               (item.has_batch_no = data.has_batch_no),
