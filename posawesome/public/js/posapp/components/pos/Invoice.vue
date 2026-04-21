@@ -1828,6 +1828,7 @@ export default {
             conversion_rate: 1,
             qty: item.qty,
             price_list_rate: item.price_list_rate,
+            conversion_factor: item.conversion_factor,
             child_docname: "New Sales Invoice Item 1",
             cost_center: this.pos_profile.cost_center,
             currency: this.pos_profile.currency,
