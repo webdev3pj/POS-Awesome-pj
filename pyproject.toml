@@ -6,3 +6,11 @@ requires-python = ">=3.10"
 dependencies = [
     "qrcode[pil]>=7.3",
 ]
+
+[build-system]
+requires = ["setuptools>=61.0"]
+build-backend = "setuptools.build_meta"
+
+[tool.setuptools.packages.find]
+include = ["posawesome*"]
+exclude = ["wiki_images*", "docs*", "node_modules*"]
