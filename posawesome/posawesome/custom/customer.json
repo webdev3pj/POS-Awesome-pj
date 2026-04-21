@@ -1,4 +1,6 @@
 {
+ "doctype": "Customer",
+ "sync_on_migrate": 1,
  "custom_fields": [
   {
    "allow_in_quick_entry": 0,
