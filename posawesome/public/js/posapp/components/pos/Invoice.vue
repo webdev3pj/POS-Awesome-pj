@@ -2483,7 +2483,7 @@ export default {
       });
 
       const relayEnabled = parseInt(this.pos_profile.custom_have_token || 0, 10) === 1;
-      const relayBaseUrl = (this.pos_profile.custom_edge_relay_url || "").trim();
+      const relayBaseUrl = this.get_relay_base_url();
       if (relayEnabled && relayBaseUrl && this.invoice_doc && this.invoice_doc.docstatus === 0) {
         const tokenPayload = {
           token_id: (this.invoice_doc.name || "").slice(-5),

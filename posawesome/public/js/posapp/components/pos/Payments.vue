@@ -787,6 +787,8 @@ export default {
       connectivity_mode: "cloud_checked",
       allow_cloud_fallback_when_relay_down: false,
       cloud_connected: false,
+      profile_relay_url: "",
+      relay_url: "",
     },
     cloud_status: {
       navigator_online: true,
@@ -872,6 +874,14 @@ export default {
         return this.relay_status.effective_connected;
       }
       return !!this.relay_status.connected;
+    },
+    get_relay_base_url() {
+      const raw =
+        (this.pos_profile && this.pos_profile.custom_edge_relay_url) ||
+        (this.relay_status && this.relay_status.profile_relay_url) ||
+        (this.relay_status && this.relay_status.relay_url) ||
+        "";
+      return String(raw || "").trim().replace(/\/$/, "");
     },
     relay_allows_cloud_fallback_when_down() {
       if (typeof this.relay_status.allow_cloud_fallback_when_relay_down === "boolean") {
@@ -1097,7 +1107,7 @@ export default {
       const vm = this;
 
       const relayEnabled = parseInt(vm.pos_profile.custom_have_token || 0, 10) === 1;
-      const relayBaseUrl = (vm.pos_profile.custom_edge_relay_url || "").trim();
+      const relayBaseUrl = this.get_relay_base_url();
       const relayConnectedForSubmit = this.get_effective_relay_connected();
       const allowCloudFallbackWhenRelayDown = relayEnabled && this.relay_allows_cloud_fallback_when_down();
       const cloudReachable = this.is_cloud_reachable_for_fallback();
@@ -1848,6 +1858,8 @@ export default {
             typeof statusPayload.cloud_connected === "boolean"
               ? !!statusPayload.cloud_connected
               : !!statusPayload.connected,
+          profile_relay_url: statusPayload.profile_relay_url || "",
+          relay_url: statusPayload.relay_url || "",
         };
       });
       evntBus.$on("cloud_status_changed", (payload) => {
