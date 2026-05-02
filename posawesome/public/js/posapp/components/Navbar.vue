@@ -124,7 +124,7 @@
           <v-card-text class="pt-3">
             <div class="mb-2"><b>{{ __('Browser Internet') }}:</b> {{ cloud_status.navigator_online ? __('Online') : __('Offline') }}</div>
             <div class="mb-2"><b>{{ __('Cloud Reachability') }}:</b> {{ cloud_status.server_online ? __('Reachable') : __('Unreachable') }}</div>
-            <div class="mb-2"><b>{{ __('URL') }}:</b> {{ cloud_status.url || window.location.origin }}</div>
+            <div class="mb-2"><b>{{ __('URL') }}:</b> {{ cloud_status.url || browser_origin }}</div>
             <div class="mb-2" v-if="cloud_status.response_ms"><b>{{ __('Latency') }}:</b> {{ cloud_status.response_ms }} ms</div>
             <div class="mb-2" v-if="cloud_status.http_status"><b>{{ __('HTTP Status') }}:</b> {{ cloud_status.http_status }}</div>
             <div class="mb-2"><b>{{ __('Checked At') }}:</b> {{ cloud_status.checked_at || '-' }}</div>
@@ -404,6 +404,7 @@ export default {
         message: '',
         url: '',
       },
+      browser_origin: typeof window !== 'undefined' && window.location ? window.location.origin : '',
       cloud_poll_timer: null,
       current_role: '',
       workflow_monitor_pending_count: 0,
@@ -967,7 +968,7 @@ export default {
             this.relay_status = resolvedStatus;
             evntBus.$emit('relay_status_changed', this.relay_status);
 
-            if (!silent && relay.enabled) {
+            if (!silent && relay.enabled && this.relay_status.relay_source !== 'browser_cache') {
               evntBus.$emit('show_mesage', {
                 text:
                   this.relay_status.message ||
