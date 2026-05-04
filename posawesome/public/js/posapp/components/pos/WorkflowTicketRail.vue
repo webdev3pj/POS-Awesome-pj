@@ -90,63 +90,12 @@
           </div>
 
           <v-list v-else dense class="workflow-ticket-rail-list">
-            <v-list-item
+            <WorkflowTicketRow
               v-for="row in rows"
               :key="row.workflow_state || row.token_id || row.sales_order || row.sales_invoice"
-              class="workflow-ticket-row"
-            >
-              <v-list-item-content>
-                <div class="workflow-ticket-row-top">
-                  <div class="workflow-ticket-row-customer">
-                    {{ row.customer_name || __('Unknown Customer') }}
-                  </div>
-                  <v-chip x-small :color="statusColor(row.display_status)" text-color="white">
-                    {{ row.display_status || __('Unknown') }}
-                  </v-chip>
-                </div>
-                <div class="workflow-ticket-current-state">
-                  {{ workflowCurrentLabel(row) }}
-                </div>
-                <div
-                  class="workflow-state-strip"
-                  :aria-label="workflowStateAria(row)"
-                >
-                  <div
-                    v-for="step in workflowSteps(row)"
-                    :key="step.key"
-                    class="workflow-state-step"
-                    :class="'workflow-state-step-' + step.state"
-                  >
-                    <span class="workflow-state-dot">
-                      <v-icon x-small>{{ step.icon }}</v-icon>
-                    </span>
-                    <span class="workflow-state-label">{{ step.label }}</span>
-                  </div>
-                </div>
-                <div class="workflow-ticket-state-fields">
-                  <span>{{ __('Token') }}: {{ row.token_status || '-' }}</span>
-                  <span>{{ __('Pick') }}: {{ row.picking_status || '-' }}</span>
-                  <span>{{ __('Dispatch') }}: {{ row.dispatch_status || '-' }}</span>
-                </div>
-                <div class="workflow-ticket-row-meta">
-                  <span>{{ __('SA') }}: {{ row.sales_associate_name || row.sales_associate_user || '-' }}</span>
-                </div>
-                <div class="workflow-ticket-row-meta">
-                  <span>{{ __('Taken') }}: {{ formatDateTime(row.order_taken_at) }}</span>
-                </div>
-                <div class="workflow-ticket-row-meta">
-                  <span>{{ __('Time in status') }}: {{ durationSince(row.status_changed_at || row.order_taken_at) }}</span>
-                </div>
-                <div class="workflow-ticket-row-meta workflow-ticket-row-total">
-                  <span>{{ __('Total') }}: {{ formatMoney(row.grand_total, row.currency) }}</span>
-                </div>
-                <div class="workflow-ticket-row-ids">
-                  <small v-if="row.sales_order">SO: {{ row.sales_order }}</small>
-                  <small v-if="row.sales_invoice">SI: {{ row.sales_invoice }}</small>
-                  <small v-if="row.token_id">{{ __('Token') }}: {{ row.token_id }}</small>
-                </div>
-              </v-list-item-content>
-            </v-list-item>
+              :row="row"
+              :now-ms="nowMs"
+            />
           </v-list>
         </v-card>
       </v-slide-x-transition>
@@ -156,8 +105,13 @@
 
 <script>
 import { evntBus } from '../../bus';
+import WorkflowTicketRow from './workflow/WorkflowTicketRow.vue';
+import { workflowStatusColor } from './workflow/workflowDisplay';
 
 export default {
+  components: {
+    WorkflowTicketRow,
+  },
   props: {
     pos_profile: {
       type: [Object, String],
@@ -465,170 +419,8 @@ export default {
       this.fetchBoard(true);
       this.restartPolling();
     },
-    parseDate(value) {
-      if (!value) return null;
-      if (value instanceof Date) return isNaN(value.getTime()) ? null : value;
-      var raw = String(value).trim();
-      if (!raw) return null;
-      if (/^\d{4}-\d{2}-\d{2}\s/.test(raw)) {
-        raw = raw.replace(' ', 'T');
-      }
-      var dateObj = new Date(raw);
-      if (!isNaN(dateObj.getTime())) return dateObj;
-      return null;
-    },
-    formatDateTime(value) {
-      var dt = this.parseDate(value);
-      if (!dt) return '-';
-      try {
-        return dt.toLocaleString();
-      } catch (e) {
-        return String(value || '-');
-      }
-    },
-    durationSince(value) {
-      var dt = this.parseDate(value);
-      if (!dt) return '-';
-      var deltaMs = Math.max(0, this.nowMs - dt.getTime());
-      var totalSec = Math.floor(deltaMs / 1000);
-      var days = Math.floor(totalSec / 86400);
-      var hours = Math.floor((totalSec % 86400) / 3600);
-      var mins = Math.floor((totalSec % 3600) / 60);
-      var secs = totalSec % 60;
-      if (days > 0) return days + 'd ' + hours + 'h';
-      if (hours > 0) return hours + 'h ' + mins + 'm';
-      if (mins > 0) return mins + 'm ' + secs + 's';
-      return secs + 's';
-    },
-    formatMoney(amount, currency) {
-      var num = parseFloat(amount || 0);
-      if (isNaN(num)) num = 0;
-      try {
-        if (currency) {
-          return new Intl.NumberFormat(undefined, {
-            style: 'currency',
-            currency: currency,
-          }).format(num);
-        }
-      } catch (e) {
-        // fallback to plain format
-      }
-      return (currency ? currency + ' ' : '') + num.toFixed(2);
-    },
     statusColor(status) {
-      var s = (status || '').toString();
-      if (s === 'Unpaid') return 'orange';
-      if (s === 'Paid') return 'blue';
-      if (s === 'Picking') return 'deep-purple';
-      if (s === 'Picked') return 'green';
-      if (s === 'On Hold') return 'red darken-1';
-      if (s === 'Dispatched') return 'teal';
-      return 'grey';
-    },
-    normalizeWorkflowStatus(value) {
-      return String(value || '').trim().toLowerCase();
-    },
-    workflowCurrentLabel(row) {
-      var displayStatus = String((row && row.display_status) || '').trim();
-      var tokenStatus = this.normalizeWorkflowStatus(row && row.token_status);
-      var pickingStatus = this.normalizeWorkflowStatus(row && row.picking_status);
-      var dispatchStatus = this.normalizeWorkflowStatus(row && row.dispatch_status);
-
-      if (displayStatus === 'Dispatched' || dispatchStatus === 'released') {
-        return __('Current state: Dispatched / released');
-      }
-      if (displayStatus === 'On Hold' || dispatchStatus === 'on hold' || pickingStatus === 'exception') {
-        return __('Current state: On hold / exception');
-      }
-      if (displayStatus === 'Picked' || pickingStatus === 'picked') {
-        return __('Current state: Picked, ready for dispatch');
-      }
-      if (displayStatus === 'Picking' || pickingStatus === 'in progress') {
-        return __('Current state: Picking in progress');
-      }
-      if (displayStatus === 'Paid' || tokenStatus === 'paid') {
-        return __('Current state: Paid, waiting for picking');
-      }
-      if (tokenStatus === 'expired') {
-        return __('Current state: Token expired');
-      }
-      if (tokenStatus === 'abandoned') {
-        return __('Current state: Token abandoned');
-      }
-      return __('Current state: Token created, payment pending');
-    },
-    workflowSteps(row) {
-      var tokenStatus = this.normalizeWorkflowStatus(row && row.token_status);
-      var pickingStatus = this.normalizeWorkflowStatus(row && row.picking_status);
-      var dispatchStatus = this.normalizeWorkflowStatus(row && row.dispatch_status);
-      var isPaid = tokenStatus === 'paid';
-      var isPicking = pickingStatus === 'in progress';
-      var isPicked = pickingStatus === 'picked';
-      var isException = pickingStatus === 'exception' || dispatchStatus === 'on hold';
-      var isReleased = dispatchStatus === 'released';
-      var isTerminalToken = tokenStatus === 'expired' || tokenStatus === 'abandoned';
-
-      var paymentState = 'pending';
-      if (isPaid || isPicked || isReleased || isPicking || isException) {
-        paymentState = 'done';
-      } else if (isTerminalToken) {
-        paymentState = 'blocked';
-      } else {
-        paymentState = 'active';
-      }
-
-      var pickState = 'pending';
-      if (isPicked || isReleased) {
-        pickState = 'done';
-      } else if (isException) {
-        pickState = 'blocked';
-      } else if (isPicking || isPaid) {
-        pickState = 'active';
-      }
-
-      var dispatchState = 'pending';
-      if (isReleased) {
-        dispatchState = 'done';
-      } else if (isException) {
-        dispatchState = 'blocked';
-      } else if (isPicked) {
-        dispatchState = 'active';
-      }
-
-      return [
-        {
-          key: 'token',
-          label: __('Token'),
-          icon: 'mdi-ticket-confirmation-outline',
-          state: isTerminalToken ? 'blocked' : 'done',
-        },
-        {
-          key: 'payment',
-          label: __('Payment'),
-          icon: 'mdi-cash-register',
-          state: paymentState,
-        },
-        {
-          key: 'pick',
-          label: __('Pick'),
-          icon: 'mdi-package-variant-closed',
-          state: pickState,
-        },
-        {
-          key: 'dispatch',
-          label: __('Dispatch'),
-          icon: 'mdi-truck-check-outline',
-          state: dispatchState,
-        },
-      ];
-    },
-    workflowStateAria(row) {
-      return [
-        this.workflowCurrentLabel(row),
-        __('Token') + ': ' + ((row && row.token_status) || '-'),
-        __('Pick') + ': ' + ((row && row.picking_status) || '-'),
-        __('Dispatch') + ': ' + ((row && row.dispatch_status) || '-'),
-      ].join(', ');
+      return workflowStatusColor(status);
     },
   },
   mounted() {
@@ -805,125 +597,6 @@ export default {
 .workflow-ticket-rail-list {
   overflow-y: auto;
   padding-bottom: 6px;
-}
-
-.workflow-ticket-row {
-  align-items: flex-start;
-  border-top: 1px solid #eef2f7;
-}
-
-.workflow-ticket-row-top {
-  display: flex;
-  justify-content: space-between;
-  gap: 8px;
-  align-items: flex-start;
-  margin-bottom: 3px;
-}
-
-.workflow-ticket-row-customer {
-  font-weight: 600;
-  font-size: 12px;
-  line-height: 1.2;
-  color: #111827;
-}
-
-.workflow-ticket-current-state {
-  margin: 2px 0 5px;
-  color: #0f172a;
-  font-size: 11px;
-  font-weight: 700;
-  line-height: 1.25;
-}
-
-.workflow-state-strip {
-  display: grid;
-  grid-template-columns: repeat(4, minmax(0, 1fr));
-  gap: 4px;
-  margin: 5px 0;
-}
-
-.workflow-state-step {
-  min-width: 0;
-  display: flex;
-  align-items: center;
-  gap: 3px;
-  padding: 4px 5px;
-  border-radius: 6px;
-  border: 1px solid #e5e7eb;
-  background: #f8fafc;
-  color: #64748b;
-}
-
-.workflow-state-step-done {
-  border-color: #a7f3d0;
-  background: #ecfdf5;
-  color: #047857;
-}
-
-.workflow-state-step-active {
-  border-color: #93c5fd;
-  background: #eff6ff;
-  color: #1d4ed8;
-  box-shadow: inset 0 0 0 1px rgba(37, 99, 235, 0.12);
-}
-
-.workflow-state-step-blocked {
-  border-color: #fecaca;
-  background: #fef2f2;
-  color: #b91c1c;
-}
-
-.workflow-state-dot {
-  flex: 0 0 auto;
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-}
-
-.workflow-state-label {
-  min-width: 0;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-  font-size: 10px;
-  font-weight: 700;
-}
-
-.workflow-ticket-state-fields {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 4px;
-  margin: 4px 0 5px;
-}
-
-.workflow-ticket-state-fields span {
-  max-width: 100%;
-  padding: 2px 5px;
-  border-radius: 5px;
-  background: #f1f5f9;
-  color: #475569;
-  font-size: 10px;
-  line-height: 1.25;
-}
-
-.workflow-ticket-row-meta {
-  color: #374151;
-  font-size: 11px;
-  line-height: 1.35;
-}
-
-.workflow-ticket-row-total {
-  font-weight: 600;
-  color: #111827;
-}
-
-.workflow-ticket-row-ids {
-  margin-top: 4px;
-  display: flex;
-  flex-direction: column;
-  gap: 1px;
-  color: #6b7280;
-  font-size: 10px;
 }
 
 .workflow-spin {
