@@ -221,6 +221,39 @@ export default {
     show_coupons() {
       evntBus.$emit("show_coupons", "true");
     },
+    get_items_cache_key() {
+      const site =
+        typeof window !== "undefined" && window.location
+          ? window.location.host || "site"
+          : "site";
+      const profile = this.pos_profile && this.pos_profile.name
+        ? this.pos_profile.name
+        : "profile";
+      const priceList =
+        this.customer_price_list ||
+        (this.pos_profile && this.pos_profile.selling_price_list) ||
+        "price-list";
+      const customer = this.customer || "";
+      return `items_storage:${site}:${profile}:${priceList}:${customer}`;
+    },
+    load_cached_items() {
+      try {
+        const raw = localStorage.getItem(this.get_items_cache_key());
+        if (!raw) return null;
+        const items = JSON.parse(raw);
+        return Array.isArray(items) ? items : null;
+      } catch (e) {
+        return null;
+      }
+    },
+    save_cached_items(items) {
+      try {
+        localStorage.setItem(this.get_items_cache_key(), JSON.stringify(items || []));
+        localStorage.removeItem("items_storage");
+      } catch (e) {
+        console.error(e);
+      }
+    },
     get_items() {
       if (!this.pos_profile) {
         console.error("No POS Profile");
@@ -239,12 +272,14 @@ export default {
       }
       if (
         vm.pos_profile.posa_local_storage &&
-        localStorage.items_storage &&
         !vm.pos_profile.pose_use_limit_search
       ) {
-        vm.items = JSON.parse(localStorage.getItem("items_storage"));
-        evntBus.$emit("set_all_items", vm.items);
-        vm.loading = false;
+        const cachedItems = vm.load_cached_items();
+        if (cachedItems) {
+          vm.items = cachedItems;
+          evntBus.$emit("set_all_items", vm.items);
+          vm.loading = false;
+        }
       }
       frappe.call({
         method: "posawesome.posawesome.api.posapp.get_items",
@@ -265,15 +300,7 @@ export default {
               vm.pos_profile.posa_local_storage &&
               !vm.pos_profile.pose_use_limit_search
             ) {
-              localStorage.setItem("items_storage", "");
-              try {
-                localStorage.setItem(
-                  "items_storage",
-                  JSON.stringify(r.message)
-                );
-              } catch (e) {
-                console.error(e);
-              }
+              vm.save_cached_items(r.message);
             }
             if (vm.pos_profile.pose_use_limit_search) {
               vm.enter_event();
