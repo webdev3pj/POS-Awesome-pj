@@ -205,6 +205,22 @@
                     <v-list-item-title>{{ __('Relay Settings') }}</v-list-item-title>
                   </v-list-item-content>
                 </v-list-item>
+                <template v-if="show_admin_role_testing">
+                  <v-divider class="my-0"></v-divider>
+                  <v-subheader>{{ __('Admin Test Role') }}</v-subheader>
+                  <v-list-item>
+                    <v-list-item-content>
+                      <v-select
+                        v-model="admin_test_role"
+                        :items="admin_test_role_options"
+                        dense
+                        outlined
+                        hide-details
+                        @change="change_admin_test_role"
+                      ></v-select>
+                    </v-list-item-content>
+                  </v-list-item>
+                </template>
               </v-list-item-group>
             </v-list>
           </v-card>
@@ -334,6 +350,12 @@
 
 <script>
 import { evntBus } from '../bus';
+import {
+  OPERATIONAL_ROLES,
+  isAdminRoleTestingEnabled,
+  resolveCurrentRole,
+  setAdminTestRole,
+} from '../utils/posRole';
 
 export default {
   // components: {MyPopup},
@@ -407,6 +429,9 @@ export default {
       browser_origin: typeof window !== 'undefined' && window.location ? window.location.origin : '',
       cloud_poll_timer: null,
       current_role: '',
+      admin_role_testing_enabled: false,
+      admin_test_role: '',
+      admin_test_role_options: OPERATIONAL_ROLES,
       workflow_monitor_pending_count: 0,
       workflow_monitor_expanded: false,
       relay_settings_dialog: false,
@@ -482,54 +507,26 @@ export default {
       const profile = this.pos_profile || {};
       return parseInt(profile.custom_have_token || 0, 10) === 1;
     },
+    show_admin_role_testing() {
+      return this.admin_role_testing_enabled;
+    },
   },
   methods: {
     sync_current_role() {
-      try {
-        const stored = (localStorage.getItem('pos_current_role') || '').trim();
-        if (stored) {
-          this.current_role = stored;
-          return;
-        }
-      } catch (e) {}
-      try {
-        const sourceRoles = [];
-        if (typeof frappe !== 'undefined' && Array.isArray(frappe.user_roles)) {
-          sourceRoles.push(...frappe.user_roles);
-        }
-        if (
-          typeof frappe !== 'undefined' &&
-          frappe.boot &&
-          frappe.boot.user &&
-          Array.isArray(frappe.boot.user.roles)
-        ) {
-          sourceRoles.push(...frappe.boot.user.roles);
-        }
-        const operationalRoles = Array.from(
-          new Set(
-            sourceRoles
-              .map((r) => String(r || '').trim())
-              .filter(Boolean)
-              .filter((r) =>
-                [
-                  'cline-Sales Associate',
-                  'cline-Cashier',
-                  'cline-Picker',
-                  'cline-Dispatch',
-                  'cline-Supervisor',
-                ].includes(r)
-              )
-          )
-        );
-        if (operationalRoles.length === 1) {
-          try {
-            localStorage.setItem('pos_current_role', operationalRoles[0]);
-          } catch (e) {}
-          this.current_role = operationalRoles[0];
-          return;
-        }
-      } catch (e) {}
-      this.current_role = '';
+      this.admin_role_testing_enabled = isAdminRoleTestingEnabled();
+      this.current_role = resolveCurrentRole();
+      this.admin_test_role = this.current_role;
+    },
+    change_admin_test_role(role) {
+      const selected = setAdminTestRole(role);
+      if (!selected) return;
+      this.current_role = selected;
+      this.admin_test_role = selected;
+      evntBus.$emit('show_mesage', {
+        text: __('Administrator test role changed. Reload POS if the visible workspace does not switch immediately.'),
+        color: 'info',
+      });
+      evntBus.$emit('pos_role_changed', { role: selected });
     },
     changePage(key) {
       this.$emit('changePage', key);

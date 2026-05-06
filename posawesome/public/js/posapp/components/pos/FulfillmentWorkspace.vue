@@ -536,6 +536,7 @@
 <script>
 import { evntBus } from "../../bus";
 import format from "../../format";
+import { resolveCurrentRole } from "../../utils/posRole";
 
 export default {
   name: "FulfillmentWorkspace",
@@ -547,6 +548,7 @@ export default {
   data() {
     return {
       queueRows: [],
+      queueSource: "",
       queueLoading: false,
       detailLoading: false,
       actionLoading: false,
@@ -588,47 +590,7 @@ export default {
     roleCode() {
       const p = (this.current_role || "").trim();
       if (p) return p;
-      try {
-        const stored = (localStorage.getItem("pos_current_role") || "").trim();
-        if (stored) return stored;
-      } catch (e) {}
-      try {
-        const sourceRoles = [];
-        if (typeof frappe !== "undefined" && Array.isArray(frappe.user_roles)) {
-          sourceRoles.push(...frappe.user_roles);
-        }
-        if (
-          typeof frappe !== "undefined" &&
-          frappe.boot &&
-          frappe.boot.user &&
-          Array.isArray(frappe.boot.user.roles)
-        ) {
-          sourceRoles.push(...frappe.boot.user.roles);
-        }
-        const operationalRoles = Array.from(
-          new Set(
-            sourceRoles
-              .map((r) => String(r || "").trim())
-              .filter(Boolean)
-              .filter((r) =>
-                [
-                  "cline-Sales Associate",
-                  "cline-Cashier",
-                  "cline-Picker",
-                  "cline-Dispatch",
-                  "cline-Supervisor",
-                ].includes(r)
-              )
-          )
-        );
-        if (operationalRoles.length === 1) {
-          try {
-            localStorage.setItem("pos_current_role", operationalRoles[0]);
-          } catch (e) {}
-          return operationalRoles[0];
-        }
-      } catch (e) {}
-      return "";
+      return resolveCurrentRole();
     },
     canPick() {
       return ["cline-Picker", "cline-Supervisor"].includes(this.roleCode);
@@ -655,6 +617,8 @@ export default {
       return Math.max(0, Number(raw || 1) || 1);
     },
     relayBase() {
+      const browserRelay = this.browserRelayBase();
+      if (browserRelay) return browserRelay;
       const v =
         this.pos_profile && typeof this.pos_profile === "object"
           ? (this.pos_profile.custom_edge_relay_url || "").trim()
@@ -930,6 +894,24 @@ export default {
     showMessage(text, color) {
       evntBus.$emit("show_mesage", { text, color });
     },
+    browserRelayBase() {
+      try {
+        const site =
+          typeof window !== "undefined" && window.location
+            ? window.location.host || "site"
+            : "site";
+        const profile =
+          this.pos_profile && typeof this.pos_profile === "object"
+            ? String(this.pos_profile.name || "default").trim() || "default"
+            : "default";
+        const raw = localStorage.getItem(`posa_edge_relay_config:${site}:${profile}`);
+        if (!raw) return "";
+        const parsed = JSON.parse(raw) || {};
+        return String(parsed.relay_url || "").trim().replace(/\/$/, "");
+      } catch (e) {
+        return "";
+      }
+    },
     relayHeaders(extra = {}) {
       const headers = { ...extra };
       try {
@@ -964,6 +946,7 @@ export default {
         const q = `?pos_profile_id=${encodeURIComponent(this.profileName)}&limit=200`;
         const data = await this.getJson(`/relay/pick-queue${q}`);
         this.queueRows = Array.isArray(data.rows) ? data.rows : [];
+        this.queueSource = "relay";
         if (!this.queueRows.some((r) => r.local_sale_ref === this.selectedRef)) {
           this.selectedRef = "";
           this.detail = null;
@@ -972,7 +955,23 @@ export default {
           this.selectRow(this.filteredRows[0]);
         }
       } catch (e) {
-        this.errorText = `Relay queue load failed: ${String(e.message || e)}`;
+        try {
+          const data = await this.fetchCloudQueue();
+          this.queueRows = this.mapCloudQueueRows(data.rows || []);
+          this.queueSource = "cloud";
+          if (!this.queueRows.some((r) => r.local_sale_ref === this.selectedRef)) {
+            this.selectedRef = "";
+            this.detail = null;
+          }
+          if ((preferSelect || !this.selectedRef) && this.filteredRows.length) {
+            this.selectRow(this.filteredRows[0]);
+          }
+          if (!quiet) {
+            this.showMessage(__("Loaded picker queue from cloud because local relay is unavailable."), "warning");
+          }
+        } catch (cloudErr) {
+          this.errorText = `Relay queue load failed: ${String(e.message || e)}; cloud fallback failed: ${String(cloudErr.message || cloudErr)}`;
+        }
       } finally {
         this.queueLoading = false;
       }
@@ -991,10 +990,68 @@ export default {
         this.detail = data;
         this.buildDraftsFromDetail();
       } catch (e) {
-        this.detailError = `Relay sale detail load failed: ${String(e.message || e)}`;
+        try {
+          this.detail = await this.fetchCloudDetail(localSaleRef);
+          this.buildDraftsFromDetail();
+        } catch (cloudErr) {
+          this.detailError = `Relay sale detail load failed: ${String(e.message || e)}; cloud fallback failed: ${String(cloudErr.message || cloudErr)}`;
+        }
       } finally {
         this.detailLoading = false;
       }
+    },
+    async fetchCloudQueue() {
+      const r = await frappe.call({
+        method: "posawesome.posawesome.api.posapp.get_relay_workflow_monitor_board",
+        args: {
+          pos_profile: this.profileName,
+          include_released: 0,
+          limit_page_length: 200,
+        },
+      });
+      return r.message || { rows: [] };
+    },
+    async fetchCloudDetail(localSaleRef) {
+      const r = await frappe.call({
+        method: "posawesome.posawesome.api.posapp.get_relay_fulfillment_detail",
+        args: {
+          sales_invoice: localSaleRef,
+          pos_profile: this.profileName,
+        },
+      });
+      return r.message || {};
+    },
+    mapCloudQueueRows(rows) {
+      return (Array.isArray(rows) ? rows : []).map((row) => {
+        const invoice = String(row.sales_invoice || row.local_sale_ref || "").trim();
+        const pick = this.cloudPickToRelayStatus(row.picking_status);
+        const dispatch = String(row.dispatch_status || "Pending").toUpperCase();
+        return {
+          ...row,
+          local_sale_ref: invoice,
+          token_id: row.token_id || row.sales_order || invoice,
+          customer_id: row.customer || row.customer_id || "",
+          customer_name: row.customer_name || "",
+          pick_status: pick,
+          dispatch_status: dispatch,
+          created_at: row.order_taken_at || row.paid_at || row.status_changed_at || "",
+          updated_at: row.status_changed_at || row.modified || "",
+        };
+      });
+    },
+    cloudPickToRelayStatus(status) {
+      const s = String(status || "").trim();
+      if (s === "In Progress") return "PICK_IN_PROGRESS";
+      if (s === "Picked") return "PICKED_READY_FOR_RELEASE";
+      if (s === "Exception") return "PICK_EXCEPTION";
+      return "PAID_PENDING_PICK";
+    },
+    relayPickToCloudStatus(status) {
+      const s = String(status || "").trim().toUpperCase();
+      if (s === "PICK_IN_PROGRESS") return "In Progress";
+      if (s === "PICKED_READY_FOR_RELEASE") return "Picked";
+      if (s === "PICK_EXCEPTION") return "Exception";
+      return "Not Started";
     },
     buildDraftsFromDetail() {
       const next = {};
@@ -1155,7 +1212,23 @@ export default {
         await this.fetchDetail(this.selectedRef);
         await this.fetchQueue(false);
       } catch (e) {
-        this.showMessage(`Pick update failed: ${String(e.message || e)}`, "error");
+        try {
+          await frappe.call({
+            method: "posawesome.posawesome.api.posapp.update_relay_picking_status",
+            args: {
+              sales_invoice: this.selectedRef,
+              picking_status: this.relayPickToCloudStatus(status),
+              exceptions_note: this.pickNotes || "",
+              pos_profile: this.profileName,
+              role: this.roleCode,
+            },
+          });
+          this.showMessage(__("Pick status updated in cloud because local relay is unavailable."), "warning");
+          await this.fetchDetail(this.selectedRef);
+          await this.fetchQueue(false);
+        } catch (cloudErr) {
+          this.showMessage(`Pick update failed: ${String(cloudErr.message || cloudErr || e.message || e)}`, "error");
+        }
       } finally {
         this.actionLoading = false;
       }
@@ -1194,7 +1267,22 @@ export default {
         await this.fetchDetail(this.selectedRef);
         await this.fetchQueue(false);
       } catch (e) {
-        this.showMessage(`Dispatch failed: ${String(e.message || e)}`, "error");
+        try {
+          await frappe.call({
+            method: "posawesome.posawesome.api.posapp.release_relay_dispatch",
+            args: {
+              sales_invoice: this.selectedRef,
+              allow_exception_release: this.allowPartialRelease ? 1 : 0,
+              pos_profile: this.profileName,
+              role: this.roleCode,
+            },
+          });
+          this.showMessage(__("Dispatch updated in cloud because local relay is unavailable."), "warning");
+          await this.fetchDetail(this.selectedRef);
+          await this.fetchQueue(false);
+        } catch (cloudErr) {
+          this.showMessage(`Dispatch failed: ${String(cloudErr.message || cloudErr || e.message || e)}`, "error");
+        }
       } finally {
         this.actionLoading = false;
       }
@@ -1230,7 +1318,24 @@ export default {
         await this.fetchDetail(this.selectedRef);
         await this.fetchQueue(false);
       } catch (e) {
-        this.showMessage(`Dispatch mismatch failed: ${String(e.message || e)}`, "error");
+        try {
+          await frappe.call({
+            method: "posawesome.posawesome.api.posapp.update_relay_picking_status",
+            args: {
+              sales_invoice: this.selectedRef,
+              picking_status: "Exception",
+              exceptions_note: reasonText || reasonCode,
+              pos_profile: this.profileName,
+              role: this.roleCode,
+            },
+          });
+          this.showMessage(__("Mismatch returned to picker in cloud because local relay is unavailable."), "warning");
+          this.mismatchReasonText = "";
+          await this.fetchDetail(this.selectedRef);
+          await this.fetchQueue(false);
+        } catch (cloudErr) {
+          this.showMessage(`Dispatch mismatch failed: ${String(cloudErr.message || cloudErr || e.message || e)}`, "error");
+        }
       } finally {
         this.actionLoading = false;
       }

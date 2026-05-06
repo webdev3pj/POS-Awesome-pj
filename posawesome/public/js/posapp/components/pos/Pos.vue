@@ -98,6 +98,7 @@ import Returns from './Returns.vue';
 import MpesaPayments from './Mpesa-Payments.vue';
 import WorkflowTicketRail from './WorkflowTicketRail.vue';
 import FulfillmentWorkspace from './FulfillmentWorkspace.vue';
+import { resolveCurrentRole } from '../../utils/posRole';
 
 export default {
   data: function () {
@@ -143,47 +144,7 @@ export default {
 
   methods: {
     get_current_role() {
-      try {
-        const stored = (localStorage.getItem('pos_current_role') || '').trim();
-        if (stored) return stored;
-      } catch (e) {}
-      try {
-        const sourceRoles = [];
-        if (typeof frappe !== 'undefined' && Array.isArray(frappe.user_roles)) {
-          sourceRoles.push(...frappe.user_roles);
-        }
-        if (
-          typeof frappe !== 'undefined' &&
-          frappe.boot &&
-          frappe.boot.user &&
-          Array.isArray(frappe.boot.user.roles)
-        ) {
-          sourceRoles.push(...frappe.boot.user.roles);
-        }
-        const operationalRoles = Array.from(
-          new Set(
-            sourceRoles
-              .map((r) => String(r || '').trim())
-              .filter(Boolean)
-              .filter((r) =>
-                [
-                  'cline-Sales Associate',
-                  'cline-Cashier',
-                  'cline-Picker',
-                  'cline-Dispatch',
-                  'cline-Supervisor',
-                ].includes(r)
-              )
-          )
-        );
-        if (operationalRoles.length === 1) {
-          try {
-            localStorage.setItem('pos_current_role', operationalRoles[0]);
-          } catch (e) {}
-          return operationalRoles[0];
-        }
-      } catch (e) {}
-      return '';
+      return resolveCurrentRole();
     },
     refresh_current_role() {
       this.current_role = this.get_current_role();
@@ -251,10 +212,19 @@ export default {
               text: `POS Shift Closed`,
               color: 'success',
             });
+            evntBus.$emit('closing_pos_submitted');
             this.check_opening_entry();
           } else {
+            evntBus.$emit('closing_pos_submit_failed');
             console.log(r);
           }
+        })
+        .catch((e) => {
+          evntBus.$emit('closing_pos_submit_failed');
+          evntBus.$emit('show_mesage', {
+            text: (e && e.message) || __('Failed to close POS shift. Please try again.'),
+            color: 'error',
+          });
         });
     },
     get_offers(pos_profile) {
@@ -326,6 +296,9 @@ export default {
       evntBus.$on('submit_closing_pos', (data) => {
         this.submit_closing_pos(data);
       });
+      evntBus.$on('pos_role_changed', () => {
+        this.refresh_current_role();
+      });
     });
   },
   beforeDestroy() {
@@ -336,6 +309,7 @@ export default {
     evntBus.$off('show_coupons');
     evntBus.$off('open_closing_dialog');
     evntBus.$off('submit_closing_pos');
+    evntBus.$off('pos_role_changed');
     if (typeof window !== 'undefined' && window.removeEventListener && this._handle_storage_event) {
       window.removeEventListener('storage', this._handle_storage_event);
     }

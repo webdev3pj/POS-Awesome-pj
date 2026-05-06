@@ -75,6 +75,7 @@
 <script>
 import { evntBus } from "../../bus";
 import format from "../../format";
+import { resolveCurrentRole } from "../../utils/posRole";
 
 export default {
   mixins: [format],
@@ -114,11 +115,7 @@ export default {
       return { maxAge, allowStale, historyDays };
     },
     getCurrentRole() {
-      try {
-        return (localStorage.getItem("pos_current_role") || "").trim();
-      } catch (e) {
-        return "";
-      }
+      return resolveCurrentRole();
     },
     get_relay_base_url() {
       return String((this.pos_profile && this.pos_profile.custom_edge_relay_url) || "")

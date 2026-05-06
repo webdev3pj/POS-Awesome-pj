@@ -62,10 +62,10 @@
         </v-card-text>
         <v-card-actions>
           <v-spacer></v-spacer>
-          <v-btn color="error" dark @click="close_dialog">{{
+          <v-btn color="error" dark :disabled="is_submitting" @click="close_dialog">{{
             __('Close')
           }}</v-btn>
-          <v-btn color="success" dark @click="submit_dialog">{{
+          <v-btn color="success" dark :loading="is_submitting" :disabled="is_submitting" @click="submit_dialog">{{
             __('Submit')
           }}</v-btn>
         </v-card-actions>
@@ -84,6 +84,7 @@ export default {
     itemsPerPage: 20,
     dialog_data: {},
     pos_profile: '',
+    is_submitting: false,
     headers: [
       {
         text: __('Mode of Payment'),
@@ -114,15 +115,24 @@ export default {
       this.closingDialog = false;
     },
     submit_dialog() {
+      if (this.is_submitting) return;
+      this.is_submitting = true;
       evntBus.$emit('submit_closing_pos', this.dialog_data);
-      this.closingDialog = false;
     },
   },
 
   created: function () {
     evntBus.$on('open_ClosingDialog', (data) => {
       this.closingDialog = true;
+      this.is_submitting = false;
       this.dialog_data = data;
+    });
+    evntBus.$on('closing_pos_submitted', () => {
+      this.is_submitting = false;
+      this.closingDialog = false;
+    });
+    evntBus.$on('closing_pos_submit_failed', () => {
+      this.is_submitting = false;
     });
     evntBus.$on('register_pos_profile', (data) => {
       this.pos_profile = data.pos_profile;

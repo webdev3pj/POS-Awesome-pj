@@ -34,6 +34,17 @@
                   <strong>Role:</strong> {{ detected_role_display }}
                 </v-alert>
               </v-col>
+              <v-col cols="12" v-if="admin_role_testing_enabled">
+                <v-select
+                  v-model="detected_role"
+                  :items="admin_test_role_options"
+                  :label="__('Administrator Test Role')"
+                  dense
+                  outlined
+                  hide-details="auto"
+                  @change="set_admin_test_role"
+                ></v-select>
+              </v-col>
               <v-col cols="12" v-if="role_error">
                 <v-alert type="error" dense>
                   {{ role_error }}
@@ -99,6 +110,7 @@
 <script>
 import { evntBus } from '../../bus';
 import format from '../../format';
+import { OPERATIONAL_ROLES, resolveCurrentRole, setAdminTestRole } from '../../utils/posRole';
 export default {
   mixins: [format],
   props: ['dialog'],
@@ -115,6 +127,8 @@ export default {
       // Role derived from ERPNext user roles (not user-selectable)
       detected_role: '',
       role_error: '',
+      admin_role_testing_enabled: false,
+      admin_test_role_options: OPERATIONAL_ROLES,
       payments_method_data: [],
       payments_methods: [],
       payments_methods_headers: [
@@ -206,8 +220,20 @@ export default {
             vm.pos_profiles_data = r.message.pos_profiles_data;
             vm.payments_method_data = r.message.payments_method;
             // Get role from user's ERPNext roles (derived, not user-selected)
+            vm.admin_role_testing_enabled = parseInt(r.message.admin_role_testing_enabled || 0, 10) === 1;
+            try {
+              if (vm.admin_role_testing_enabled) {
+                localStorage.setItem("posa_admin_role_testing_enabled", "1");
+              } else {
+                localStorage.removeItem("posa_admin_role_testing_enabled");
+              }
+            } catch (e) {}
             vm.detected_role = r.message.user_role || '';
             vm.role_error = r.message.role_error || '';
+            if (vm.admin_role_testing_enabled) {
+              vm.detected_role = resolveCurrentRole({ fallback: vm.detected_role || "cline-Supervisor" });
+              vm.role_error = "";
+            }
             try {
               const relayKey = String(r.message.relay_client_auth_key || "").trim();
               if (relayKey) {
@@ -237,7 +263,11 @@ export default {
       this.is_loading = true;
       const vm = this;
       // Store role in localStorage for session
-      localStorage.setItem('pos_current_role', this.detected_role);
+      if (this.admin_role_testing_enabled) {
+        setAdminTestRole(this.detected_role);
+      } else {
+        localStorage.setItem('pos_current_role', this.detected_role);
+      }
       const method = this.requires_cash_opening
         ? 'posawesome.posawesome.api.posapp.create_opening_voucher'
         : 'posawesome.posawesome.api.posapp.bootstrap_pos_session';
@@ -264,6 +294,13 @@ export default {
         .catch(() => {
           vm.is_loading = false;
         });
+    },
+    set_admin_test_role(role) {
+      const selected = setAdminTestRole(role);
+      if (selected) {
+        this.detected_role = selected;
+        this.role_error = "";
+      }
     },
     go_desk() {
       frappe.set_route('/');
