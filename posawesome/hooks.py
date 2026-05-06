@@ -21,8 +21,6 @@ app_include_js = [
     "/assets/posawesome/node_modules/vuetify/dist/vuetify.js",
     "posawesome.bundle.js",
     "/assets/posawesome/js/xlsx.full.min.js",
-    "/assets/posawesome/js/sales_person_commiss.js",
-    "/assets/posawesome/js/sales_partner_commis.js",
 ]
 
 
