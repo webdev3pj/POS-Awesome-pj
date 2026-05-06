@@ -4,6 +4,7 @@
 
 from __future__ import unicode_literals
 import json
+import time
 import frappe
 import copy
 import requests
@@ -34,6 +35,14 @@ from posawesome.posawesome.doctype.delivery_charges.delivery_charges import (
     get_applicable_delivery_charges as _get_applicable_delivery_charges,
 )
 from frappe.utils.caching import redis_cache
+
+OPERATIONAL_ROLES = (
+    "cline-Sales Associate",
+    "cline-Cashier",
+    "cline-Picker",
+    "cline-Dispatch",
+    "cline-Supervisor",
+)
 
 
 @frappe.whitelist()
@@ -69,11 +78,19 @@ def get_opening_dialog_data():
             "POS Profile", mode["parent"], "currency"
         )
 
-    # Derive role from ERPNext user roles (not user-selectable)
+    admin_role_testing_enabled = _is_admin_role_testing_enabled()
+    data["admin_role_testing_enabled"] = 1 if admin_role_testing_enabled else 0
+    data["admin_test_roles"] = list(OPERATIONAL_ROLES) if admin_role_testing_enabled else []
+
+    # Derive role from ERPNext user roles (not user-selectable), except the
+    # local Administrator/dev-mode test harness.
     user_roles = frappe.get_roles()
     cline_roles = [r for r in user_roles if r.startswith('cline-')]
 
-    if len(cline_roles) > 1:
+    if admin_role_testing_enabled:
+        data["user_role"] = "cline-Supervisor"
+        data["role_error"] = ""
+    elif len(cline_roles) > 1:
         # Multiple operational roles - block login
         data["user_role"] = ""
         data["role_error"] = frappe._(
@@ -111,6 +128,20 @@ def get_opening_dialog_data():
     data["relay_client_auth_required"] = 1 if relay_client_auth_key else 0
 
     return data
+
+
+def _is_admin_role_testing_enabled():
+    return frappe.session.user == "Administrator" and cint(frappe.conf.get("developer_mode") or 0) == 1
+
+
+def _admin_requested_test_role():
+    if not _is_admin_role_testing_enabled():
+        return ""
+    for key in ("role", "session_role", "posa_test_role"):
+        role = cstr(frappe.form_dict.get(key) or "").strip()
+        if role in OPERATIONAL_ROLES:
+            return role
+    return "cline-Supervisor"
 
 
 @frappe.whitelist()
@@ -177,6 +208,9 @@ def update_opening_shift_data(data, pos_profile):
 
 
 def _get_single_operational_role():
+    admin_role = _admin_requested_test_role()
+    if admin_role:
+        return admin_role
     user_roles = frappe.get_roles() or []
     cline_roles = [r for r in user_roles if cstr(r).startswith("cline-")]
     if len(cline_roles) != 1:
@@ -1242,6 +1276,86 @@ def get_relay_workflow_state(sales_invoice):
 
     state_doc = _upsert_relay_workflow_state(invoice_doc)
     return state_doc.as_dict() if state_doc else {}
+
+
+@frappe.whitelist()
+def get_relay_fulfillment_detail(sales_invoice, pos_profile=None, pos_profile_id=None):
+    if not _relay_workflow_doctype_exists():
+        return {}
+
+    invoice_doc = frappe.get_doc("Sales Invoice", sales_invoice)
+    effective_pos_profile = _resolve_relay_workflow_pos_profile(
+        invoice_doc, pos_profile, pos_profile_id
+    )
+    if not _is_relay_workflow_enabled(effective_pos_profile):
+        frappe.throw(
+            _("Relay workflow is not enabled for POS Profile {0}").format(
+                effective_pos_profile or invoice_doc.pos_profile
+            )
+        )
+
+    state_doc = _upsert_relay_workflow_state(invoice_doc, token_status="Paid")
+    state = state_doc.as_dict() if state_doc else {}
+    sale = {
+        "local_sale_ref": invoice_doc.name,
+        "token_id": state.get("token_id") or invoice_doc.name,
+        "pos_profile_id": effective_pos_profile or invoice_doc.pos_profile,
+        "customer_id": invoice_doc.customer,
+        "customer_name": invoice_doc.customer_name,
+        "currency": invoice_doc.currency,
+        "grand_total": invoice_doc.grand_total,
+        "paid": 1 if invoice_doc.docstatus == 1 else 0,
+        "pick_status": _cloud_pick_to_relay_status(state.get("picking_status")),
+        "dispatch_status": cstr(state.get("dispatch_status") or "Pending").upper(),
+        "released_at": state.get("released_at"),
+        "dispatch_proof": state.get("dispatch_proof") or state.get("dispatch_proof_payload") or {},
+        "dispatch_proof_payload": state.get("dispatch_proof_payload") or state.get("dispatch_proof") or {},
+        "cashier_adjustment_required": cint(state.get("cashier_adjustment_required") or 0),
+        "created_at": invoice_doc.creation,
+        "updated_at": state.get("modified") or invoice_doc.modified,
+    }
+    lines = []
+    for row in invoice_doc.items:
+        conversion_factor = flt(row.get("conversion_factor") or 1) or 1
+        qty = flt(row.get("qty") or 0)
+        stock_qty = flt(row.get("stock_qty") or (qty * conversion_factor))
+        lines.append(
+            {
+                "id": row.idx,
+                "item_code": row.item_code,
+                "item_name": row.item_name,
+                "qty": qty,
+                "uom": row.uom,
+                "rate": row.rate,
+                "amount": row.amount,
+                "pick_status": sale["pick_status"],
+                "payload": {
+                    "stock_uom": row.stock_uom,
+                    "stock_qty": stock_qty,
+                    "conversion_factor": conversion_factor,
+                },
+            }
+        )
+    return {
+        "ok": True,
+        "sale": sale,
+        "lines": lines,
+        "pick_events": [],
+        "dispatch_events": [],
+        "outbox_events": [],
+        "workflow_state": state,
+    }
+
+
+def _cloud_pick_to_relay_status(picking_status):
+    status = cstr(picking_status or "").strip()
+    if status == "In Progress":
+        return "PICK_IN_PROGRESS"
+    if status == "Picked":
+        return "PICKED_READY_FOR_RELEASE"
+    if status == "Exception":
+        return "PICK_EXCEPTION"
+    return "PAID_PENDING_PICK"
 
 
 @frappe.whitelist()
@@ -2352,7 +2466,7 @@ def get_draft_invoices(pos_opening_shift):
 def delete_invoice(invoice):
     if frappe.get_value("Sales Invoice", invoice, "posa_is_printed"):
         frappe.throw(_("This invoice {0} cannot be deleted").format(invoice))
-    frappe.delete_doc("Sales Invoice", invoice, force=1)
+    _delete_sales_invoice_with_retry(invoice, force=1)
     return _("Invoice {0} Deleted").format(invoice)
 
 
@@ -3823,7 +3937,22 @@ def create_sales_invoice_from_order(sales_order):
 
 @frappe.whitelist()
 def delete_sales_invoice(sales_invoice):
-    frappe.delete_doc("Sales Invoice", sales_invoice)
+    _delete_sales_invoice_with_retry(sales_invoice)
+
+
+def _delete_sales_invoice_with_retry(sales_invoice, force=0, attempts=3):
+    last_error = None
+    for attempt in range(attempts):
+        try:
+            frappe.delete_doc("Sales Invoice", sales_invoice, force=force)
+            return
+        except frappe.QueryDeadlockError as exc:
+            last_error = exc
+            frappe.db.rollback()
+            if attempt >= attempts - 1:
+                break
+            time.sleep(0.2 * (attempt + 1))
+    raise last_error
 
 
 @frappe.whitelist()

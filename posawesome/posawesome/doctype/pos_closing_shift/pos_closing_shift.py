@@ -5,6 +5,7 @@
 from __future__ import unicode_literals
 import frappe
 import json
+import time
 from frappe import _
 from frappe.model.document import Document
 from frappe.utils import flt
@@ -268,12 +269,27 @@ def make_closing_shift_from_opening(opening_shift):
 
 @frappe.whitelist()
 def submit_closing_shift(closing_shift):
-    closing_shift = json.loads(closing_shift)
-    closing_shift_doc = frappe.get_doc(closing_shift)
-    closing_shift_doc.flags.ignore_permissions = True
-    closing_shift_doc.save()
+    closing_shift_payload = json.loads(closing_shift)
+    closing_shift_doc = _save_closing_shift_with_retry(closing_shift_payload)
     closing_shift_doc.submit()
     return closing_shift_doc.name
+
+
+def _save_closing_shift_with_retry(closing_shift_payload, attempts=3):
+    last_error = None
+    for attempt in range(attempts):
+        try:
+            closing_shift_doc = frappe.get_doc(closing_shift_payload)
+            closing_shift_doc.flags.ignore_permissions = True
+            closing_shift_doc.save()
+            return closing_shift_doc
+        except frappe.QueryDeadlockError as exc:
+            last_error = exc
+            frappe.db.rollback()
+            if attempt >= attempts - 1:
+                break
+            time.sleep(0.2 * (attempt + 1))
+    raise last_error
 
 
 def submit_printed_invoices(pos_opening_shift):
