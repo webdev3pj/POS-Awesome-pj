@@ -230,22 +230,36 @@ export default {
       if (typeof value === 'string') return value;
       return (value.name || '').toString();
     },
+    normalizeRelayUrl(relayUrl) {
+      return String(relayUrl || '').trim().replace(/\/$/, '');
+    },
     getRelayBaseUrl() {
       try {
-        const site =
+        const bootSite =
+          (typeof frappe !== 'undefined' &&
+            frappe.boot &&
+            (frappe.boot.sitename || frappe.boot.site_name)) ||
+          '';
+        const browserSite =
           typeof window !== 'undefined' && window.location
             ? window.location.host || 'site'
             : 'site';
+        const site = bootSite || browserSite;
         const profile =
           this.pos_profile && typeof this.pos_profile === 'object'
             ? String(this.pos_profile.name || 'default').trim() || 'default'
             : 'default';
-        const raw =
-          localStorage.getItem(`posa_edge_relay_config:${site}:${profile}`) ||
-          localStorage.getItem(`posa_edge_relay_config:${site}:__default__`);
+        const sites = Array.from(new Set([site, bootSite, browserSite].filter(Boolean)));
+        let raw = '';
+        for (const siteKey of sites) {
+          raw =
+            localStorage.getItem(`posa_edge_relay_config:${siteKey}:${profile}`) ||
+            localStorage.getItem(`posa_edge_relay_config:${siteKey}:__default__`);
+          if (raw) break;
+        }
         if (!raw) return '';
         const parsed = JSON.parse(raw) || {};
-        return String(parsed.relay_url || '').trim().replace(/\/$/, '');
+        return this.normalizeRelayUrl(parsed.relay_url);
       } catch (e) {
         return '';
       }

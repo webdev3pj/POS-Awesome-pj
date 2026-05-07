@@ -117,6 +117,9 @@ export default {
     getCurrentRole() {
       return resolveCurrentRole();
     },
+    normalize_relay_url(relayUrl) {
+      return String(relayUrl || "").trim().replace(/\/$/, "");
+    },
     relay_config_storage_key() {
       const site =
         (frappe.boot && (frappe.boot.sitename || frappe.boot.site_name)) ||
@@ -139,7 +142,7 @@ export default {
           localStorage.getItem(this.relay_default_config_storage_key());
         if (!raw) return null;
         const parsed = JSON.parse(raw) || {};
-        const relayUrl = String(parsed.relay_url || "").trim().replace(/\/$/, "");
+        const relayUrl = this.normalize_relay_url(parsed.relay_url);
         if (!relayUrl) return null;
         return { relay_url: relayUrl };
       } catch (e) {

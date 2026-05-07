@@ -1045,11 +1045,11 @@ export default {
             allow_cloud_fallback_when_relay_down: !!relay.allow_cloud_fallback_when_relay_down,
             relay_source: relay.relay_source || '',
             relay_config_identified: !!relay.relay_config_identified,
-            relay_url: relay.relay_url || '',
+            relay_url: this.normalize_relay_url(relay.relay_url || ''),
             relay_host: relay.relay_host || '',
             relay_host_type: relay.relay_host_type || '',
-            profile_relay_url: relay.profile_relay_url || '',
-            site_relay_url: relay.site_relay_url || '',
+            profile_relay_url: this.normalize_relay_url(relay.profile_relay_url || ''),
+            site_relay_url: this.normalize_relay_url(relay.site_relay_url || ''),
             http_status: relay.http_status || null,
             cloud_http_status:
               relay.cloud_http_status !== undefined && relay.cloud_http_status !== null

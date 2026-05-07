@@ -844,6 +844,9 @@ export default {
       evntBus.$emit("show_payment", "false");
       evntBus.$emit("set_customer_readonly", false);
     },
+    normalize_relay_url(relayUrl) {
+      return String(relayUrl || "").trim().replace(/\/$/, "");
+    },
     get_effective_relay_connected() {
       if (typeof this.relay_status.effective_connected === "boolean") {
         return this.relay_status.effective_connected;
@@ -855,7 +858,7 @@ export default {
         (this.relay_status && this.relay_status.profile_relay_url) ||
         (this.relay_status && this.relay_status.relay_url) ||
         "";
-      return String(raw || "").trim().replace(/\/$/, "");
+      return this.normalize_relay_url(raw);
     },
     relay_allows_cloud_fallback_when_down() {
       if (typeof this.relay_status.allow_cloud_fallback_when_relay_down === "boolean") {

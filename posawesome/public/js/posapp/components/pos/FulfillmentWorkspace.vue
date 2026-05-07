@@ -890,48 +890,104 @@ export default {
     showMessage(text, color) {
       evntBus.$emit("show_mesage", { text, color });
     },
+    normalizeRelayUrl(relayUrl) {
+      return String(relayUrl || "").trim().replace(/\/$/, "");
+    },
     browserRelayBase() {
       try {
-        const site =
+        const bootSite =
+          (typeof frappe !== "undefined" &&
+            frappe.boot &&
+            (frappe.boot.sitename || frappe.boot.site_name)) ||
+          "";
+        const browserSite =
           typeof window !== "undefined" && window.location
             ? window.location.host || "site"
             : "site";
+        const site = bootSite || browserSite;
         const profile =
           this.pos_profile && typeof this.pos_profile === "object"
             ? String(this.pos_profile.name || "default").trim() || "default"
             : "default";
-        const raw =
-          localStorage.getItem(`posa_edge_relay_config:${site}:${profile}`) ||
-          localStorage.getItem(`posa_edge_relay_config:${site}:__default__`);
+        const sites = Array.from(new Set([site, bootSite, browserSite].filter(Boolean)));
+        let raw = "";
+        for (const siteKey of sites) {
+          raw =
+            localStorage.getItem(`posa_edge_relay_config:${siteKey}:${profile}`) ||
+            localStorage.getItem(`posa_edge_relay_config:${siteKey}:__default__`);
+          if (raw) break;
+        }
         if (!raw) return "";
         const parsed = JSON.parse(raw) || {};
-        return String(parsed.relay_url || "").trim().replace(/\/$/, "");
+        return this.normalizeRelayUrl(parsed.relay_url);
       } catch (e) {
         return "";
       }
     },
     relayHeaders(extra = {}) {
       const headers = { ...extra };
+      const role = this.roleCode || resolveCurrentRole();
+      if (role) headers["X-Relay-Role"] = role;
       try {
         const relayKey = (localStorage.getItem("posa_relay_client_key") || "").trim();
         if (relayKey) headers["X-Relay-Client-Key"] = relayKey;
       } catch (e) {}
       return headers;
     },
+    formatError(error) {
+      if (!error) return "";
+      if (typeof error === "string") return error;
+      if (error.message) return String(error.message);
+      if (error._server_messages) return String(error._server_messages);
+      if (error.exc) return String(error.exc);
+      if (error.responseJSON) {
+        const data = error.responseJSON;
+        return String(data.message || data.exc || data.exception || JSON.stringify(data));
+      }
+      try {
+        return JSON.stringify(error);
+      } catch (e) {
+        return String(error);
+      }
+    },
     async getJson(path) {
-      const r = await fetch(`${this.relayBase}${path}`, {
-        headers: this.relayHeaders({ Accept: "application/json" }),
-      });
+      const base = this.relayBase;
+      if (!base) {
+        throw new Error("Relay URL is not configured in this browser.");
+      }
+      const url = `${base}${path}`;
+      let r;
+      try {
+        r = await fetch(url, {
+          mode: "cors",
+          cache: "no-store",
+          headers: this.relayHeaders({ Accept: "application/json" }),
+        });
+      } catch (error) {
+        throw new Error(`${this.formatError(error)} (${url})`);
+      }
       const data = await r.json().catch(() => ({}));
       if (!r.ok) throw new Error(data.message || data.code || `HTTP ${r.status}`);
       return data;
     },
     async postJson(path, payload) {
-      const r = await fetch(`${this.relayBase}${path}`, {
-        method: "POST",
-        headers: this.relayHeaders({ "Content-Type": "application/json", Accept: "application/json" }),
-        body: JSON.stringify(payload || {}),
-      });
+      const base = this.relayBase;
+      if (!base) {
+        throw new Error("Relay URL is not configured in this browser.");
+      }
+      const url = `${base}${path}`;
+      let r;
+      try {
+        r = await fetch(url, {
+          method: "POST",
+          mode: "cors",
+          cache: "no-store",
+          headers: this.relayHeaders({ "Content-Type": "application/json", Accept: "application/json" }),
+          body: JSON.stringify(payload || {}),
+        });
+      } catch (error) {
+        throw new Error(`${this.formatError(error)} (${url})`);
+      }
       const data = await r.json().catch(() => ({}));
       if (!r.ok || data.ok === false) throw new Error(data.message || data.code || `HTTP ${r.status}`);
       return data;
@@ -968,7 +1024,7 @@ export default {
             this.showMessage(__("Loaded picker queue from cloud because local relay is unavailable."), "warning");
           }
         } catch (cloudErr) {
-          this.errorText = `Relay queue load failed: ${String(e.message || e)}; cloud fallback failed: ${String(cloudErr.message || cloudErr)}`;
+          this.errorText = `Relay queue load failed: ${this.formatError(e)}; cloud fallback failed: ${this.formatError(cloudErr)}`;
         }
       } finally {
         this.queueLoading = false;
@@ -992,7 +1048,7 @@ export default {
           this.detail = await this.fetchCloudDetail(localSaleRef);
           this.buildDraftsFromDetail();
         } catch (cloudErr) {
-          this.detailError = `Relay sale detail load failed: ${String(e.message || e)}; cloud fallback failed: ${String(cloudErr.message || cloudErr)}`;
+          this.detailError = `Relay sale detail load failed: ${this.formatError(e)}; cloud fallback failed: ${this.formatError(cloudErr)}`;
         }
       } finally {
         this.detailLoading = false;
