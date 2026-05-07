@@ -451,6 +451,9 @@
                       <div class="caption red--text mt-2" v-if="!dispatchProofValid">
                         {{ __('Release requires Acknowledged By and Proof Mode.') }}
                       </div>
+                      <div class="caption red--text mt-2" v-if="releaseBlockedReason">
+                        {{ releaseBlockedReason }}
+                      </div>
                     </v-card-text>
                   </v-card>
                   <v-card outlined class="mb-2" v-if="canDispatch">
@@ -665,6 +668,27 @@ export default {
         (pick === "PICKED_READY_FOR_RELEASE" || (this.allowPartialRelease && pick === "PICK_EXCEPTION")) &&
         this.dispatchProofValid
       );
+    },
+    releaseBlockedReason() {
+      if (!this.canDispatch || !this.detail || !this.detail.sale || this.canRelease) return "";
+      const sale = this.detail.sale;
+      if (String(sale.dispatch_status || "").toUpperCase() === "RELEASED") {
+        return __("Release is disabled because this sale is already released.");
+      }
+      if (parseInt(sale.paid || 0, 10) !== 1) {
+        return __("Release is disabled until the sale is marked paid.");
+      }
+      const pick = String(sale.pick_status || "").toUpperCase();
+      if (pick === "PICK_EXCEPTION" && !this.allowPartialRelease) {
+        return __("Release is disabled for pick exceptions unless partial/exception release is allowed.");
+      }
+      if (pick !== "PICKED_READY_FOR_RELEASE" && !(this.allowPartialRelease && pick === "PICK_EXCEPTION")) {
+        return __("Release is disabled until picking is marked Picked Ready.");
+      }
+      if (!this.dispatchProofValid) {
+        return __("Release is disabled until dispatch proof is complete.");
+      }
+      return "";
     },
     isDetailedView() {
       return String(this.viewMode || "detailed") !== "simple";
