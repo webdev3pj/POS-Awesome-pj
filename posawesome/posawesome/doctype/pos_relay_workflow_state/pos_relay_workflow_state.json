@@ -23,6 +23,8 @@
   "picked_at",
   "is_offline_recorded",
   "last_sync_status",
+  "local_token_id",
+  "local_sale_ref",
   "section_break_dispatch",
   "exceptions_note",
   "released_by",
@@ -159,6 +161,20 @@
    "options": "Not Applicable\nPending\nSynced\nFailed"
   },
   {
+   "fieldname": "local_token_id",
+   "fieldtype": "Data",
+   "in_standard_filter": 1,
+   "label": "Relay Local Token ID",
+   "read_only": 1
+  },
+  {
+   "fieldname": "local_sale_ref",
+   "fieldtype": "Data",
+   "in_standard_filter": 1,
+   "label": "Relay Local Sale Ref",
+   "read_only": 1
+  },
+  {
    "fieldname": "section_break_dispatch",
    "fieldtype": "Section Break",
    "label": "Dispatch"
@@ -218,4 +234,3 @@
  "sort_order": "DESC",
  "track_changes": 1
 }
-
