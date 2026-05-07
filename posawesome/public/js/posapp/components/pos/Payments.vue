@@ -828,6 +828,24 @@ export default {
       } catch (e) {}
       return headers;
     },
+    get_explicit_token_ref(source = {}) {
+      const doc = this.invoice_doc || {};
+      const line = (
+        (Array.isArray(doc.items)
+          ? doc.items.find((row) => row && row.sales_order)
+          : null) || {}
+      );
+      return String(
+        source.token_id ||
+          source.sales_order ||
+          source.sales_order_name ||
+          doc.token_id ||
+          doc.sales_order ||
+          doc.sales_order_name ||
+          line.sales_order ||
+          ""
+      ).trim();
+    },
     block_sales_associate_payment() {
       this.current_role = this.get_current_role();
       if (!this.is_sales_associate_role) {
@@ -894,16 +912,7 @@ export default {
                       text: __(
                         "Relay Queue: Token {0} is {1}, Picking {2}",
                         [
-                          relay.token_id ||
-                            vm.invoice_doc.token_id ||
-                            vm.invoice_doc.sales_order ||
-                            vm.invoice_doc.sales_order_name ||
-                            ((Array.isArray(vm.invoice_doc.items)
-                              ? vm.invoice_doc.items.find((row) => (row || {}).sales_order)
-                              : null) || {}).sales_order ||
-                            (/^SAL-ORD-/i.test(String(vm.invoice_doc.name || ""))
-                              ? vm.invoice_doc.name
-                              : String(vm.invoice_doc.name || "").slice(-5)),
+                          vm.get_explicit_token_ref(relay) || __("Unknown"),
                           relay.token_status,
                           relay.picking_status || "Not Started",
                         ]
@@ -1158,26 +1167,15 @@ export default {
       const base = relayBaseUrl.replace(/\/$/, "");
       const endpoint = `${base}/relay/commit-invoice`;
 
-      const docName = String((vm.invoice_doc && vm.invoice_doc.name) || "").trim();
-      const lineItemSalesOrderRef = String(
-        (
-          (Array.isArray(vm.invoice_doc && vm.invoice_doc.items)
-            ? vm.invoice_doc.items.find((row) => (row || {}).sales_order)
-            : null) || {}
-        ).sales_order || ""
-      ).trim();
-      const salesOrderTokenRef = String(
-        (vm.invoice_doc &&
-          (vm.invoice_doc.sales_order ||
-            vm.invoice_doc.sales_order_name ||
-            lineItemSalesOrderRef)) ||
-          ""
-      ).trim();
-      const fallbackTokenId =
-        salesOrderTokenRef || (/^SAL-ORD-/i.test(docName) ? docName : docName.slice(-5));
-      const tokenId = String(
-        (vm.invoice_doc && vm.invoice_doc.token_id) || fallbackTokenId || ""
-      ).trim();
+      const tokenId = vm.get_explicit_token_ref();
+      if (!tokenId) {
+        evntBus.$emit("show_mesage", {
+          text: __("Token reference missing. Please select the Sales Order/token again."),
+          color: "error",
+        });
+        frappe.utils.play_sound("error");
+        return;
+      }
       const idempotencyKey = `${
         vm.invoice_doc.name || "DRAFT"
       }|${Date.now()}|${Math.random().toString(36).slice(2, 10)}`;

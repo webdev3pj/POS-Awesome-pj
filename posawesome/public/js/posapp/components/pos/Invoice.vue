@@ -1035,15 +1035,30 @@ export default {
       );
       return { maxAgeDays, allowStale, historyDays };
     },
-    get_relay_client_headers(extra = {}) {
-      const headers = { ...extra };
-      try {
-        const relayKey = (localStorage.getItem("posa_relay_client_key") || "").trim();
-        if (relayKey) headers["X-Relay-Client-Key"] = relayKey;
-      } catch (e) {}
-      return headers;
+	    get_relay_client_headers(extra = {}) {
+	      const headers = { ...extra };
+	      try {
+	        const relayKey = (localStorage.getItem("posa_relay_client_key") || "").trim();
+	        if (relayKey) headers["X-Relay-Client-Key"] = relayKey;
+	      } catch (e) {}
+	      return headers;
+	    },
+    get_explicit_token_ref(source = {}) {
+      const doc = source || {};
+      const line = (
+        (Array.isArray(doc.items)
+          ? doc.items.find((row) => row && row.sales_order)
+          : null) || {}
+      );
+      return String(
+        doc.token_id ||
+          doc.sales_order ||
+          doc.sales_order_name ||
+          line.sales_order ||
+          ""
+      ).trim();
     },
-    relay_customer_fallback_enabled() {
+	    relay_customer_fallback_enabled() {
       return this.relayWorkflowEnabled() && !!this.get_relay_base_url();
     },
     is_click_event(payload) {
@@ -2087,13 +2102,14 @@ export default {
       if (doc.name || doc.items.length) {
         old_invoice = this.update_invoice(doc);
 
-        if (
-          old_invoice &&
-          old_invoice.docstatus === 0 &&
-          this.pos_profile.custom_have_token === 1
-        ) {
-          const token = old_invoice.name.slice(-5);
-          const posting_date = frappe.datetime.str_to_user(old_invoice.posting_date);
+	        if (
+	          old_invoice &&
+	          old_invoice.docstatus === 0 &&
+	          this.pos_profile.custom_have_token === 1
+	        ) {
+	          const token = this.get_explicit_token_ref(old_invoice);
+	          if (!token) return;
+	          const posting_date = frappe.datetime.str_to_user(old_invoice.posting_date);
           const posting_time =
             old_invoice.posting_time?.split(".")[0] || frappe.datetime.now_time();
 
@@ -2502,12 +2518,14 @@ export default {
         },
       });
 
-      const relayEnabled = parseInt(this.pos_profile.custom_have_token || 0, 10) === 1;
-      const relayBaseUrl = this.get_relay_base_url();
-      if (relayEnabled && relayBaseUrl && this.invoice_doc && this.invoice_doc.docstatus === 0) {
-        const tokenPayload = {
-          token_id: (this.invoice_doc.name || "").slice(-5),
-          pos_profile_id: this.pos_profile.name,
+	      const relayEnabled = parseInt(this.pos_profile.custom_have_token || 0, 10) === 1;
+	      const relayBaseUrl = this.get_relay_base_url();
+	      if (relayEnabled && relayBaseUrl && this.invoice_doc && this.invoice_doc.docstatus === 0) {
+	        const tokenId = this.get_explicit_token_ref(this.invoice_doc);
+	        if (!tokenId) return this.invoice_doc;
+	        const tokenPayload = {
+	          token_id: tokenId,
+	          pos_profile_id: this.pos_profile.name,
           cashier_user_id: frappe.session.user,
           role: this.current_role || this.get_current_role() || "",
           customer_id: this.invoice_doc.customer,
