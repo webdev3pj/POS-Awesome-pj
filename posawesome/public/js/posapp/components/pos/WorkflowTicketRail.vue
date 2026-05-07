@@ -231,8 +231,24 @@ export default {
       return (value.name || '').toString();
     },
     getRelayBaseUrl() {
-      const profile = this.pos_profile && typeof this.pos_profile === 'object' ? this.pos_profile : {};
-      return String(profile.custom_edge_relay_url || '').trim().replace(/\/$/, '');
+      try {
+        const site =
+          typeof window !== 'undefined' && window.location
+            ? window.location.host || 'site'
+            : 'site';
+        const profile =
+          this.pos_profile && typeof this.pos_profile === 'object'
+            ? String(this.pos_profile.name || 'default').trim() || 'default'
+            : 'default';
+        const raw =
+          localStorage.getItem(`posa_edge_relay_config:${site}:${profile}`) ||
+          localStorage.getItem(`posa_edge_relay_config:${site}:__default__`);
+        if (!raw) return '';
+        const parsed = JSON.parse(raw) || {};
+        return String(parsed.relay_url || '').trim().replace(/\/$/, '');
+      } catch (e) {
+        return '';
+      }
     },
     getRelayClientHeaders(extra = {}) {
       const headers = { ...extra };

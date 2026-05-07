@@ -117,8 +117,41 @@ export default {
     getCurrentRole() {
       return resolveCurrentRole();
     },
+    relay_config_storage_key() {
+      const site =
+        (frappe.boot && (frappe.boot.sitename || frappe.boot.site_name)) ||
+        window.location.host ||
+        "site";
+      const profile = String((this.pos_profile && this.pos_profile.name) || "default").trim() || "default";
+      return `posa_edge_relay_config:${site}:${profile}`;
+    },
+    relay_default_config_storage_key() {
+      const site =
+        (frappe.boot && (frappe.boot.sitename || frappe.boot.site_name)) ||
+        window.location.host ||
+        "site";
+      return `posa_edge_relay_config:${site}:__default__`;
+    },
+    get_browser_relay_config() {
+      try {
+        const raw =
+          localStorage.getItem(this.relay_config_storage_key()) ||
+          localStorage.getItem(this.relay_default_config_storage_key());
+        if (!raw) return null;
+        const parsed = JSON.parse(raw) || {};
+        const relayUrl = String(parsed.relay_url || "").trim().replace(/\/$/, "");
+        if (!relayUrl) return null;
+        return { relay_url: relayUrl };
+      } catch (e) {
+        return null;
+      }
+    },
     get_relay_base_url() {
-      return String((this.pos_profile && this.pos_profile.custom_edge_relay_url) || "")
+      const browserConfig = this.get_browser_relay_config();
+      return String(
+        (browserConfig && browserConfig.relay_url) ||
+          ""
+      )
         .trim()
         .replace(/\/$/, "");
     },
@@ -131,8 +164,10 @@ export default {
       return headers;
     },
     relay_quote_fallback_enabled() {
+      const browserConfig = this.get_browser_relay_config();
       return (
-        parseInt((this.pos_profile && this.pos_profile.custom_have_token) || 0, 10) === 1 &&
+        (parseInt((this.pos_profile && this.pos_profile.custom_have_token) || 0, 10) === 1 ||
+          !!(browserConfig && browserConfig.relay_url)) &&
         !!this.get_relay_base_url()
       );
     },
@@ -193,6 +228,7 @@ export default {
           sales_order_name: token.token_id || "",
         };
       });
+      const grandTotal = flt(token.grand_total || 0);
       return {
         name: token.token_id || "",
         doctype: "Sales Order",
@@ -208,7 +244,10 @@ export default {
         pos_profile: (this.pos_profile && this.pos_profile.name) || "",
         posting_date: transactionDate,
         transaction_date: transactionDate,
-        grand_total: flt(token.grand_total || 0),
+        grand_total: grandTotal,
+        rounded_total: flt(token.rounded_total || grandTotal),
+        net_total: flt(token.net_total || grandTotal),
+        total: flt(token.total || grandTotal),
         discount_amount: 0,
         additional_discount_percentage: 0,
         posa_offers: [],

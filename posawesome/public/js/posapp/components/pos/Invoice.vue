@@ -981,10 +981,41 @@ export default {
     get_current_role() {
       return resolveCurrentRole();
     },
+    relay_config_storage_key() {
+      const site =
+        (frappe.boot && (frappe.boot.sitename || frappe.boot.site_name)) ||
+        window.location.host ||
+        "site";
+      const profile = String((this.pos_profile && this.pos_profile.name) || "default").trim() || "default";
+      return `posa_edge_relay_config:${site}:${profile}`;
+    },
+    relay_default_config_storage_key() {
+      const site =
+        (frappe.boot && (frappe.boot.sitename || frappe.boot.site_name)) ||
+        window.location.host ||
+        "site";
+      return `posa_edge_relay_config:${site}:__default__`;
+    },
+    get_browser_relay_config() {
+      try {
+        const raw =
+          localStorage.getItem(this.relay_config_storage_key()) ||
+          localStorage.getItem(this.relay_default_config_storage_key());
+        if (!raw) return null;
+        const parsed = JSON.parse(raw) || {};
+        const relayUrl = String(parsed.relay_url || "").trim().replace(/\/$/, "");
+        if (!relayUrl) return null;
+        return { relay_url: relayUrl };
+      } catch (e) {
+        return null;
+      }
+    },
     get_relay_base_url() {
+      const browserConfig = this.get_browser_relay_config();
       const raw =
-        (this.pos_profile && this.pos_profile.custom_edge_relay_url) ||
+        (browserConfig && browserConfig.relay_url) ||
         (this.relay_status && this.relay_status.profile_relay_url) ||
+        (this.relay_status && this.relay_status.relay_url) ||
         "";
       return String(raw || "").trim().replace(/\/$/, "");
     },
@@ -1010,15 +1041,17 @@ export default {
       return headers;
     },
     relay_customer_fallback_enabled() {
-      const relayEnabled =
-        parseInt((this.pos_profile && this.pos_profile.custom_have_token) || 0, 10) === 1;
-      return relayEnabled && !!this.get_relay_base_url();
+      return this.relayWorkflowEnabled() && !!this.get_relay_base_url();
     },
     is_click_event(payload) {
       return !!(payload && typeof payload === "object" && payload.target && payload.preventDefault);
     },
     relayWorkflowEnabled() {
-      return parseInt((this.pos_profile && this.pos_profile.custom_have_token) || 0, 10) === 1;
+      const browserConfig = this.get_browser_relay_config();
+      return (
+        parseInt((this.pos_profile && this.pos_profile.custom_have_token) || 0, 10) === 1 ||
+        !!(browserConfig && browserConfig.relay_url)
+      );
     },
     reset_after_token_save() {
       this.items = [];
@@ -1379,6 +1412,7 @@ export default {
           sales_order_name: row.token_id || "",
         };
       });
+      const grandTotal = flt(row.grand_total || 0);
       return {
         name: row.token_id || "",
         doctype: "Sales Order",
@@ -1394,7 +1428,10 @@ export default {
         pos_profile: this.pos_profile.name,
         posting_date: transactionDate,
         transaction_date: transactionDate,
-        grand_total: flt(row.grand_total || 0),
+        grand_total: grandTotal,
+        rounded_total: flt(row.rounded_total || grandTotal),
+        net_total: flt(row.net_total || grandTotal),
+        total: flt(row.total || grandTotal),
         discount_amount: 0,
         additional_discount_percentage: 0,
         posa_offers: [],
@@ -1409,7 +1446,6 @@ export default {
       }
       const policy = this.so_lookup_policy();
       const params = new URLSearchParams();
-      params.set("pos_profile_id", this.pos_profile.name || "");
       params.set("limit", "100");
       params.set("statuses_csv", "TOKEN_OPEN");
       params.set("max_age_days", String(policy.maxAgeDays));
@@ -1430,6 +1466,26 @@ export default {
         throw new Error(body.message || __("Unable to load Sales Orders from relay."));
       }
       return (body.rows || []).map((row) => this.normalize_relay_token_to_order_doc(row));
+    },
+    merge_sales_order_rows(cloudRows = [], relayRows = []) {
+      const seen = new Set();
+      const keyFor = (row) =>
+        String(
+          (row && (row.token_id || row.sales_order_name || row.sales_order || row.name)) || ""
+        ).trim();
+      const merged = [];
+      (cloudRows || []).forEach((row) => {
+        const key = keyFor(row);
+        if (key) seen.add(key);
+        merged.push(row);
+      });
+      (relayRows || []).forEach((row) => {
+        const key = keyFor(row);
+        if (key && seen.has(key)) return;
+        if (key) seen.add(key);
+        merged.push(row);
+      });
+      return merged;
     },
     async fetch_quotes_from_relay(searchText = "") {
       const base = this.get_relay_base_url();
@@ -2772,14 +2828,27 @@ export default {
         callback: async function (r) {
           if (r && !r.exc && r.message) {
             const cloudRows = Array.isArray(r.message) ? r.message : [];
-            if (cloudRows.length > 0 || !vm.relayWorkflowEnabled() || !vm.get_relay_base_url()) {
-              evntBus.$emit("open_orders", r.message);
+            if (cloudRows.length > 0) {
+              let rows = cloudRows;
+              if (vm.relayWorkflowEnabled() && vm.get_relay_base_url()) {
+                try {
+                  const relayRows = await vm.fetch_open_orders_from_relay("");
+                  rows = vm.merge_sales_order_rows(cloudRows, relayRows);
+                } catch (e) {
+                  rows = cloudRows;
+                }
+              }
+              evntBus.$emit("open_orders", rows);
               if (cloudRows.some((row) => Number(row && row.is_stale ? 1 : 0) === 1)) {
                 evntBus.$emit("show_mesage", {
                   text: __("Some Sales Orders are stale (allowed by profile policy)."),
                   color: "warning",
                 });
               }
+              return;
+            }
+            if (!vm.relayWorkflowEnabled() || !vm.get_relay_base_url()) {
+              evntBus.$emit("open_orders", cloudRows);
               return;
             }
           }

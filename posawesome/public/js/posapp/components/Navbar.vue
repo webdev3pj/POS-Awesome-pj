@@ -582,9 +582,37 @@ export default {
       const profile = String(profileName || 'default').trim() || 'default';
       return `posa_edge_relay_config:${site}:${profile}`;
     },
+    relay_default_config_storage_key() {
+      return this.relay_config_storage_key('__default__');
+    },
+    active_profile_storage_key() {
+      const site =
+        (frappe.boot && (frappe.boot.sitename || frappe.boot.site_name)) ||
+        window.location.host ||
+        'site';
+      return `posa_active_pos_profile:${site}`;
+    },
+    active_pos_profile_name() {
+      const current = String((this.pos_profile && this.pos_profile.name) || '').trim();
+      if (current) return current;
+      try {
+        return String(localStorage.getItem(this.active_profile_storage_key()) || '').trim();
+      } catch (e) {
+        return '';
+      }
+    },
+    remember_active_pos_profile(profileName) {
+      const name = String(profileName || '').trim();
+      if (!name) return;
+      try {
+        localStorage.setItem(this.active_profile_storage_key(), name);
+      } catch (e) {}
+    },
     load_browser_relay_config(profileName) {
       try {
-        const raw = localStorage.getItem(this.relay_config_storage_key(profileName));
+        const raw =
+          localStorage.getItem(this.relay_config_storage_key(profileName)) ||
+          localStorage.getItem(this.relay_default_config_storage_key());
         if (!raw) return null;
         const parsed = JSON.parse(raw) || {};
         const relayUrl = this.normalize_relay_url(parsed.relay_url);
@@ -602,6 +630,24 @@ export default {
         return null;
       }
     },
+    cache_profile_relay_config_if_missing(profile) {
+      if (!profile || !profile.name || !navigator.onLine) return;
+      if (this.load_browser_relay_config(profile.name)) return;
+      const relayUrl = this.normalize_relay_url(profile.custom_edge_relay_url || '');
+      if (!relayUrl) return;
+      const config = {
+        relay_url: relayUrl,
+        connectivity_mode:
+          profile.posa_edge_relay_connectivity_mode === 'cloud_checked'
+            ? 'cloud_checked'
+            : 'lan_only_browser_checked',
+        client_key: localStorage.getItem('posa_relay_client_key') || '',
+        saved_at: frappe.datetime.now_datetime(),
+        refreshed_from_profile: 1,
+      };
+      localStorage.setItem(this.relay_config_storage_key(profile.name), JSON.stringify(config));
+      localStorage.setItem(this.relay_default_config_storage_key(), JSON.stringify(config));
+    },
     apply_browser_relay_config_to_profile(profile) {
       if (!profile || !profile.name) return profile;
       const browserConfig = this.load_browser_relay_config(profile.name);
@@ -609,22 +655,16 @@ export default {
       return {
         ...profile,
         custom_have_token: parseInt(profile.custom_have_token || 0, 10) === 1 ? profile.custom_have_token : 1,
-        custom_edge_relay_url: browserConfig.relay_url,
         posa_edge_relay_connectivity_mode: browserConfig.connectivity_mode,
       };
     },
     open_relay_settings() {
-      const profileName = this.pos_profile && this.pos_profile.name;
+      const profileName = this.active_pos_profile_name();
       const browserConfig = this.load_browser_relay_config(profileName);
       this.relay_settings_form = {
         relay_url:
           (browserConfig && browserConfig.relay_url) ||
-          this.normalize_relay_url(
-            (this.pos_profile && this.pos_profile.custom_edge_relay_url) ||
-              this.relay_status.profile_relay_url ||
-              this.relay_status.relay_url ||
-              ''
-          ),
+          this.normalize_relay_url(this.relay_status.profile_relay_url || this.relay_status.relay_url || ''),
         connectivity_mode:
           (browserConfig && browserConfig.connectivity_mode) ||
           (this.pos_profile && this.pos_profile.posa_edge_relay_connectivity_mode) ||
@@ -637,7 +677,7 @@ export default {
       this.relay_settings_dialog = true;
     },
     save_browser_relay_config() {
-      const profileName = this.pos_profile && this.pos_profile.name;
+      const profileName = this.active_pos_profile_name();
       const relayUrl = this.normalize_relay_url(this.relay_settings_form.relay_url);
       if (!profileName) {
         this.show_mesage({ text: __('Open a POS Profile before saving relay settings.'), color: 'warning' });
@@ -646,6 +686,9 @@ export default {
       if (!/^https?:\/\//i.test(relayUrl)) {
         this.show_mesage({ text: __('Relay URL must start with http:// or https://'), color: 'error' });
         return;
+      }
+      if (!this.pos_profile || !this.pos_profile.name) {
+        this.pos_profile = { name: profileName, custom_have_token: 1 };
       }
       const config = {
         relay_url: relayUrl,
@@ -657,19 +700,51 @@ export default {
         saved_at: frappe.datetime.now_datetime(),
       };
       localStorage.setItem(this.relay_config_storage_key(profileName), JSON.stringify(config));
+      localStorage.setItem(this.relay_default_config_storage_key(), JSON.stringify(config));
       if (config.client_key) {
         localStorage.setItem('posa_relay_client_key', config.client_key);
+      } else {
+        localStorage.removeItem('posa_relay_client_key');
       }
       this.pos_profile = this.apply_browser_relay_config_to_profile(this.pos_profile);
       this.relay_settings_dialog = false;
-      this.show_mesage({ text: __('Relay settings saved on this browser.'), color: 'success' });
+      this.save_relay_config_to_profile(profileName, config);
+      this.show_mesage({ text: __('Relay settings saved for this browser.'), color: 'success' });
       this.fetch_relay_status(profileName, false);
     },
+    save_relay_config_to_profile(profileName, config) {
+      if (!profileName || !navigator.onLine) {
+        return;
+      }
+      frappe.call({
+        method: 'frappe.client.set_value',
+        args: {
+          doctype: 'POS Profile',
+          name: profileName,
+          fieldname: {
+            custom_edge_relay_url: config.relay_url,
+            posa_edge_relay_connectivity_mode: config.connectivity_mode,
+          },
+        },
+        callback: (r) => {
+          if (r && !r.exc) {
+            this.show_mesage({ text: __('Relay settings also saved to POS Profile.'), color: 'success' });
+          }
+        },
+        error: () => {
+          this.show_mesage({
+            text: __('Relay settings saved locally. POS Profile save failed; try again while online.'),
+            color: 'warning',
+          });
+        },
+      });
+    },
     clear_browser_relay_config() {
-      const profileName = this.pos_profile && this.pos_profile.name;
+      const profileName = this.active_pos_profile_name();
       if (profileName) {
         localStorage.removeItem(this.relay_config_storage_key(profileName));
       }
+      localStorage.removeItem(this.relay_default_config_storage_key());
       this.relay_settings_form = {
         relay_url: '',
         connectivity_mode: 'lan_only_browser_checked',
@@ -681,6 +756,8 @@ export default {
     apply_pos_profile_registration(data) {
       if (!data || !data.pos_profile) return;
       this.sync_current_role();
+      this.remember_active_pos_profile(data.pos_profile.name);
+      this.cache_profile_relay_config_if_missing(data.pos_profile);
       this.pos_profile = this.apply_browser_relay_config_to_profile(data.pos_profile);
       const payments = { text: 'Payments', icon: 'mdi-cash-register' };
       if (
@@ -704,6 +781,18 @@ export default {
           this.apply_pos_profile_registration(msg);
         },
       });
+      const storedProfile = this.active_pos_profile_name();
+      if (storedProfile && navigator.onLine) {
+        frappe.db
+          .get_doc('POS Profile', storedProfile)
+          .then((profile) => {
+            if (!profile || (this.pos_profile && this.pos_profile.name)) return;
+            this.apply_pos_profile_registration({ pos_profile: profile });
+          })
+          .catch(() => {});
+      } else if (storedProfile) {
+        this.pos_profile = { name: storedProfile, custom_have_token: 1 };
+      }
     },
     emit_cloud_status_changed() {
       evntBus.$emit('cloud_status_changed', { ...(this.cloud_status || {}) });
@@ -825,7 +914,7 @@ export default {
       const relayStatus = { ...this.build_empty_relay_status(), ...(baseStatus || {}) };
       const profileName = this.pos_profile && this.pos_profile.name;
       const browserConfig = this.load_browser_relay_config(profileName);
-      if (browserConfig && (!relayStatus.configured || !relayStatus.profile_relay_url)) {
+      if (browserConfig) {
         relayStatus.enabled = true;
         relayStatus.configured = true;
         relayStatus.relay_source = 'browser_cache';
@@ -834,7 +923,16 @@ export default {
         relayStatus.profile_relay_url = browserConfig.relay_url;
         relayStatus.connectivity_mode = browserConfig.connectivity_mode;
         relayStatus.status = relayStatus.status === 'not_configured' ? '' : relayStatus.status;
-        relayStatus.message = __('Using browser-saved Edge Relay URL.');
+        relayStatus.message = __('Using browser-cached Edge Relay URL.');
+      } else {
+        relayStatus.configured = false;
+        relayStatus.relay_source = '';
+        relayStatus.relay_config_identified = false;
+        relayStatus.relay_url = '';
+        relayStatus.profile_relay_url = '';
+        relayStatus.site_relay_url = '';
+        relayStatus.status = 'not_configured';
+        relayStatus.message = __('Relay URL is not configured in this browser.');
       }
       const mode =
         relayStatus.connectivity_mode === 'lan_only_browser_checked'
@@ -912,6 +1010,13 @@ export default {
       if (!profileName) {
         this.relay_status = this.build_empty_relay_status();
         evntBus.$emit('relay_status_changed', this.relay_status);
+        return;
+      }
+      if (!navigator.onLine) {
+        this.resolve_effective_relay_status(this.build_empty_relay_status()).then((resolvedStatus) => {
+          this.relay_status = resolvedStatus;
+          evntBus.$emit('relay_status_changed', this.relay_status);
+        });
         return;
       }
 
@@ -1106,6 +1211,9 @@ export default {
     evntBus.$on('register_pos_profile', (data) => {
       this.apply_pos_profile_registration(data);
     });
+    evntBus.$on('register_pos_data', (data) => {
+      this.apply_pos_profile_registration(data);
+    });
     evntBus.$on('check_relay_connectivity', () => {
       this.fetch_relay_status(this.pos_profile && this.pos_profile.name, false);
     });
@@ -1137,6 +1245,7 @@ export default {
     evntBus.$off('show_mesage');
     evntBus.$off('set_company');
     evntBus.$off('register_pos_profile');
+    evntBus.$off('register_pos_data');
     evntBus.$off('check_relay_connectivity');
     evntBus.$off('set_last_invoice');
     evntBus.$off('workflow_monitor_summary_changed', this.on_workflow_monitor_summary_changed);

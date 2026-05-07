@@ -619,11 +619,7 @@ export default {
     relayBase() {
       const browserRelay = this.browserRelayBase();
       if (browserRelay) return browserRelay;
-      const v =
-        this.pos_profile && typeof this.pos_profile === "object"
-          ? (this.pos_profile.custom_edge_relay_url || "").trim()
-          : "";
-      return (v || "http://127.0.0.1:8787").replace(/\/$/, "");
+      return "";
     },
     filters() {
       const rows = [{ value: "all", label: __("All"), color: "primary" }];
@@ -904,7 +900,9 @@ export default {
           this.pos_profile && typeof this.pos_profile === "object"
             ? String(this.pos_profile.name || "default").trim() || "default"
             : "default";
-        const raw = localStorage.getItem(`posa_edge_relay_config:${site}:${profile}`);
+        const raw =
+          localStorage.getItem(`posa_edge_relay_config:${site}:${profile}`) ||
+          localStorage.getItem(`posa_edge_relay_config:${site}:__default__`);
         if (!raw) return "";
         const parsed = JSON.parse(raw) || {};
         return String(parsed.relay_url || "").trim().replace(/\/$/, "");
@@ -943,7 +941,7 @@ export default {
       if (!quiet) this.queueLoading = true;
       this.errorText = "";
       try {
-        const q = `?pos_profile_id=${encodeURIComponent(this.profileName)}&limit=200`;
+        const q = "?limit=200";
         const data = await this.getJson(`/relay/pick-queue${q}`);
         this.queueRows = Array.isArray(data.rows) ? data.rows : [];
         this.queueSource = "relay";

@@ -803,6 +803,20 @@ export default {
   }),
 
   methods: {
+    safe_flt(value, precision = this.currency_precision) {
+      const amount = this.flt(value, precision);
+      return Number.isFinite(amount) ? amount : 0;
+    },
+    payable_total(invoice_doc = this.invoice_doc) {
+      if (!invoice_doc) return 0;
+      const rounded_total = this.safe_flt(invoice_doc.rounded_total);
+      if (rounded_total) return rounded_total;
+      const grand_total = this.safe_flt(invoice_doc.grand_total);
+      if (grand_total) return grand_total;
+      const total = this.safe_flt(invoice_doc.total);
+      if (total) return total;
+      return this.safe_flt(invoice_doc.net_total);
+    },
     get_current_role() {
       return resolveCurrentRole();
     },
@@ -838,7 +852,6 @@ export default {
     },
     get_relay_base_url() {
       const raw =
-        (this.pos_profile && this.pos_profile.custom_edge_relay_url) ||
         (this.relay_status && this.relay_status.profile_relay_url) ||
         (this.relay_status && this.relay_status.relay_url) ||
         "";
@@ -951,8 +964,7 @@ export default {
 
       if (
         !this.pos_profile.posa_allow_partial_payment &&
-        this.total_payments <
-          (this.invoice_doc.rounded_total || this.invoice_doc.grand_total)
+        this.total_payments < this.payable_total()
       ) {
         evntBus.$emit("show_mesage", {
           text: `The amount paid is not complete`,
@@ -1276,7 +1288,7 @@ export default {
       this.invoice_doc.payments.forEach((payment) => {
         payment.amount =
           payment.idx == idx
-            ? this.invoice_doc.rounded_total || this.invoice_doc.grand_total
+            ? this.payable_total()
             : 0;
       });
     },
@@ -1648,23 +1660,22 @@ export default {
       return (this.current_role || "") === "cline-Sales Associate";
     },
     total_payments() {
-      let total = parseFloat(this.invoice_doc.loyalty_amount);
+      let total = this.safe_flt(this.invoice_doc && this.invoice_doc.loyalty_amount);
       if (this.invoice_doc && this.invoice_doc.payments) {
         this.invoice_doc.payments.forEach((payment) => {
-          total += this.flt(payment.amount);
+          total += this.safe_flt(payment.amount);
         });
       }
 
-      total += this.flt(this.redeemed_customer_credit);
+      total += this.safe_flt(this.redeemed_customer_credit);
 
       if (!this.is_cashback) total = 0;
 
-      return this.flt(total, this.currency_precision);
+      return this.safe_flt(total, this.currency_precision);
     },
     diff_payment() {
-      let diff_payment = this.flt(
-        (this.invoice_doc.rounded_total || this.invoice_doc.grand_total) -
-          this.total_payments,
+      let diff_payment = this.safe_flt(
+        this.payable_total() - this.total_payments,
         this.currency_precision
       );
       this.paid_change = -diff_payment;
@@ -1672,8 +1683,9 @@ export default {
     },
     credit_change() {
       let change = -this.diff_payment;
-      if (this.paid_change > change) return 0;
-      return this.flt(this.paid_change - change, this.currency_precision);
+      const paid_change = this.safe_flt(this.paid_change);
+      if (paid_change > change) return 0;
+      return this.safe_flt(paid_change - change, this.currency_precision);
     },
     diff_lable() {
       let lable = this.diff_payment < 0 ? "Change" : "To Be Paid";
@@ -1774,6 +1786,8 @@ export default {
             if (payment.base_amount === undefined || payment.base_amount === null || payment.base_amount === "") {
               payment.base_amount = 0;
             }
+            payment.amount = this.safe_flt(payment.amount);
+            payment.base_amount = this.safe_flt(payment.base_amount);
           });
           this.$set(this.invoice_doc, "payments", normalizedPayments);
           const default_payment = this.invoice_doc.payments.find(
@@ -1782,10 +1796,7 @@ export default {
         this.is_credit_sale = 0;
         this.is_write_off_change = 0;
         if (default_payment && !invoice_doc.is_return) {
-          default_payment.amount = this.flt(
-            invoice_doc.rounded_total || invoice_doc.grand_total,
-            this.currency_precision
-          );
+          default_payment.amount = this.payable_total(invoice_doc);
         }
         if (invoice_doc.is_return) {
           this.is_return = true;

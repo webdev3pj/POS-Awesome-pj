@@ -168,8 +168,41 @@ export default {
     close_dialog() {
       this.draftsDialog = false;
     },
+    relay_config_storage_key() {
+      const site =
+        (frappe.boot && (frappe.boot.sitename || frappe.boot.site_name)) ||
+        window.location.host ||
+        "site";
+      const profile = String((this.pos_profile && this.pos_profile.name) || "default").trim() || "default";
+      return `posa_edge_relay_config:${site}:${profile}`;
+    },
+    relay_default_config_storage_key() {
+      const site =
+        (frappe.boot && (frappe.boot.sitename || frappe.boot.site_name)) ||
+        window.location.host ||
+        "site";
+      return `posa_edge_relay_config:${site}:__default__`;
+    },
+    get_browser_relay_config() {
+      try {
+        const raw =
+          localStorage.getItem(this.relay_config_storage_key()) ||
+          localStorage.getItem(this.relay_default_config_storage_key());
+        if (!raw) return null;
+        const parsed = JSON.parse(raw) || {};
+        const relayUrl = String(parsed.relay_url || "").trim().replace(/\/$/, "");
+        if (!relayUrl) return null;
+        return { relay_url: relayUrl };
+      } catch (e) {
+        return null;
+      }
+    },
     get_relay_base_url() {
-      return String((this.pos_profile && this.pos_profile.custom_edge_relay_url) || "")
+      const browserConfig = this.get_browser_relay_config();
+      return String(
+        (browserConfig && browserConfig.relay_url) ||
+          ""
+      )
         .trim()
         .replace(/\/$/, "");
     },
@@ -182,8 +215,10 @@ export default {
       return headers;
     },
     relay_order_fallback_enabled() {
+      const browserConfig = this.get_browser_relay_config();
       return (
-        parseInt((this.pos_profile && this.pos_profile.custom_have_token) || 0, 10) === 1 &&
+        (parseInt((this.pos_profile && this.pos_profile.custom_have_token) || 0, 10) === 1 ||
+          !!(browserConfig && browserConfig.relay_url)) &&
         !!this.get_relay_base_url()
       );
     },
@@ -223,6 +258,7 @@ export default {
           sales_order_name: row.token_id || "",
         };
       });
+      const grand_total = flt(row.grand_total || 0);
 
       return {
         name: row.token_id || "",
@@ -239,7 +275,10 @@ export default {
         pos_profile: (this.pos_profile && this.pos_profile.name) || "",
         posting_date: transaction_date,
         transaction_date: transaction_date,
-        grand_total: flt(row.grand_total || 0),
+        grand_total: grand_total,
+        rounded_total: flt(row.rounded_total || grand_total),
+        net_total: flt(row.net_total || grand_total),
+        total: flt(row.total || grand_total),
         items: items,
         discount_amount: 0,
         additional_discount_percentage: 0,
@@ -247,20 +286,19 @@ export default {
         posa_coupons: [],
       };
     },
-    async search_orders_via_relay() {
+    async fetch_relay_token_rows(searchText = "") {
       const base = this.get_relay_base_url();
       if (!base) {
         throw new Error(__("Relay URL is not configured."));
       }
       const policy = this.soPolicy();
       const params = new URLSearchParams();
-      params.set("pos_profile_id", (this.pos_profile && this.pos_profile.name) || "");
       params.set("limit", "100");
       params.set("statuses_csv", "TOKEN_OPEN");
       params.set("max_age_days", String(policy.maxAge));
       params.set("allow_stale", policy.allowStale ? "1" : "0");
       params.set("history_days", String(policy.historyDays));
-      if (this.order_name) params.set("search", this.order_name);
+      if (searchText) params.set("search", searchText);
       const resp = await fetch(`${base}/relay/tokens/search?${params.toString()}`, {
         method: "GET",
         headers: this.get_relay_client_headers({ Accept: "application/json" }),
@@ -274,8 +312,33 @@ export default {
       if (!resp.ok || payload.ok === false) {
         throw new Error(payload.message || __("Unable to search relay orders."));
       }
-      this.dialog_data = (payload.rows || []).map((row) => this.normalize_relay_token_row(row));
+      return payload.rows || [];
+    },
+    async search_orders_via_relay() {
+      const searchText = String(this.order_name || "").trim();
+      const rows = await this.fetch_relay_token_rows(searchText);
+      this.dialog_data = rows.map((row) => this.normalize_relay_token_row(row));
       return true;
+    },
+    merge_sales_order_rows(cloudRows = [], relayRows = []) {
+      const seen = new Set();
+      const keyFor = (row) =>
+        String(
+          (row && (row.token_id || row.sales_order_name || row.sales_order || row.name)) || ""
+        ).trim();
+      const merged = [];
+      (cloudRows || []).forEach((row) => {
+        const key = keyFor(row);
+        if (key) seen.add(key);
+        merged.push(row);
+      });
+      (relayRows || []).forEach((row) => {
+        const key = keyFor(row);
+        if (key && seen.has(key)) return;
+        if (key) seen.add(key);
+        merged.push(row);
+      });
+      return merged;
     },
     search_orders() {
       const vm = this;
@@ -299,7 +362,24 @@ export default {
               cloudFailed = true;
             } else if (r && r.message) {
               const cloudRows = Array.isArray(r.message) ? r.message : [];
-              if (cloudRows.length > 0 || !vm.relay_order_fallback_enabled()) {
+              if (cloudRows.length > 0) {
+                let rows = cloudRows;
+                if (vm.relay_order_fallback_enabled()) {
+                  try {
+                    const relayRows = await vm.fetch_relay_token_rows(String(vm.order_name || "").trim());
+                    rows = vm.merge_sales_order_rows(
+                      cloudRows,
+                      relayRows.map((row) => vm.normalize_relay_token_row(row))
+                    );
+                  } catch (e) {
+                    rows = cloudRows;
+                  }
+                }
+                vm.dialog_data = rows;
+                resolve(true);
+                return;
+              }
+              if (!vm.relay_order_fallback_enabled()) {
                 vm.dialog_data = r.message;
                 resolve(true);
                 return;
