@@ -6,7 +6,15 @@ frappe.pages['posapp'].on_page_load = function (wrapper) {
 		single_column: true
 	});
 
-	this.page.$PosApp = new frappe.PosApp.posapp(this.page);
+	// Frappe page loader context differs across versions/custom desk shells.
+	// Some local staging builds invoke this handler without `this.page` set.
+	var page_ctx = (this && this.page) ? this.page : page;
+	var pos_instance = new frappe.PosApp.posapp(page_ctx);
+	if (this && this.page) {
+		this.page.$PosApp = pos_instance;
+	} else {
+		page.$PosApp = pos_instance;
+	}
 
 	$('div.navbar-fixed-top').find('.container').css('padding', '0');
 

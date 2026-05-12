@@ -4,32 +4,68 @@
       <!-- <template v-slot:activator="{ on, attrs }">
         <v-btn color="primary" dark v-bind="attrs" v-on="on">Open Dialog</v-btn>
       </template>-->
-      <v-card>
+        <v-card>
         <v-card-title>
           <span class="headline primary--text">{{
-            __('Create POS Opening Shift')
+            dialog_title
           }}</span>
         </v-card-title>
         <v-card-text>
           <v-container>
             <v-row>
               <v-col cols="12">
-                <v-autocomplete
-                  :items="companies"
+                <v-text-field
                   :label="frappe._('Company')"
                   v-model="company"
+                  readonly
+                  outlined
+                  dense
+                  hide-details="auto"
                   required
-                ></v-autocomplete>
+                ></v-text-field>
               </v-col>
               <v-col cols="12">
-                <v-autocomplete
-                  :items="pos_profiles"
+                <v-text-field
                   :label="frappe._('POS Profile')"
                   v-model="pos_profile"
+                  readonly
+                  outlined
+                  dense
+                  hide-details="auto"
                   required
-                ></v-autocomplete>
+                ></v-text-field>
               </v-col>
-              <v-col cols="12">
+              <v-col cols="12" v-if="detected_role">
+                <v-alert type="info" dense outlined>
+                  <strong>Role:</strong> {{ detected_role_display }}
+                </v-alert>
+              </v-col>
+              <v-col cols="12" v-if="admin_role_testing_enabled">
+                <v-select
+                  v-model="detected_role"
+                  :items="admin_test_role_options"
+                  :label="__('Administrator Test Role')"
+                  dense
+                  outlined
+                  hide-details="auto"
+                  @change="set_admin_test_role"
+                ></v-select>
+              </v-col>
+              <v-col cols="12" v-if="role_error">
+                <v-alert type="error" dense>
+                  {{ role_error }}
+                </v-alert>
+              </v-col>
+              <v-col cols="12" v-if="is_non_cash_role_session">
+                <v-alert type="info" dense outlined>
+                  {{
+                    __(
+                      'Cash opening/closing is cashier-only. You can start a non-cash POS session to create orders and tokens.'
+                    )
+                  }}
+                </v-alert>
+              </v-col>
+              <v-col cols="12" v-if="requires_cash_opening">
                 <template>
                   <v-data-table
                     :headers="payments_methods_headers"
@@ -80,6 +116,7 @@
 <script>
 import { evntBus } from '../../bus';
 import format from '../../format';
+import { OPERATIONAL_ROLES, resolveCurrentRole, setAdminTestRole } from '../../utils/posRole';
 export default {
   mixins: [format],
   props: ['dialog'],
@@ -93,6 +130,11 @@ export default {
       pos_profiles_data: [],
       pos_profiles: [],
       pos_profile: '',
+      // Role derived from ERPNext user roles (not user-selectable)
+      detected_role: '',
+      role_error: '',
+      admin_role_testing_enabled: false,
+      admin_test_role_options: OPERATIONAL_ROLES,
       payments_method_data: [],
       payments_methods: [],
       payments_methods_headers: [
@@ -144,6 +186,28 @@ export default {
       });
     },
   },
+  computed: {
+    // Display role without "cline-" prefix
+    detected_role_display() {
+      if (this.detected_role && this.detected_role.startsWith('cline-')) {
+        return this.detected_role.substring(6);
+      }
+      return this.detected_role;
+    },
+    is_non_cash_role_session() {
+      const role = (this.detected_role || '').trim();
+      if (!role) return false;
+      return role !== 'cline-Cashier';
+    },
+    requires_cash_opening() {
+      return !this.is_non_cash_role_session;
+    },
+    dialog_title() {
+      return this.requires_cash_opening
+        ? __('Create POS Opening Shift')
+        : __('Start POS Session');
+    },
+  },
   methods: {
     close_opening_dialog() {
       evntBus.$emit('close_opening_dialog');
@@ -155,36 +219,96 @@ export default {
         args: {},
         callback: function (r) {
           if (r.message) {
-            r.message.companies.forEach((element) => {
+            (r.message.companies || []).forEach((element) => {
               vm.companies.push(element.name);
             });
-            vm.company = vm.companies[0];
-            vm.pos_profiles_data = r.message.pos_profiles_data;
+            vm.company = r.message.default_company || vm.companies[0] || "";
+            vm.pos_profiles_data = r.message.pos_profiles_data || [];
+            vm.pos_profiles = vm.pos_profiles_data.map((element) => element.name);
+            vm.pos_profile = r.message.default_pos_profile || vm.pos_profiles[0] || "";
             vm.payments_method_data = r.message.payments_method;
+            // Get role from user's ERPNext roles (derived, not user-selected)
+            vm.admin_role_testing_enabled = parseInt(r.message.admin_role_testing_enabled || 0, 10) === 1;
+            try {
+              if (vm.admin_role_testing_enabled) {
+                localStorage.setItem("posa_admin_role_testing_enabled", "1");
+              } else {
+                localStorage.removeItem("posa_admin_role_testing_enabled");
+              }
+            } catch (e) {}
+            vm.detected_role = r.message.user_role || '';
+            vm.role_error = r.message.role_error || '';
+            if (vm.admin_role_testing_enabled) {
+              vm.detected_role = resolveCurrentRole({ fallback: vm.detected_role || "cline-Supervisor" });
+              vm.role_error = "";
+            }
+            try {
+              const relayKey = String(r.message.relay_client_auth_key || "").trim();
+              if (relayKey) {
+                localStorage.setItem("posa_relay_client_key", relayKey);
+              } else if (parseInt(r.message.relay_client_auth_required || 0, 10) !== 1) {
+                // Only clear when backend explicitly indicates auth is not required.
+                localStorage.removeItem("posa_relay_client_key");
+              }
+            } catch (e) {}
           }
         },
       });
     },
     submit_dialog() {
-      if (!this.payments_methods.length || !this.company || !this.pos_profile) {
+      if (!this.company || !this.pos_profile) {
+        frappe.msgprint(__('Please select Company and POS Profile'));
+        return;
+      }
+      if (this.requires_cash_opening && !this.payments_methods.length) {
+        frappe.msgprint(__('Please enter opening amounts or configure payment methods for the POS Profile.'));
+        return;
+      }
+      if (this.role_error) {
+        frappe.msgprint(this.role_error);
         return;
       }
       this.is_loading = true;
       const vm = this;
+      // Store role in localStorage for session
+      if (this.admin_role_testing_enabled) {
+        setAdminTestRole(this.detected_role);
+      } else {
+        localStorage.setItem('pos_current_role', this.detected_role);
+      }
+      const method = this.requires_cash_opening
+        ? 'posawesome.posawesome.api.posapp.create_opening_voucher'
+        : 'posawesome.posawesome.api.posapp.bootstrap_pos_session';
+      const args = this.requires_cash_opening
+        ? {
+            pos_profile: this.pos_profile,
+            company: this.company,
+            balance_details: this.payments_methods,
+          }
+        : {
+            pos_profile: this.pos_profile,
+            company: this.company,
+          };
       return frappe
-        .call('posawesome.posawesome.api.posapp.create_opening_voucher', {
-          pos_profile: this.pos_profile,
-          company: this.company,
-          balance_details: this.payments_methods,
-        })
+        .call(method, args)
         .then((r) => {
           if (r.message) {
             evntBus.$emit('register_pos_data', r.message);
             evntBus.$emit('set_company', r.message.company);
             vm.close_opening_dialog();
-            is_loading = false;
+            vm.is_loading = false;
           }
+        })
+        .catch(() => {
+          vm.is_loading = false;
         });
+    },
+    set_admin_test_role(role) {
+      const selected = setAdminTestRole(role);
+      if (selected) {
+        this.detected_role = selected;
+        this.role_error = "";
+      }
     },
     go_desk() {
       frappe.set_route('/');

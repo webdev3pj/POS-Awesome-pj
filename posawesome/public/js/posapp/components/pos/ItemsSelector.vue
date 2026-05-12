@@ -37,8 +37,12 @@
             :label="frappe._('QTY')"
             background-color="white"
             hide-details
-            v-model.number="qty"
+            :value="qty_input"
             type="number"
+            step="0.01"
+            @input="setManualQtyInput"
+            @blur="normalizeManualQty"
+            @change="normalizeManualQty"
             @keydown.enter="enter_event"
             @keydown.esc="esc_event"
           ></v-text-field>
@@ -191,6 +195,7 @@ export default {
     customer: null,
     new_line: false,
     qty: 1,
+    qty_input: "1.00",
   }),
 
   watch: {
@@ -216,6 +221,39 @@ export default {
     show_coupons() {
       evntBus.$emit("show_coupons", "true");
     },
+    get_items_cache_key() {
+      const site =
+        typeof window !== "undefined" && window.location
+          ? window.location.host || "site"
+          : "site";
+      const profile = this.pos_profile && this.pos_profile.name
+        ? this.pos_profile.name
+        : "profile";
+      const priceList =
+        this.customer_price_list ||
+        (this.pos_profile && this.pos_profile.selling_price_list) ||
+        "price-list";
+      const customer = this.customer || "";
+      return `items_storage:${site}:${profile}:${priceList}:${customer}`;
+    },
+    load_cached_items() {
+      try {
+        const raw = localStorage.getItem(this.get_items_cache_key());
+        if (!raw) return null;
+        const items = JSON.parse(raw);
+        return Array.isArray(items) ? items : null;
+      } catch (e) {
+        return null;
+      }
+    },
+    save_cached_items(items) {
+      try {
+        localStorage.setItem(this.get_items_cache_key(), JSON.stringify(items || []));
+        localStorage.removeItem("items_storage");
+      } catch (e) {
+        console.error(e);
+      }
+    },
     get_items() {
       if (!this.pos_profile) {
         console.error("No POS Profile");
@@ -234,12 +272,14 @@ export default {
       }
       if (
         vm.pos_profile.posa_local_storage &&
-        localStorage.items_storage &&
         !vm.pos_profile.pose_use_limit_search
       ) {
-        vm.items = JSON.parse(localStorage.getItem("items_storage"));
-        evntBus.$emit("set_all_items", vm.items);
-        vm.loading = false;
+        const cachedItems = vm.load_cached_items();
+        if (cachedItems) {
+          vm.items = cachedItems;
+          evntBus.$emit("set_all_items", vm.items);
+          vm.loading = false;
+        }
       }
       frappe.call({
         method: "posawesome.posawesome.api.posapp.get_items",
@@ -260,15 +300,7 @@ export default {
               vm.pos_profile.posa_local_storage &&
               !vm.pos_profile.pose_use_limit_search
             ) {
-              localStorage.setItem("items_storage", "");
-              try {
-                localStorage.setItem(
-                  "items_storage",
-                  JSON.stringify(r.message)
-                );
-              } catch (e) {
-                console.error(e);
-              }
+              vm.save_cached_items(r.message);
             }
             if (vm.pos_profile.pose_use_limit_search) {
               vm.enter_event();
@@ -332,21 +364,25 @@ export default {
       if (item.has_variants) {
         evntBus.$emit("open_variants_model", item, this.items);
       } else {
-        if (!item.qty || item.qty === 1) {
-          item.qty = Math.abs(this.qty);
-        }
+        const baseQty =
+          item.qty === undefined || item.qty === null || item.qty === "" || item.qty === 1
+            ? this.qty
+            : item.qty;
+        item.qty = this.normalizeFixedPrecisionNumber(baseQty, 2, true, 1);
         evntBus.$emit("add_item", item);
         this.qty = 1;
+        this.qty_input = this.formtFloat(1, 2);
       }
     },
     enter_event() {
+      this.normalizeManualQty();
       let match = false;
       if (!this.filtred_items.length || !this.first_search) {
         return;
       }
       const qty = this.get_item_qty(this.first_search);
       const new_item = { ...this.filtred_items[0] };
-      new_item.qty = flt(qty);
+      new_item.qty = this.normalizeFixedPrecisionNumber(qty, 2, true, 1);
       new_item.item_barcode.forEach((element) => {
         if (this.search == element.barcode) {
           new_item.uom = element.posa_uom;
@@ -392,6 +428,7 @@ export default {
         this.flags.serial_no = null;
         this.flags.batch_no = null;
         this.qty = 1;
+        this.qty_input = this.formtFloat(1, 2);
         this.$refs.debounce_search.focus();
       }
     },
@@ -402,6 +439,18 @@ export default {
       } else {
         vm.enter_event();
       }
+    },
+    setManualQtyInput(value) {
+      this.qty_input = value;
+      const parsedValue = parseFloat(value);
+      if (!isNaN(parsedValue)) {
+        this.qty = parsedValue;
+      }
+    },
+    normalizeManualQty() {
+      this.qty = this.normalizeFixedPrecisionNumber(this.qty_input, 2, true, 1);
+      this.qty_input = this.formtFloat(this.qty, 2);
+      return this.qty;
     },
     get_item_qty(first_search) {
       let scal_qty = Math.abs(this.qty);
@@ -423,7 +472,7 @@ export default {
         }
         scal_qty = pesokg;
       }
-      return scal_qty;
+      return this.normalizeFixedPrecisionNumber(scal_qty, 2, true, 1);
     },
     get_search(first_search) {
       let search_term = "";

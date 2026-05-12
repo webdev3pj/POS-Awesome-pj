@@ -15,6 +15,20 @@ export default {
             }
             return flt(value, precision, number_format, rounding_method);
         },
+        normalizeFixedPrecisionNumber(value, precision = 2, no_negative = false, fallback = 0) {
+            const safePrecision = Number.isInteger(precision) && precision >= 0 ? precision : 2;
+            let numeric = parseFloat(value);
+            if (isNaN(numeric)) {
+                numeric = fallback == null ? 0 : fallback;
+            }
+            if (no_negative && numeric < 0) {
+                numeric = numeric * -1;
+            }
+            const factor = Math.pow(10, safePrecision);
+            const rounded =
+                Math.round((Number(numeric) + Number.EPSILON) * factor) / factor;
+            return Number(rounded.toFixed(safePrecision));
+        },
         formtCurrency (value, precision) {
             const format = get_number_format(this.pos_profile?.currency);
             value = format_number(
@@ -32,15 +46,15 @@ export default {
         setFormatedCurrency (el, field_name, precision, no_negative = false, $event) {
             let value = 0;
             try {
-                // make sure it is a number and positive
-                let _value = parseFloat($event);
-                if (!isNaN(_value)) {
-                    value = _value;
-                }
-                if (no_negative && value < 0) {
-                    value = value * -1;
-                }
-                value = this.formtCurrency($event, precision);
+                const normalized = this.normalizeFixedPrecisionNumber(
+                    $event,
+                    precision == null ? this.currency_precision || 2 : precision,
+                    no_negative
+                );
+                value = this.formtCurrency(
+                    normalized,
+                    precision == null ? this.currency_precision || 2 : precision
+                );
             } catch (e) {
                 console.error(e);
                 value = 0;
@@ -59,14 +73,15 @@ export default {
         setFormatedFloat (el, field_name, precision, no_negative = false, $event) {
             let value = 0;
             try {
-                // make sure it is a number and positive
-                value = parseFloat($event);
-                if (isNaN(value)) {
-                    value = 0;
-                } else if (no_negative && value < 0) {
-                    value = value * -1;
-                }
-                value = this.formtFloat($event, precision);
+                const normalized = this.normalizeFixedPrecisionNumber(
+                    $event,
+                    precision == null ? this.float_precision || 2 : precision,
+                    no_negative
+                );
+                value = this.formtFloat(
+                    normalized,
+                    precision == null ? this.float_precision || 2 : precision
+                );
             } catch (e) {
                 console.error(e);
                 value = 0;

@@ -666,6 +666,15 @@
     </v-card>
 
     <v-card flat class="cards mb-0 mt-3 py-0">
+      <v-alert
+        v-if="is_sales_associate_role"
+        dense
+        outlined
+        type="warning"
+        class="ma-0 mb-2"
+      >
+        {{ __("Cashier role is required to submit payment. Sales Associate can prepare the cart and token only.") }}
+      </v-alert>
       <v-row align="start" no-gutters>
         <v-col cols="6">
           <v-btn
@@ -674,7 +683,7 @@
             color="primary"
             dark
             @click="submit"
-            :disabled="vaildatPayment"
+            :disabled="vaildatPayment || is_sales_associate_role"
             >{{ __("Submit") }}</v-btn
           >
         </v-col>
@@ -685,7 +694,7 @@
             color="success"
             dark
             @click="submit(undefined, false, true)"
-            :disabled="vaildatPayment"
+            :disabled="vaildatPayment || is_sales_associate_role"
             >{{ __("Submit & Print") }}</v-btn
           >
         </v-col>
@@ -742,6 +751,7 @@
 <script>
 import { evntBus } from "../../bus";
 import format from "../../format";
+import { resolveCurrentRole } from "../../utils/posRole";
 export default {
   mixins: [format],
   data: () => ({
@@ -770,14 +780,168 @@ export default {
     pos_settings: "",
     customer_info: "",
     mpesa_modes: [],
+    relay_status: {
+      enabled: false,
+      connected: false,
+      status: "",
+      effective_connected: false,
+      connectivity_mode: "cloud_checked",
+      allow_cloud_fallback_when_relay_down: false,
+      cloud_connected: false,
+      profile_relay_url: "",
+      relay_url: "",
+    },
+    cloud_status: {
+      navigator_online: true,
+      server_online: false,
+      http_status: null,
+      checked_at: "",
+      message: "",
+    },
+    local_sale_ref: "",
+    current_role: "",
   }),
 
   methods: {
+    safe_flt(value, precision = this.currency_precision) {
+      const amount = this.flt(value, precision);
+      return Number.isFinite(amount) ? amount : 0;
+    },
+    payable_total(invoice_doc = this.invoice_doc) {
+      if (!invoice_doc) return 0;
+      const rounded_total = this.safe_flt(invoice_doc.rounded_total);
+      if (rounded_total) return rounded_total;
+      const grand_total = this.safe_flt(invoice_doc.grand_total);
+      if (grand_total) return grand_total;
+      const total = this.safe_flt(invoice_doc.total);
+      if (total) return total;
+      return this.safe_flt(invoice_doc.net_total);
+    },
+    get_current_role() {
+      return resolveCurrentRole();
+    },
+    get_relay_client_headers(extra = {}) {
+      const headers = { ...extra };
+      try {
+        const relayKey = (localStorage.getItem("posa_relay_client_key") || "").trim();
+        if (relayKey) headers["X-Relay-Client-Key"] = relayKey;
+      } catch (e) {}
+      return headers;
+    },
+    get_explicit_token_ref(source = {}) {
+      const doc = this.invoice_doc || {};
+      const line = (
+        (Array.isArray(doc.items)
+          ? doc.items.find((row) => row && row.sales_order)
+          : null) || {}
+      );
+      return String(
+        source.token_id ||
+          source.sales_order ||
+          source.sales_order_name ||
+          doc.token_id ||
+          doc.sales_order ||
+          doc.sales_order_name ||
+          line.sales_order ||
+          ""
+      ).trim();
+    },
+    block_sales_associate_payment() {
+      this.current_role = this.get_current_role();
+      if (!this.is_sales_associate_role) {
+        return false;
+      }
+      evntBus.$emit("show_mesage", {
+        text: __("Sales Associate cannot take payment. Please use a Cashier account."),
+        color: "error",
+      });
+      frappe.utils.play_sound("error");
+      return true;
+    },
     back_to_invoice() {
       evntBus.$emit("show_payment", "false");
       evntBus.$emit("set_customer_readonly", false);
     },
+    normalize_relay_url(relayUrl) {
+      return String(relayUrl || "").trim().replace(/\/$/, "");
+    },
+    get_effective_relay_connected() {
+      if (typeof this.relay_status.effective_connected === "boolean") {
+        return this.relay_status.effective_connected;
+      }
+      return !!this.relay_status.connected;
+    },
+    get_relay_base_url() {
+      const raw =
+        (this.relay_status && this.relay_status.profile_relay_url) ||
+        (this.relay_status && this.relay_status.relay_url) ||
+        "";
+      return this.normalize_relay_url(raw);
+    },
+    relay_allows_cloud_fallback_when_down() {
+      if (typeof this.relay_status.allow_cloud_fallback_when_relay_down === "boolean") {
+        return this.relay_status.allow_cloud_fallback_when_relay_down;
+      }
+      return parseInt((this.pos_profile && this.pos_profile.posa_allow_cloud_fallback_when_relay_down) || 0, 10) === 1;
+    },
+    is_cloud_reachable_for_fallback() {
+      return !!(this.cloud_status && this.cloud_status.server_online);
+    },
+    submit_invoice_via_cloud(data, print) {
+      const vm = this;
+      frappe.call({
+        method: "posawesome.posawesome.api.posapp.submit_invoice",
+        args: {
+          data: data,
+          invoice: this.invoice_doc,
+        },
+        async: true,
+        callback: function (r) {
+          if (r.message) {
+            if (parseInt(vm.pos_profile.custom_have_token || 0, 10) === 1) {
+              frappe.call({
+                method: "posawesome.posawesome.api.posapp.get_relay_workflow_state",
+                args: {
+                  sales_invoice: vm.invoice_doc.name,
+                },
+                async: true,
+                callback: function (relayResponse) {
+                  const relay = relayResponse.message || {};
+                  if (relay.token_status) {
+                    evntBus.$emit("show_mesage", {
+                      text: __(
+                        "Relay Queue: Token {0} is {1}, Picking {2}",
+                        [
+                          vm.get_explicit_token_ref(relay) || __("Unknown"),
+                          relay.token_status,
+                          relay.picking_status || "Not Started",
+                        ]
+                      ),
+                      color: "info",
+                    });
+                  }
+                },
+              });
+            }
+            if (print) {
+              vm.load_print_page();
+            }
+            evntBus.$emit("workflow_monitor_refresh_requested");
+            evntBus.$emit("set_last_invoice", vm.invoice_doc.name);
+            evntBus.$emit("show_mesage", {
+              text: `Invoice ${r.message.name} is Submited`,
+              color: "success",
+            });
+            frappe.utils.play_sound("submit");
+            vm.addresses = [];
+          }
+        },
+      });
+    },
     submit(event, payment_received = false, print = false) {
+      if (this.block_sales_associate_payment()) {
+        return;
+      }
       if (!this.invoice_doc.is_return && this.total_payments < 0) {
         evntBus.$emit("show_mesage", {
           text: `Payments not correct`,
@@ -812,8 +976,7 @@ export default {
 
       if (
         !this.pos_profile.posa_allow_partial_payment &&
-        this.total_payments <
-          (this.invoice_doc.rounded_total || this.invoice_doc.grand_total)
+        this.total_payments < this.payable_total()
       ) {
         evntBus.$emit("show_mesage", {
           text: `The amount paid is not complete`,
@@ -899,6 +1062,9 @@ export default {
       this.back_to_invoice();
     },
     submit_invoice(print) {
+      if (this.block_sales_associate_payment()) {
+        return;
+      }
       let totalPayedAmount = 0;
       this.invoice_doc.payments.forEach((payment) => {
         payment.amount = flt(payment.amount);
@@ -921,36 +1087,209 @@ export default {
       data["redeemed_customer_credit"] = this.redeemed_customer_credit;
       data["customer_credit_dict"] = this.customer_credit_dict;
       data["is_cashback"] = this.is_cashback;
+      data["cashier_user_id"] = frappe.session.user;
 
       const vm = this;
-      frappe.call({
-        method: "posawesome.posawesome.api.posapp.submit_invoice",
-        args: {
-          data: data,
-          invoice: this.invoice_doc,
-        },
-        async: true,
-        callback: function (r) {
-          if (r.message) {
-            if (print) {
-              vm.load_print_page();
-            }
-            evntBus.$emit("set_last_invoice", vm.invoice_doc.name);
+
+      const relayEnabled = parseInt(vm.pos_profile.custom_have_token || 0, 10) === 1;
+      const relayBaseUrl = this.get_relay_base_url();
+      const relayConnectedForSubmit = this.get_effective_relay_connected();
+      const allowCloudFallbackWhenRelayDown = relayEnabled && this.relay_allows_cloud_fallback_when_down();
+      const cloudReachable = this.is_cloud_reachable_for_fallback();
+
+      if (relayEnabled && !relayBaseUrl) {
+        evntBus.$emit("show_mesage", {
+          text: __("Relay workflow is enabled but Edge Relay URL is not configured for this POS Profile."),
+          color: "error",
+        });
+        frappe.utils.play_sound("error");
+        return;
+      }
+
+      if (relayEnabled && !relayConnectedForSubmit) {
+        if (allowCloudFallbackWhenRelayDown && cloudReachable) {
+          const confirmMsg = __(
+            "Edge Relay is down/unreachable, but cloud is reachable. Submit directly to cloud for this sale?"
+          );
+          const accepted = window.confirm(confirmMsg);
+          if (accepted) {
             evntBus.$emit("show_mesage", {
-              text: `Invoice ${r.message.name} is Submited`,
-              color: "success",
+              text: __("Submitting to cloud (relay fallback confirmed by cashier)."),
+              color: "warning",
             });
-            frappe.utils.play_sound("submit");
-            this.addresses = [];
+            vm.submit_invoice_via_cloud(data, print);
+            return;
           }
-        },
-      });
+          evntBus.$emit("show_mesage", {
+            text: __("Cashier cancelled cloud fallback. Submit remains blocked until relay is reachable."),
+            color: "warning",
+          });
+          frappe.utils.play_sound("error");
+          return;
+        }
+
+        const relayDownBlockMessage =
+          allowCloudFallbackWhenRelayDown && !cloudReachable
+            ? __(
+                "RELAY DOWN and cloud is unreachable. Submit is blocked until relay or cloud connectivity is restored."
+              )
+            : allowCloudFallbackWhenRelayDown
+            ? __(
+                "RELAY DOWN: Offline continuity unavailable, and cloud fallback cannot be used because cloud is not reachable."
+              )
+            : __("RELAY DOWN: Offline continuity unavailable. Submit is blocked until relay is reachable.");
+        evntBus.$emit("show_mesage", {
+          text: relayDownBlockMessage,
+          color: "error",
+        });
+        frappe.utils.play_sound("error");
+        return;
+      }
+
+      if (relayEnabled && relayBaseUrl) {
+        // Walk-in/default POS customers are valid for relay-backed commits; only block when customer is truly missing.
+        if (!this.invoice_doc.customer) {
+          evntBus.$emit("show_mesage", {
+            text: __("Customer is required before relay-backed commit."),
+            color: "error",
+          });
+          frappe.utils.play_sound("error");
+          return;
+        }
+        vm.submit_invoice_via_relay(relayBaseUrl, data, print);
+        return;
+      }
+
+      vm.submit_invoice_via_cloud(data, print);
+    },
+    submit_invoice_via_relay(relayBaseUrl, data, print) {
+      const vm = this;
+      const base = relayBaseUrl.replace(/\/$/, "");
+      const endpoint = `${base}/relay/commit-invoice`;
+
+      const tokenId = vm.get_explicit_token_ref();
+      if (!tokenId) {
+        evntBus.$emit("show_mesage", {
+          text: __("Token reference missing. Please select the Sales Order/token again."),
+          color: "error",
+        });
+        frappe.utils.play_sound("error");
+        return;
+      }
+      const idempotencyKey = `${
+        vm.invoice_doc.name || "DRAFT"
+      }|${Date.now()}|${Math.random().toString(36).slice(2, 10)}`;
+
+      const deviceId =
+        localStorage.getItem("posa_relay_device_id") ||
+        `POS-${Math.random().toString(36).slice(2, 8).toUpperCase()}`;
+      localStorage.setItem("posa_relay_device_id", deviceId);
+
+      const ensureSession = async () => {
+        const queryUrl = `${base}/relay/session/current?pos_profile_id=${encodeURIComponent(
+          vm.pos_profile.name
+        )}&cashier_user_id=${encodeURIComponent(frappe.session.user)}&device_id=${encodeURIComponent(
+          deviceId
+        )}`;
+        try {
+          const currentResp = await fetch(queryUrl, {
+            method: "GET",
+            headers: vm.get_relay_client_headers({
+              Accept: "application/json",
+            }),
+          });
+          const currentPayload = await currentResp.json();
+          if (currentResp.ok && currentPayload.ok && currentPayload.session) {
+            return currentPayload.session.session_id;
+          }
+        } catch (e) {
+          // continue to open session
+        }
+
+        const openResp = await fetch(`${base}/relay/session/open`, {
+          method: "POST",
+          headers: vm.get_relay_client_headers({
+            "Content-Type": "application/json",
+          }),
+          body: JSON.stringify({
+            pos_profile_id: vm.pos_profile.name,
+            cashier_user_id: frappe.session.user,
+            device_id: deviceId,
+            role: vm.current_role || "",
+          }),
+        });
+        const openPayload = await openResp.json();
+        if (!openResp.ok || !openPayload.ok || !openPayload.session) {
+          throw new Error(openPayload.message || "Unable to open cashier relay session");
+        }
+        return openPayload.session.session_id;
+      };
+
+      ensureSession()
+        .then((cashierSessionId) => {
+          return fetch(endpoint, {
+            method: "POST",
+            headers: vm.get_relay_client_headers({
+              "Content-Type": "application/json",
+            }),
+            body: JSON.stringify({
+              token_id: tokenId,
+              idempotency_key: idempotencyKey,
+              pos_profile_id: vm.pos_profile.name,
+              cashier_user_id: frappe.session.user,
+              cashier_session_id: cashierSessionId,
+              device_id: deviceId,
+              role: vm.current_role || "",
+              invoice: vm.invoice_doc,
+              data: data,
+            }),
+          });
+        })
+        .then(async (response) => {
+          let payload = {};
+          try {
+            payload = await response.json();
+          } catch (e) {
+            payload = {};
+          }
+
+          if (!response.ok || !payload.ok) {
+            throw new Error(payload.message || payload.code || "Relay commit failed");
+          }
+
+          vm.local_sale_ref = payload.local_sale_ref || "";
+
+          if (print) {
+            vm.load_print_page();
+          }
+
+          evntBus.$emit("workflow_monitor_refresh_requested");
+          evntBus.$emit("set_last_invoice", vm.invoice_doc.name || "Queued");
+          evntBus.$emit("show_mesage", {
+            text: __(
+              "Sale committed locally. Local Sale Ref: {0}. Cloud sync will happen from relay.",
+              [payload.local_sale_ref || "-"]
+            ),
+            color: "success",
+          });
+          frappe.utils.play_sound("submit");
+        })
+        .catch((error) => {
+          evntBus.$emit("show_mesage", {
+            text: __(
+              "Edge Relay commit failed: {0}. Direct cloud fallback is disabled for relay-enabled profiles.",
+              [error.message || "Unknown error"]
+            ),
+            color: "error",
+          });
+          frappe.utils.play_sound("error");
+        });
     },
     set_full_amount(idx) {
       this.invoice_doc.payments.forEach((payment) => {
         payment.amount =
           payment.idx == idx
-            ? this.invoice_doc.rounded_total || this.invoice_doc.grand_total
+            ? this.payable_total()
             : 0;
       });
     },
@@ -1318,24 +1657,26 @@ export default {
   },
 
   computed: {
+    is_sales_associate_role() {
+      return (this.current_role || "") === "cline-Sales Associate";
+    },
     total_payments() {
-      let total = parseFloat(this.invoice_doc.loyalty_amount);
+      let total = this.safe_flt(this.invoice_doc && this.invoice_doc.loyalty_amount);
       if (this.invoice_doc && this.invoice_doc.payments) {
         this.invoice_doc.payments.forEach((payment) => {
-          total += this.flt(payment.amount);
+          total += this.safe_flt(payment.amount);
         });
       }
 
-      total += this.flt(this.redeemed_customer_credit);
+      total += this.safe_flt(this.redeemed_customer_credit);
 
       if (!this.is_cashback) total = 0;
 
-      return this.flt(total, this.currency_precision);
+      return this.safe_flt(total, this.currency_precision);
     },
     diff_payment() {
-      let diff_payment = this.flt(
-        (this.invoice_doc.rounded_total || this.invoice_doc.grand_total) -
-          this.total_payments,
+      let diff_payment = this.safe_flt(
+        this.payable_total() - this.total_payments,
         this.currency_precision
       );
       this.paid_change = -diff_payment;
@@ -1343,8 +1684,9 @@ export default {
     },
     credit_change() {
       let change = -this.diff_payment;
-      if (this.paid_change > change) return 0;
-      return this.flt(this.paid_change - change, this.currency_precision);
+      const paid_change = this.safe_flt(this.paid_change);
+      if (paid_change > change) return 0;
+      return this.safe_flt(paid_change - change, this.currency_precision);
     },
     diff_lable() {
       let lable = this.diff_payment < 0 ? "Change" : "To Be Paid";
@@ -1409,19 +1751,53 @@ export default {
   },
 
   mounted: function () {
-    this.$nextTick(function () {
-      evntBus.$on("send_invoice_doc_payment", (invoice_doc) => {
-        this.invoice_doc = invoice_doc;
-        const default_payment = this.invoice_doc.payments.find(
-          (payment) => payment.default == 1
-        );
+      this.$nextTick(function () {
+        this.current_role = this.get_current_role();
+        evntBus.$on("send_invoice_doc_payment", (invoice_doc) => {
+          this.invoice_doc = invoice_doc;
+          this.current_role = this.get_current_role();
+          let normalizedPayments = Array.isArray(this.invoice_doc.payments)
+            ? [...this.invoice_doc.payments]
+            : [];
+          if (
+            normalizedPayments.length === 0 &&
+            this.pos_profile &&
+            Array.isArray(this.pos_profile.payments)
+          ) {
+            normalizedPayments = this.pos_profile.payments.map((row, index) => ({
+              idx: index + 1,
+              name:
+                row.name ||
+                `POSA-PAYMENT-${index + 1}-${(row.mode_of_payment || "").replace(/\s+/g, "-")}`,
+              mode_of_payment: row.mode_of_payment,
+              type: row.type || "",
+              default: row.default,
+              amount: 0,
+              base_amount: 0,
+              account: row.account || "",
+            }));
+          }
+          normalizedPayments.forEach((payment, index) => {
+            if (!payment.idx) {
+              payment.idx = index + 1;
+            }
+            if (payment.amount === undefined || payment.amount === null || payment.amount === "") {
+              payment.amount = 0;
+            }
+            if (payment.base_amount === undefined || payment.base_amount === null || payment.base_amount === "") {
+              payment.base_amount = 0;
+            }
+            payment.amount = this.safe_flt(payment.amount);
+            payment.base_amount = this.safe_flt(payment.base_amount);
+          });
+          this.$set(this.invoice_doc, "payments", normalizedPayments);
+          const default_payment = this.invoice_doc.payments.find(
+            (payment) => payment.default == 1
+          );
         this.is_credit_sale = 0;
         this.is_write_off_change = 0;
         if (default_payment && !invoice_doc.is_return) {
-          default_payment.amount = this.flt(
-            invoice_doc.rounded_total || invoice_doc.grand_total,
-            this.currency_precision
-          );
+          default_payment.amount = this.payable_total(invoice_doc);
         }
         if (invoice_doc.is_return) {
           this.is_return = true;
@@ -1437,7 +1813,38 @@ export default {
       });
       evntBus.$on("register_pos_profile", (data) => {
         this.pos_profile = data.pos_profile;
+        this.current_role = this.get_current_role();
         this.get_mpesa_modes();
+      });
+      evntBus.$on("relay_status_changed", (statusPayload) => {
+        this.relay_status = {
+          enabled: !!statusPayload.enabled,
+          connected: !!statusPayload.connected,
+          status: statusPayload.status || "",
+          effective_connected:
+            typeof statusPayload.effective_connected === "boolean"
+              ? !!statusPayload.effective_connected
+              : !!statusPayload.connected,
+          connectivity_mode: statusPayload.connectivity_mode || "cloud_checked",
+          allow_cloud_fallback_when_relay_down: !!statusPayload.allow_cloud_fallback_when_relay_down,
+          cloud_connected:
+            typeof statusPayload.cloud_connected === "boolean"
+              ? !!statusPayload.cloud_connected
+              : !!statusPayload.connected,
+          profile_relay_url: statusPayload.profile_relay_url || "",
+          relay_url: statusPayload.relay_url || "",
+        };
+      });
+      evntBus.$on("cloud_status_changed", (payload) => {
+        const cloudPayload = payload && typeof payload === "object" ? payload : {};
+        this.cloud_status = {
+          navigator_online:
+            typeof cloudPayload.navigator_online === "boolean" ? !!cloudPayload.navigator_online : true,
+          server_online: !!cloudPayload.server_online,
+          http_status: cloudPayload.http_status || null,
+          checked_at: cloudPayload.checked_at || "",
+          message: cloudPayload.message || "",
+        };
       });
       evntBus.$on("add_the_new_address", (data) => {
         this.addresses.push(data);
@@ -1482,6 +1889,8 @@ export default {
     evntBus.$off("set_customer_info_to_edit");
     evntBus.$off("update_invoice_coupons");
     evntBus.$off("set_mpesa_payment");
+    evntBus.$off("relay_status_changed");
+    evntBus.$off("cloud_status_changed");
   },
 
   destroyed() {

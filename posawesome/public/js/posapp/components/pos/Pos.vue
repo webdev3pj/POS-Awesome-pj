@@ -1,62 +1,81 @@
 <template>
-  <div fluid class="mt-2">
+  <div class="pos-shell">
     <ClosingDialog></ClosingDialog>
     <Drafts></Drafts>
     <SalesOrders></SalesOrders>
+    <Quotations></Quotations>
     <Returns></Returns>
     <NewAddress></NewAddress>
     <MpesaPayments></MpesaPayments>
     <Variants></Variants>
+    <WorkflowTicketRail
+      v-if="!dialog"
+      :pos_profile="pos_profile"
+      :pos_opening_shift="pos_opening_shift"
+      :business_date="session_business_date"
+    ></WorkflowTicketRail>
     <OpeningDialog v-if="dialog" :dialog="dialog"></OpeningDialog>
     <v-row v-show="!dialog">
-      <v-col
-        v-show="!payment && !offers && !coupons"
-        xl="5"
-        lg="5"
-        md="5"
-        sm="5"
-        cols="12"
-        class="pos pr-0"
-      >
-        <ItemsSelector></ItemsSelector>
-      </v-col>
-      <v-col
-        v-show="offers"
-        xl="5"
-        lg="5"
-        md="5"
-        sm="5"
-        cols="12"
-        class="pos pr-0"
-      >
-        <PosOffers></PosOffers>
-      </v-col>
-      <v-col
-        v-show="coupons"
-        xl="5"
-        lg="5"
-        md="5"
-        sm="5"
-        cols="12"
-        class="pos pr-0"
-      >
-        <PosCoupons></PosCoupons>
-      </v-col>
-      <v-col
-        v-show="payment"
-        xl="5"
-        lg="5"
-        md="5"
-        sm="5"
-        cols="12"
-        class="pos pr-0"
-      >
-        <Payments></Payments>
-      </v-col>
+      <template v-if="is_fulfillment_role">
+        <v-col cols="12" class="pos">
+          <FulfillmentWorkspace
+            :pos_profile="pos_profile"
+            :pos_opening_shift="pos_opening_shift"
+            :business_date="session_business_date"
+            :current_role="current_role"
+          ></FulfillmentWorkspace>
+        </v-col>
+      </template>
+      <template v-else>
+        <v-col
+          v-show="!payment && !offers && !coupons"
+          xl="5"
+          lg="5"
+          md="5"
+          sm="5"
+          cols="12"
+          class="pos pr-0"
+        >
+          <ItemsSelector></ItemsSelector>
+        </v-col>
+        <v-col
+          v-show="offers"
+          xl="5"
+          lg="5"
+          md="5"
+          sm="5"
+          cols="12"
+          class="pos pr-0"
+        >
+          <PosOffers></PosOffers>
+        </v-col>
+        <v-col
+          v-show="coupons"
+          xl="5"
+          lg="5"
+          md="5"
+          sm="5"
+          cols="12"
+          class="pos pr-0"
+        >
+          <PosCoupons></PosCoupons>
+        </v-col>
+        <v-col
+          v-show="payment"
+          xl="5"
+          lg="5"
+          md="5"
+          sm="5"
+          cols="12"
+          class="pos pr-0"
+        >
+          <Payments></Payments>
+        </v-col>
 
-      <v-col xl="7" lg="7" md="7" sm="7" cols="12" class="pos">
-        <Invoice></Invoice>
-      </v-col>
+        <v-col xl="7" lg="7" md="7" sm="7" cols="12" class="pos">
+          <Invoice></Invoice>
+        </v-col>
+      </template>
     </v-row>
   </div>
 </template>
@@ -71,11 +90,15 @@ import PosOffers from './PosOffers.vue';
 import PosCoupons from './PosCoupons.vue';
 import Drafts from './Drafts.vue';
 import SalesOrders from "./SalesOrders.vue";
+import Quotations from "./Quotations.vue";
 import ClosingDialog from './ClosingDialog.vue';
 import NewAddress from './NewAddress.vue';
 import Variants from './Variants.vue';
 import Returns from './Returns.vue';
 import MpesaPayments from './Mpesa-Payments.vue';
+import WorkflowTicketRail from './WorkflowTicketRail.vue';
+import FulfillmentWorkspace from './FulfillmentWorkspace.vue';
+import { resolveCurrentRole } from '../../utils/posRole';
 
 export default {
   data: function () {
@@ -83,9 +106,11 @@ export default {
       dialog: false,
       pos_profile: '',
       pos_opening_shift: '',
+      session_business_date: '',
       payment: false,
       offers: false,
       coupons: false,
+      current_role: '',
     };
   },
 
@@ -104,18 +129,40 @@ export default {
     Variants,
     MpesaPayments,
     SalesOrders,
+    Quotations,
+    WorkflowTicketRail,
+    FulfillmentWorkspace,
+  },
+
+  computed: {
+    is_fulfillment_role() {
+      return ['cline-Picker', 'cline-Dispatch', 'cline-Supervisor'].includes(
+        (this.current_role || '').trim()
+      );
+    },
   },
 
   methods: {
+    get_current_role() {
+      return resolveCurrentRole();
+    },
+    refresh_current_role() {
+      this.current_role = this.get_current_role();
+    },
     check_opening_entry() {
       return frappe
         .call('posawesome.posawesome.api.posapp.check_opening_shift', {
           user: frappe.session.user,
         })
         .then((r) => {
+          this.refresh_current_role();
           if (r.message) {
             this.pos_profile = r.message.pos_profile;
             this.pos_opening_shift = r.message.pos_opening_shift;
+            this.session_business_date =
+              r.message.session_business_date ||
+              (r.message.pos_opening_shift && r.message.pos_opening_shift.posting_date) ||
+              frappe.datetime.nowdate();
             this.get_offers(this.pos_profile.name);
             evntBus.$emit('register_pos_profile', r.message);
             evntBus.$emit('set_company', r.message.company);
@@ -129,6 +176,13 @@ export default {
       this.dialog = true;
     },
     get_closing_data() {
+      if (!this.pos_opening_shift || !this.pos_opening_shift.name) {
+        evntBus.$emit('show_mesage', {
+          text: __('Close Shift is only available for a cashier opening shift session.'),
+          color: 'warning',
+        });
+        return Promise.resolve();
+      }
       return frappe
         .call(
           'posawesome.posawesome.doctype.pos_closing_shift.pos_closing_shift.make_closing_shift_from_opening',
@@ -158,10 +212,19 @@ export default {
               text: `POS Shift Closed`,
               color: 'success',
             });
+            evntBus.$emit('closing_pos_submitted');
             this.check_opening_entry();
           } else {
+            evntBus.$emit('closing_pos_submit_failed');
             console.log(r);
           }
+        })
+        .catch((e) => {
+          evntBus.$emit('closing_pos_submit_failed');
+          evntBus.$emit('show_mesage', {
+            text: (e && e.message) || __('Failed to close POS shift. Please try again.'),
+            color: 'error',
+          });
         });
     },
     get_offers(pos_profile) {
@@ -185,15 +248,30 @@ export default {
 
   mounted: function () {
     this.$nextTick(function () {
+      this.refresh_current_role();
       this.check_opening_entry();
       this.get_pos_setting();
+      this._handle_storage_event = (event) => {
+        if (!event || event.key === 'pos_current_role') {
+          this.refresh_current_role();
+        }
+      };
+      if (typeof window !== 'undefined' && window.addEventListener) {
+        window.addEventListener('storage', this._handle_storage_event);
+      }
       evntBus.$on('close_opening_dialog', () => {
+        this.refresh_current_role();
         this.dialog = false;
       });
       evntBus.$on('register_pos_data', (data) => {
+        this.refresh_current_role();
         this.pos_profile = data.pos_profile;
         this.get_offers(this.pos_profile.name);
         this.pos_opening_shift = data.pos_opening_shift;
+        this.session_business_date =
+          data.session_business_date ||
+          (data.pos_opening_shift && data.pos_opening_shift.posting_date) ||
+          frappe.datetime.nowdate();
         evntBus.$emit('register_pos_profile', data);
         console.info('LoadPosProfile');
       });
@@ -218,6 +296,9 @@ export default {
       evntBus.$on('submit_closing_pos', (data) => {
         this.submit_closing_pos(data);
       });
+      evntBus.$on('pos_role_changed', () => {
+        this.refresh_current_role();
+      });
     });
   },
   beforeDestroy() {
@@ -228,8 +309,23 @@ export default {
     evntBus.$off('show_coupons');
     evntBus.$off('open_closing_dialog');
     evntBus.$off('submit_closing_pos');
+    evntBus.$off('pos_role_changed');
+    if (typeof window !== 'undefined' && window.removeEventListener && this._handle_storage_event) {
+      window.removeEventListener('storage', this._handle_storage_event);
+    }
   },
 };
 </script>
 
-<style scoped></style>
+<style scoped>
+.pos-shell {
+  padding: 8px 10px 10px;
+  background: #f4f7fb;
+}
+
+@media (max-width: 959px) {
+  .pos-shell {
+    padding: 6px;
+  }
+}
+</style>
