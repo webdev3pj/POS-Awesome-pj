@@ -122,3 +122,25 @@ Will using for this the same guidelines from Erpnext
 GNU/General Public License (see [license.txt](https://github.com/yrestom/POS-Awesome/blob/master/license.txt))
 
 The POS Awesome code is licensed as GNU General Public License (v3)
+
+---
+
+### How Nick runs the tests
+
+This repo now includes Cypress UI tests that can log into a live Frappe Cloud dev site (including OTP) using a local `.env` file.
+
+1. First-time setup (one time):
+   - Run `npm install`
+   - Create `.env` from `.env.example` and fill:
+     - `CYPRESS_baseUrl`
+     - `CYPRESS_username`
+     - `CYPRESS_password`
+     - `CYPRESS_totpUri` (full `otpauth://...` string)
+2. Open Cypress and watch it click through the login:
+   - `npm run e2e:open`
+3. Run headless:
+   - `npm run e2e:run`
+
+Notes:
+- `.env` is ignored by git and must never be committed.
+- The OTP code is generated automatically from `CYPRESS_totpUri` during the test.
