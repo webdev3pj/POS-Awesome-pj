@@ -186,41 +186,44 @@ def _copy_profile(source_profile, target_profile):
 def _ensure_profile_payment_method(profile, source):
     if not profile.meta.has_field("payments"):
         return
-    if profile.get("payments"):
-        if not any(row.get("default") for row in profile.get("payments")):
-            profile.get("payments")[0].default = 1
-        return
 
     preferred_modes = [
         source.get("posa_cash_mode_of_payment"),
-        "Cash PJ7",
         "Cash",
+        "Bank Transfer",
+        "Credit Card",
+        "Cash PJ7",
         "PJ7 OPENING INVOICE PAYMENT",
     ]
+    added_default = any(row.get("default") for row in profile.get("payments") or [])
     for mode in preferred_modes:
         mode = frappe.as_unicode(mode or "").strip()
-        if mode and frappe.db.exists("Mode of Payment", mode):
-            profile.append(
-                "payments",
-                {
-                    "mode_of_payment": mode,
-                    "default": 1,
-                    "allow_in_returns": 1,
-                },
-            )
-            return
+        if mode:
+            added_default = _append_payment_mode(profile, mode, default=0 if added_default else 1)
 
-    mode = frappe.db.get_value("Mode of Payment", {"enabled": 1}, "name")
-    if not mode:
-        frappe.throw("No enabled Mode of Payment exists for POS Profile provisioning.")
-    profile.append(
-        "payments",
-        {
-            "mode_of_payment": mode,
-            "default": 1,
-            "allow_in_returns": 1,
-        },
-    )
+    if not profile.get("payments"):
+        mode = frappe.db.get_value("Mode of Payment", {"enabled": 1}, "name")
+        if not mode:
+            frappe.throw("No enabled Mode of Payment exists for POS Profile provisioning.")
+        _append_payment_mode(profile, mode, default=1)
+
+    if not any(row.get("default") for row in profile.get("payments") or []):
+        profile.get("payments")[0].default = 1
+
+
+def _append_payment_mode(profile, mode, default=0):
+    if not frappe.db.exists("Mode of Payment", mode):
+        return False
+    if any(row.get("mode_of_payment") == mode for row in profile.get("payments") or []):
+        return bool(any(row.get("default") for row in profile.get("payments") or []))
+
+    row = {"mode_of_payment": mode}
+    if profile.meta.get_field("payments").options == "POS Payment Method":
+        row.update({"default": default, "allow_in_returns": 1})
+    else:
+        row.update({"default": default, "amount": 0})
+    profile.append("payments", row)
+    return bool(default) or bool(any(row.get("default") for row in profile.get("payments") or []))
 
 
 def _clear_default_profile_rows(users, company):
