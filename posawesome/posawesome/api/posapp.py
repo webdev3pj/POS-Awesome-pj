@@ -48,13 +48,20 @@ OPERATIONAL_ROLES = (
 @frappe.whitelist()
 def get_opening_dialog_data():
     data = {}
-    data["companies"] = frappe.get_list("Company", limit_page_length=0, order_by="name")
+    data["companies"] = frappe.get_list(
+        "Company",
+        fields=["name"],
+        limit_page_length=0,
+        order_by="name",
+        ignore_permissions=True,
+    )
     data["pos_profiles_data"] = frappe.get_list(
         "POS Profile",
         filters={"disabled": 0},
         fields=["name", "company", "currency"],
         limit_page_length=0,
         order_by="name",
+        ignore_permissions=True,
     )
 
     pos_profiles_list = []
@@ -176,6 +183,10 @@ def create_opening_voucher(pos_profile, company, balance_details):
 
 @frappe.whitelist()
 def check_opening_shift(user):
+    user = cstr(user or frappe.session.user).strip()
+    if user != frappe.session.user and frappe.session.user != "Administrator":
+        frappe.throw(_("You can only check your own POS opening shift."))
+
     open_vouchers = frappe.db.get_all(
         "POS Opening Shift",
         filters={
@@ -194,7 +205,54 @@ def check_opening_shift(user):
             "POS Opening Shift", open_vouchers[0]["name"]
         )
         update_opening_shift_data(data, open_vouchers[0]["pos_profile"])
+        return data
+
+    role = _get_single_operational_role()
+    if role and role != "cline-Cashier":
+        pos_profile = _get_default_pos_profile_for_user(user)
+        if pos_profile:
+            return _bootstrap_non_cash_pos_session(pos_profile, role)
     return data
+
+
+def _get_default_pos_profile_for_user(user):
+    user = cstr(user or "").strip()
+    if not user:
+        return ""
+
+    rows = frappe.db.sql(
+        """
+        select pf.name
+        from `tabPOS Profile` pf
+        inner join `tabPOS Profile User` pfu on pfu.parent = pf.name
+        where pfu.user = %s
+            and pfu.default = 1
+            and pf.disabled = 0
+        order by pf.modified desc
+        limit 1
+        """,
+        (user,),
+        as_dict=True,
+    )
+    if rows:
+        return cstr(rows[0].name or "").strip()
+
+    rows = frappe.db.sql(
+        """
+        select pf.name
+        from `tabPOS Profile` pf
+        inner join `tabPOS Profile User` pfu on pfu.parent = pf.name
+        where pfu.user = %s
+            and pf.disabled = 0
+        order by pf.modified desc
+        limit 1
+        """,
+        (user,),
+        as_dict=True,
+    )
+    if rows:
+        return cstr(rows[0].name or "").strip()
+    return ""
 
 
 def update_opening_shift_data(data, pos_profile):
@@ -205,6 +263,21 @@ def update_opening_shift_data(data, pos_profile):
     )
     data["stock_settings"] = {}
     data["stock_settings"].update({"allow_negative_stock": allow_negative_stock})
+
+
+def _bootstrap_non_cash_pos_session(pos_profile, role):
+    data = {
+        "pos_opening_shift": {
+            "name": "",
+            "is_virtual_session": 1,
+            "session_role": role or "",
+        },
+        "session_mode": "no_cash_role_session",
+        "session_role": role or "",
+        "session_business_date": nowdate(),
+    }
+    update_opening_shift_data(data, pos_profile)
+    return data
 
 
 def _get_single_operational_role():
@@ -299,20 +372,7 @@ def bootstrap_pos_session(pos_profile, company=None):
     ):
         frappe.throw(_("Role {0} is not allowed to start a non-cash POS session.").format(role))
 
-    data = {
-        # Keep a lightweight object shape so existing frontend code that reads
-        # `pos_opening_shift.name` does not crash in no-cash role sessions.
-        "pos_opening_shift": {
-            "name": "",
-            "is_virtual_session": 1,
-            "session_role": role or "",
-        },
-        "session_mode": "no_cash_role_session",
-        "session_role": role or "",
-        "session_business_date": nowdate(),
-    }
-    update_opening_shift_data(data, pos_profile)
-    return data
+    return _bootstrap_non_cash_pos_session(pos_profile, role)
 
 
 @frappe.whitelist()
