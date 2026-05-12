@@ -2445,6 +2445,9 @@ export default {
             "posawesome.posawesome.api.posapp.create_sales_invoice_from_order",
           args: {
             sales_order: this.invoice_doc.name,
+            pos_profile: this.pos_profile.name,
+            pos_opening_shift:
+              (this.pos_opening_shift && this.pos_opening_shift.name) || "",
           },
           // async: false,
           callback: function (r) {

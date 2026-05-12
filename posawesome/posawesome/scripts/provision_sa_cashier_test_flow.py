@@ -165,6 +165,7 @@ def _copy_profile(source_profile, target_profile):
         "posa_allow_sa_quotation": 1,
         "posa_allow_cashier_quotation": 1,
         "posa_allow_print_draft_invoices": 1,
+        "posa_allow_cloud_fallback_when_relay_down": 1,
         "posa_hide_closing_shift": 0,
     }.items():
         if profile.meta.has_field(fieldname):

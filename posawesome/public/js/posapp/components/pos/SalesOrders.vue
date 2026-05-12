@@ -465,6 +465,7 @@ export default {
             "posawesome.posawesome.api.posapp.create_sales_invoice_from_order",
           args: {
             sales_order: this.selected[0].name,
+            pos_profile: this.pos_profile.name,
           },
           callback: function (r) {
             if (r.message) {

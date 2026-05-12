@@ -4065,9 +4065,52 @@ def get_seearch_items_conditions(item_code, serial_no, batch_no, barcode):
 
 
 @frappe.whitelist()
-def create_sales_invoice_from_order(sales_order):
+def create_sales_invoice_from_order(sales_order, pos_profile=None, pos_opening_shift=None):
+    existing_invoice = _get_draft_invoice_for_sales_order(
+        sales_order, pos_profile=pos_profile, pos_opening_shift=pos_opening_shift
+    )
+    if existing_invoice:
+        return frappe.get_doc("Sales Invoice", existing_invoice).as_dict()
+
     sales_invoice = make_sales_invoice(sales_order, ignore_permissions=True)
     return sales_invoice.as_dict()
+
+
+def _get_draft_invoice_for_sales_order(sales_order, pos_profile=None, pos_opening_shift=None):
+    sales_order = cstr(sales_order or "").strip()
+    if not sales_order:
+        return ""
+
+    conditions = [
+        "si.docstatus = 0",
+        "ifnull(si.is_pos, 0) = 1",
+        "sii.sales_order = %s",
+    ]
+    values = [sales_order]
+
+    pos_profile = cstr(pos_profile or "").strip()
+    if pos_profile:
+        conditions.append("si.pos_profile = %s")
+        values.append(pos_profile)
+
+    pos_opening_shift = cstr(pos_opening_shift or "").strip()
+    if pos_opening_shift and frappe.db.has_column("Sales Invoice", "posa_pos_opening_shift"):
+        conditions.append("si.posa_pos_opening_shift = %s")
+        values.append(pos_opening_shift)
+
+    rows = frappe.db.sql(
+        """
+        select distinct si.name
+        from `tabSales Invoice` si
+        inner join `tabSales Invoice Item` sii on sii.parent = si.name
+        where {conditions}
+        order by si.modified desc
+        limit 1
+        """.format(conditions=" and ".join(conditions)),
+        values,
+        as_dict=True,
+    )
+    return rows[0].name if rows else ""
 
 
 @frappe.whitelist()
