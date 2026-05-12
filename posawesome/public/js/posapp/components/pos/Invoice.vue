@@ -727,6 +727,27 @@
         </v-col>
         <v-col cols="5">
           <v-row
+            v-if="selected_sales_order_label"
+            no-gutters
+            class="pa-1 pt-2 pl-0"
+          >
+            <v-col cols="12" class="pa-1">
+              <v-alert
+                dense
+                outlined
+                type="info"
+                class="mb-0 selected-sales-order-alert"
+              >
+                <div class="caption font-weight-medium">
+                  {{ __("Selected Sales Order") }}
+                </div>
+                <div class="body-2 font-weight-bold">
+                  {{ selected_sales_order_label }}
+                </div>
+              </v-alert>
+            </v-col>
+          </v-row>
+          <v-row
             v-if="show_order_name_field"
             no-gutters
             class="pa-1 pt-2 pl-0"
@@ -971,6 +992,16 @@ export default {
         );
       }
       return false;
+    },
+    selected_sales_order_label() {
+      const doc = this.invoice_doc || {};
+      if (doc.doctype !== "Sales Order" && !doc.relay_offline_order) return "";
+      const orderName = String(doc.posa_order_name || doc.order_name || "").trim();
+      const token = String(
+        doc.token_id || doc.sales_order_name || doc.sales_order || doc.name || ""
+      ).trim();
+      if (orderName && token) return `${orderName} / ${token}`;
+      return orderName || token;
     },
     total_qty() {
       this.close_payments();
