@@ -1898,8 +1898,14 @@ def add_taxes_from_tax_template(item, parent_doc):
 @frappe.whitelist()
 def update_invoice_from_order(data):
     data = json.loads(data)
-    invoice_doc = frappe.get_doc("Sales Invoice", data.get("name"))
-    invoice_doc.update(data)
+    if data.get("name"):
+        invoice_doc = frappe.get_doc("Sales Invoice", data.get("name"))
+        invoice_doc.update(data)
+    else:
+        data.pop("name", None)
+        invoice_doc = frappe.get_doc(data)
+    invoice_doc.flags.ignore_permissions = True
+    frappe.flags.ignore_account_permission = True
     invoice_doc.save()
     return invoice_doc
 

@@ -2708,8 +2708,8 @@ export default {
         return;
       }
       if (this.invoice_doc.doctype == "Sales Order") {
-        evntBus.$emit("show_payment", "true");
         const invoice_doc = await this.process_invoice_from_order();
+        evntBus.$emit("show_payment", "true");
         evntBus.$emit("send_invoice_doc_payment", invoice_doc);
       } else if (this.invoice_doc.doctype == "Sales Invoice") {
         const sales_invoice_item = this.invoice_doc.items[0];
@@ -2729,8 +2729,8 @@ export default {
           },
         });
         if (sales_invoice_item_doc.sales_order) {
-          evntBus.$emit("show_payment", "true");
           const invoice_doc = await this.process_invoice_from_order();
+          evntBus.$emit("show_payment", "true");
           evntBus.$emit("send_invoice_doc_payment", invoice_doc);
         } else {
           evntBus.$emit("show_payment", "true");
