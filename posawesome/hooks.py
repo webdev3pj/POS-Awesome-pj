@@ -21,8 +21,6 @@ app_include_js = [
     "/assets/posawesome/node_modules/vuetify/dist/vuetify.js",
     "posawesome.bundle.js",
     "/assets/posawesome/js/xlsx.full.min.js",
-    "/assets/posawesome/js/sales_person_commiss.js",
-    "/assets/posawesome/js/sales_partner_commis.js"
 ]
 
 
@@ -36,7 +34,6 @@ app_include_js = [
 
 # include js in page
 # page_js = {"page" : "public/js/file.js"}
-
 
 
 # include js in doctype views
@@ -104,8 +101,7 @@ override_doctype_class = {
 }
 doc_events = {
     "Sales Invoice": {
-        "before_save": "posawesome.overrides.selling_commission.run_custom_commission",
-        "before_save": "posawesome.overrides.selling_commission.run_custom_contribution",
+        "before_save": "posawesome.overrides.selling_commission.run_all_commissions",
         "validate": "posawesome.posawesome.api.invoice.validate",
         "before_submit": "posawesome.posawesome.api.invoice.before_submit",
         "before_cancel": "posawesome.posawesome.api.invoice.before_cancel",
@@ -213,6 +209,7 @@ fixtures = [
                     "Sales Invoice Item-posa_notes",
                     "Sales Invoice Item-posa_delivery_date",
                     "Sales Order-posa_additional_notes_section",
+                    "Sales Order-posa_order_name",
                     "Sales Order-posa_notes",
                     "Sales Order Item-posa_notes",
                     "POS Profile-posa_allow_sales_order",
@@ -273,13 +270,25 @@ fixtures = [
         ],
     },
     {
+        "doctype": "Custom Field",
+        "filters": [["module", "in", ("POSAwesome")]],
+    },
+    {
+        "doctype": "Property Setter",
+        "filters": [["module", "in", ("POSAwesome")]],
+    },
+    {
         "doctype": "Property Setter",
         "filters": [["name", "in", ("Sales Invoice-posa_pos_opening_shift-no_copy")]],
     },
     {
-    "doctype": "Role",
-    "filters": [
-        ["role_name", "in", ["Sales Commission", "Sales Commission Admin"]]
+        "doctype": "DocType",
+        "filters": [["name", "in", ("POS Relay Workflow State")]],
+    },
+    {
+        "doctype": "Role",
+        "filters": [
+            ["role_name", "in", ["Sales Commission", "Sales Commission Admin"]]
         ],
     },
 ]

@@ -1,0 +1,4 @@
+posawesome.patches.v2026_04_06_create_cline_helper_role
+posawesome.patches.v2026_04_06_add_sales_associate_posapp_access
+posawesome.patches.v2026_04_07_expand_cline_posapp_access
+posawesome.patches.v2026_05_11_add_sales_order_order_name
