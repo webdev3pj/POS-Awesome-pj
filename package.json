@@ -1,6 +1,25 @@
 {
+  "scripts": {
+    "e2e:open": "node scripts/run-cypress.cjs open --e2e",
+    "e2e:run": "node scripts/run-cypress.cjs run --e2e",
+    "e2e:gui": "node scripts/run-cypress.cjs run --e2e --browser chrome --headed --runner-ui",
+    "e2e:watch:gui": "node scripts/cypress-gui-watch.cjs",
+    "e2e:watch:gui:chrome": "node scripts/cypress-gui-watch.cjs --browser chrome",
+    "cypress:telegram:run": "node scripts/cypress-telegram-runner.cjs",
+    "cypress:telegram:cloud-first3": "node scripts/cypress-telegram-runner.cjs --order cloud-first3",
+    "cypress:telegram:local-first3": "node scripts/cypress-telegram-runner.cjs --order local-first3",
+    "telegram:bot": "node scripts/telegram-bot-poll.cjs",
+    "telegram:bot:start": "powershell -ExecutionPolicy Bypass -File scripts/telegram-bot-start.ps1",
+    "telegram:bot:stop": "powershell -ExecutionPolicy Bypass -File scripts/telegram-bot-stop.ps1",
+    "happy:fleet:start": "powershell -ExecutionPolicy Bypass -File scripts/happy/start-happy-codex-fleet.ps1",
+    "happy:fleet:stop": "powershell -ExecutionPolicy Bypass -File scripts/happy/stop-happy-codex-fleet.ps1"
+  },
   "dependencies": {
     "lodash": "^4.17.21",
     "vuetify": "^2.6.10"
+  },
+  "devDependencies": {
+    "cypress": "^14.5.4",
+    "dotenv": "^17.3.1"
   }
 }
