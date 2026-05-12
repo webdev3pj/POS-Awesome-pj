@@ -2,12 +2,36 @@ import frappe
 from frappe import _
 from frappe.utils import flt
 
+
+def _safe_get_doc_precision(doc, fieldname, child=None, fallback=2):
+    try:
+        if child is not None:
+            value = doc.precision(fieldname, child)
+        else:
+            value = doc.precision(fieldname)
+        return int(value) if value is not None else fallback
+    except Exception:
+        return fallback
+
+
+def _item_base_amount(item):
+    # prefer explicit base_net_amount if available and non-zero
+    base_net_amount = flt(getattr(item, "base_net_amount", 0) or 0)
+    if base_net_amount:
+        return base_net_amount
+
+    qty = flt(getattr(item, "qty", 0) or 0)
+    # fallback to price_list_rate path used by this customization
+    price_list_rate = flt(getattr(item, "price_list_rate", 0) or 0)
+    return qty * price_list_rate
+
+
 def custom_calculate_commission(self):
     # ✅ Run only if Sales Partner is set
     if not self.sales_partner:
         return  
 
-    if not self.meta.get_field("commission_rate") or self.docstatus.is_submitted():
+    if not self.meta.get_field("commission_rate") or int(getattr(self, "docstatus", 0) or 0) == 1:
         return
 
     self.round_floats_in(self, ("amount_eligible_for_commission", "commission_rate"))
@@ -30,8 +54,9 @@ def custom_calculate_commission(self):
     # clear breakdown
     self.set("custom_commission_breakdown", [])
 
-    for item in self.items:
-        if not item.grant_commission:
+    applied_rate = 0
+    for item in (self.items or []):
+        if not getattr(item, "grant_commission", 0):
             continue
 
         tax_rate = 0
@@ -45,10 +70,11 @@ def custom_calculate_commission(self):
                 tax_rate = flt(tax_rows[0].rate)  # or sum if multiple
 
         # ✅ Exclude tax from Price List Rate
-        base_rate_excl_tax = flt(item.price_list_rate) / (1 + (tax_rate / 100))
-        item_amount = flt(item.qty) * base_rate_excl_tax
+        item_amount = _item_base_amount(item)
+        if tax_rate:
+            item_amount = flt(item_amount) / (1 + (tax_rate / 100))
 
-        item_cap_rate = flt(item.custom_max_commission_rate) or effective_rate
+        item_cap_rate = flt(getattr(item, "custom_max_commission_rate", 0) or 0) or effective_rate
         applied_rate = min(effective_rate, item_cap_rate)
 
         commission_amount = item_amount * applied_rate / 100
@@ -64,7 +90,7 @@ def custom_calculate_commission(self):
 
 
     self.amount_eligible_for_commission = eligible_amount
-    self.total_commission = flt(total_commission, self.precision("total_commission"))
+    self.total_commission = flt(total_commission, _safe_get_doc_precision(self, "total_commission"))
 
     # ✅ Set the additional fields
     self.custom_effective_commission_rate = applied_rate
@@ -84,44 +110,44 @@ def custom_calculate_contribution(self):
         return
 
     total = 0.0
-    sales_team = self.get("sales_team")
+    sales_team = self.get("sales_team") or []
 
     self.validate_sales_team(sales_team)
 
     # clear breakdown table
     self.set("custom_sales_person_commission_breakdown", [])
     self.amount_eligible_for_commission = sum(
-			item.base_net_amount for item in self.items if item.grant_commission
-		)
+        _item_base_amount(item) for item in (self.items or []) if getattr(item, "grant_commission", 0)
+    )
 
     for sales_person in sales_team:
         self.round_floats_in(sales_person)
 
         sales_person.allocated_amount = flt(
             flt(self.amount_eligible_for_commission) * sales_person.allocated_percentage / 100.0,
-            self.precision("allocated_amount", sales_person),
+            _safe_get_doc_precision(self, "allocated_amount", sales_person),
         )
 
         total_commission = 0
 
         if sales_person.commission_rate:
-            for item in self.items:
-                if not item.grant_commission:
+            for item in (self.items or []):
+                if not getattr(item, "grant_commission", 0):
                     continue
 
                 # ensure numeric values
                 partner_rate = flt(sales_person.commission_rate)
-                item_cap_rate = flt(item.custom_sales_person_max_commission_rate) or partner_rate
+                item_cap_rate = flt(getattr(item, "custom_sales_person_max_commission_rate", 0) or 0) or partner_rate
 
                 applied_rate = partner_rate if partner_rate < item_cap_rate else item_cap_rate
 
-                commission_amount = (flt(item.base_net_amount) or 0) * applied_rate / 100
+                commission_amount = flt(_item_base_amount(item)) * applied_rate / 100
                 total_commission += commission_amount
 
                 self.append("custom_sales_person_commission_breakdown", {
                     "sales_person": sales_person.sales_person,
                     "item_code": item.item_code,
-                    "base_net_amount": flt(item.base_net_amount),
+                    "base_net_amount": flt(_item_base_amount(item)),
                     "applied_rate": applied_rate,
                     "commission_amount": commission_amount
                 })
@@ -129,7 +155,7 @@ def custom_calculate_contribution(self):
 
             sales_person.incentives = flt(
                 total_commission,
-                self.precision("incentives", sales_person),
+                _safe_get_doc_precision(self, "incentives", sales_person),
             )
 
         total += sales_person.allocated_percentage
@@ -141,3 +167,9 @@ def custom_calculate_contribution(self):
 def run_custom_contribution(doc, method):
     """Hook wrapper so it works in POS + Manual Invoices"""
     custom_calculate_contribution(doc)
+
+
+def run_all_commissions(doc, method):
+    """Single hook entrypoint to ensure both partner and sales-person commission calculations run."""
+    run_custom_commission(doc, method)
+    run_custom_contribution(doc, method)

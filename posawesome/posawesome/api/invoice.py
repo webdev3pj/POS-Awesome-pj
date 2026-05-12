@@ -60,6 +60,11 @@ def add_loyalty_point(invoice_doc):
 
 
 def create_sales_order(doc):
+    # Guard: if invoice already comes from a Sales Order (cashier SO -> SI flow),
+    # do not auto-create another Sales Order on submit.
+    if any(getattr(row, "sales_order", None) for row in (doc.items or [])):
+        return
+
     if (
         doc.posa_pos_opening_shift
         and doc.pos_profile
@@ -70,6 +75,11 @@ def create_sales_order(doc):
     ):
         sales_order_doc = make_sales_order(doc.name)
         if sales_order_doc:
+            profile_so_naming_series = frappe.get_value(
+                "POS Profile", doc.pos_profile, "posa_sales_order_naming_series"
+            )
+            if profile_so_naming_series and hasattr(sales_order_doc, "naming_series"):
+                sales_order_doc.naming_series = profile_so_naming_series
             sales_order_doc.posa_notes = doc.posa_notes
             sales_order_doc.flags.ignore_permissions = True
             sales_order_doc.flags.ignore_account_permission = True
