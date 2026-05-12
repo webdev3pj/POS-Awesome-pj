@@ -502,17 +502,6 @@ export default {
         }
         evntBus.$emit("load_order", this.selected[0]);
         this.draftsDialog = false;
-        frappe.call({
-          method: "posawesome.posawesome.api.posapp.delete_sales_invoice",
-          args: {
-            sales_invoice: invoice_doc_for_load.name,
-          },
-          callback: function (r) {
-            if (r.message) {
-              // invoice_doc_for_load = r.message;
-            }
-          },
-        });
       }
     },
   },

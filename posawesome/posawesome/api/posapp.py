@@ -48,25 +48,27 @@ OPERATIONAL_ROLES = (
 @frappe.whitelist()
 def get_opening_dialog_data():
     data = {}
-    data["companies"] = frappe.get_list(
-        "Company",
-        fields=["name"],
-        limit_page_length=0,
-        order_by="name",
-        ignore_permissions=True,
-    )
-    data["pos_profiles_data"] = frappe.get_list(
-        "POS Profile",
-        filters={"disabled": 0},
-        fields=["name", "company", "currency"],
-        limit_page_length=0,
-        order_by="name",
-        ignore_permissions=True,
-    )
+    default_pos_profile = _get_default_pos_profile_for_user(frappe.session.user)
+    data["default_pos_profile"] = default_pos_profile
+    data["default_company"] = ""
+    if default_pos_profile:
+        default_profile_doc = frappe.get_cached_doc("POS Profile", default_pos_profile)
+        data["default_company"] = default_profile_doc.company
+        data["companies"] = [{"name": default_profile_doc.company}]
+        data["pos_profiles_data"] = [
+            {
+                "name": default_profile_doc.name,
+                "company": default_profile_doc.company,
+                "currency": default_profile_doc.currency,
+            }
+        ]
+    else:
+        data["companies"] = []
+        data["pos_profiles_data"] = []
 
     pos_profiles_list = []
     for i in data["pos_profiles_data"]:
-        pos_profiles_list.append(i.name)
+        pos_profiles_list.append(cstr(i.get("name") if isinstance(i, dict) else i.name))
 
     payment_method_table = (
         "POS Payment Method" if get_version() == 13 else "Sales Invoice Payment"
@@ -107,6 +109,10 @@ def get_opening_dialog_data():
         # Exactly one role - use it
         data["user_role"] = cline_roles[0]
         data["role_error"] = ""
+        if not default_pos_profile:
+            data["role_error"] = frappe._(
+                "No default POS Profile is assigned to this user. Please set a default POS Profile in Backend."
+            )
     else:
         # No cline-* roles - check if any POS Profile has token workflow enabled
         token_enabled_profiles = frappe.get_all(
@@ -153,11 +159,17 @@ def _admin_requested_test_role():
 
 @frappe.whitelist()
 def create_opening_voucher(pos_profile, company, balance_details):
+    pos_profile = _require_user_default_pos_profile(pos_profile)
     if _is_relay_workflow_enabled(cstr(pos_profile or "").strip()):
         _require_operational_role_for_action(
             ("cline-Cashier", "cline-Supervisor"),
             "create POS opening shifts",
         )
+    company = cstr(company or "").strip()
+    profile_company = cstr(frappe.get_cached_value("POS Profile", pos_profile, "company") or "").strip()
+    if company and company != profile_company:
+        frappe.throw(_("Selected Company does not match your default POS Profile."))
+    company = profile_company
 
     balance_details = json.loads(balance_details)
 
@@ -255,6 +267,16 @@ def _get_default_pos_profile_for_user(user):
     return ""
 
 
+def _require_user_default_pos_profile(pos_profile):
+    pos_profile = cstr(pos_profile or "").strip()
+    default_pos_profile = _get_default_pos_profile_for_user(frappe.session.user)
+    if not default_pos_profile:
+        frappe.throw(_("No default POS Profile is assigned to this user."))
+    if pos_profile != default_pos_profile:
+        frappe.throw(_("You can only use your default POS Profile {0}.").format(default_pos_profile))
+    return default_pos_profile
+
+
 def update_opening_shift_data(data, pos_profile):
     data["pos_profile"] = frappe.get_doc("POS Profile", pos_profile)
     data["company"] = frappe.get_doc("Company", data["pos_profile"].company)
@@ -336,7 +358,7 @@ def _require_operational_role_for_action(allowed_roles, action_label, allow_rela
 
 @frappe.whitelist()
 def bootstrap_pos_session(pos_profile, company=None):
-    pos_profile = cstr(pos_profile or "").strip()
+    pos_profile = _require_user_default_pos_profile(pos_profile)
     company = cstr(company or "").strip()
     if not pos_profile:
         frappe.throw(_("POS Profile is required"))
@@ -4039,8 +4061,7 @@ def get_seearch_items_conditions(item_code, serial_no, batch_no, barcode):
 @frappe.whitelist()
 def create_sales_invoice_from_order(sales_order):
     sales_invoice = make_sales_invoice(sales_order, ignore_permissions=True)
-    sales_invoice.save()
-    return sales_invoice
+    return sales_invoice.as_dict()
 
 
 @frappe.whitelist()

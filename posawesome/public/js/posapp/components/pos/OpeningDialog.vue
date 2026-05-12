@@ -14,20 +14,26 @@
           <v-container>
             <v-row>
               <v-col cols="12">
-                <v-autocomplete
-                  :items="companies"
+                <v-text-field
                   :label="frappe._('Company')"
                   v-model="company"
+                  readonly
+                  outlined
+                  dense
+                  hide-details="auto"
                   required
-                ></v-autocomplete>
+                ></v-text-field>
               </v-col>
               <v-col cols="12">
-                <v-autocomplete
-                  :items="pos_profiles"
+                <v-text-field
                   :label="frappe._('POS Profile')"
                   v-model="pos_profile"
+                  readonly
+                  outlined
+                  dense
+                  hide-details="auto"
                   required
-                ></v-autocomplete>
+                ></v-text-field>
               </v-col>
               <v-col cols="12" v-if="detected_role">
                 <v-alert type="info" dense outlined>
@@ -213,11 +219,13 @@ export default {
         args: {},
         callback: function (r) {
           if (r.message) {
-            r.message.companies.forEach((element) => {
+            (r.message.companies || []).forEach((element) => {
               vm.companies.push(element.name);
             });
-            vm.company = vm.companies[0];
-            vm.pos_profiles_data = r.message.pos_profiles_data;
+            vm.company = r.message.default_company || vm.companies[0] || "";
+            vm.pos_profiles_data = r.message.pos_profiles_data || [];
+            vm.pos_profiles = vm.pos_profiles_data.map((element) => element.name);
+            vm.pos_profile = r.message.default_pos_profile || vm.pos_profiles[0] || "";
             vm.payments_method_data = r.message.payments_method;
             // Get role from user's ERPNext roles (derived, not user-selected)
             vm.admin_role_testing_enabled = parseInt(r.message.admin_role_testing_enabled || 0, 10) === 1;
