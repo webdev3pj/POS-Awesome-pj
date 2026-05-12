@@ -209,6 +209,7 @@ fixtures = [
                     "Sales Invoice Item-posa_notes",
                     "Sales Invoice Item-posa_delivery_date",
                     "Sales Order-posa_additional_notes_section",
+                    "Sales Order-posa_order_name",
                     "Sales Order-posa_notes",
                     "Sales Order Item-posa_notes",
                     "POS Profile-posa_allow_sales_order",

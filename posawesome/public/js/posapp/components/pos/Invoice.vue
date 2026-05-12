@@ -726,6 +726,28 @@
           </v-row>
         </v-col>
         <v-col cols="5">
+          <v-row
+            v-if="show_order_name_field"
+            no-gutters
+            class="pa-1 pt-2 pl-0"
+          >
+            <v-col cols="12" class="pa-1">
+              <v-text-field
+                v-model="order_name"
+                dense
+                outlined
+                clearable
+                maxlength="140"
+                counter="140"
+                color="primary"
+                background-color="white"
+                :label="frappe._('Order Name')"
+                :placeholder="frappe._('Nick, Table 3, Walk-in')"
+                hide-details="auto"
+                @keyup.enter="handle_save_new"
+              ></v-text-field>
+            </v-col>
+          </v-row>
           <v-row no-gutters class="pa-1 pt-2 pl-0">
             <v-col v-if="show_held_button" cols="6" class="pa-1">
               <v-btn
@@ -809,7 +831,7 @@
                 color="accent"
                 dark
                 @click="handle_save_new"
-                >{{ __("Save/New") }}</v-btn
+                >{{ save_new_label }}</v-btn
               >
             </v-col>
             <v-col v-if="show_pay_button" class="pa-1">
@@ -861,6 +883,7 @@ export default {
       return_doc: "",
       customer: "",
       customer_info: "",
+      order_name: "",
       discount_amount: 0,
       additional_discount_percentage: 0,
       total_tax: 0,
@@ -930,6 +953,12 @@ export default {
     },
     show_pay_button() {
       return !(this.simplified_sa_cashier_ui_enabled && this.is_sales_associate_role);
+    },
+    show_order_name_field() {
+      return this.is_sales_associate_role;
+    },
+    save_new_label() {
+      return this.is_sales_associate_role ? __("Save Order") : __("Save/New");
     },
     can_use_quotation_actions() {
       const role = (this.current_role || "").trim();
@@ -1071,10 +1100,14 @@ export default {
         !!(browserConfig && browserConfig.relay_url)
       );
     },
+    normalize_order_name(value = this.order_name) {
+      return String(value || "").trim();
+    },
     reset_after_token_save() {
       this.items = [];
       this.customer = this.pos_profile.customer;
       this.invoice_doc = "";
+      this.order_name = "";
       this.discount_amount = 0;
       this.additional_discount_percentage = 0;
       this.delivery_charges_rate = 0;
@@ -1100,6 +1133,7 @@ export default {
         pos_opening_shift: (this.pos_opening_shift && this.pos_opening_shift.name) || "",
         company: this.pos_profile.company,
         customer: this.customer,
+        order_name: this.normalize_order_name(),
         currency: this.pos_profile.currency,
         campaign: this.pos_profile.campaign || "",
         posting_date: this.posting_date,
@@ -1307,6 +1341,8 @@ export default {
         token_id: tokenId,
         token_last4: tokenId ? tokenId.slice(-4) : "",
         sales_order_name: tokenId,
+        order_name: tokenPayload.order_name || token.order_name || "",
+        posa_order_name: tokenPayload.order_name || token.order_name || "",
         customer: tokenPayload.customer || token.customer_id || this.customer,
         customer_name:
           (this.customer_info && this.customer_info.customer_name) ||
@@ -1369,6 +1405,7 @@ export default {
         customer_id: this.customer,
         customer_name:
           (this.customer_info && this.customer_info.customer_name) || this.customer,
+        order_name: tokenPayload.order_name || "",
         source_doctype: "Sales Order",
         source_name: "",
         role: this.current_role || this.get_current_role() || "",
@@ -1439,6 +1476,8 @@ export default {
         token_id: row.token_id || "",
         sales_order: row.token_id || "",
         sales_order_name: row.token_id || "",
+        posa_order_name: row.order_name || row.posa_order_name || "",
+        order_name: row.order_name || row.posa_order_name || "",
         customer: row.customer_id || row.customer_name || "",
         customer_name: row.customer_name || row.customer_id || "",
         company: this.pos_profile.company,
@@ -1562,6 +1601,7 @@ export default {
         sales_order: meta.sales_order_name,
         token_id: meta.token_id,
         token_last4: meta.token_last4,
+        order_name: meta.order_name || meta.posa_order_name || "",
         customer_name: meta.customer_name,
         grand_total: meta.grand_total,
         currency: meta.currency,
@@ -1586,6 +1626,7 @@ export default {
       const dt = this.token_slip_date_time(meta);
       const soName = this.escape_html(meta.sales_order_name || "");
       const tokenLast4 = this.escape_html(meta.token_last4 || "");
+      const orderName = this.escape_html(meta.order_name || meta.posa_order_name || "");
       const customerName = this.escape_html(meta.customer_name || "");
       const saName = this.escape_html(
         meta.sales_associate_name || frappe.session.user_fullname || frappe.session.user
@@ -1628,6 +1669,7 @@ export default {
             <div class="center muted">Full SO: ${soName}</div>
             <div class="center token-last4">${tokenLast4}</div>
             <div class="divider"></div>
+            <div class="row"><b>Order Name:</b> ${orderName}</div>
             <div class="row"><b>Customer:</b> ${customerName}</div>
             <div class="row"><b>Sales Associate:</b> ${saName}</div>
             <div class="row"><b>Date:</b> ${this.escape_html(dt.dateLabel)}</div>
@@ -1689,6 +1731,7 @@ export default {
       const dt = this.token_slip_date_time(meta);
       const tokenLast4 = this.escape_html(meta.token_last4 || "");
       const soName = this.escape_html(meta.sales_order_name || "");
+      const orderName = this.escape_html(meta.order_name || meta.posa_order_name || "");
       const customerName = this.escape_html(meta.customer_name || "");
       const grandTotal = `${this.currencySymbol(meta.currency)} ${this.formtCurrency(meta.grand_total || 0)}`;
       const d = new frappe.ui.Dialog({
@@ -1701,6 +1744,7 @@ export default {
               <div style="text-align:center;font-size:42px;padding:0.5rem 0;"><b>${tokenLast4}</b></div>
               <div style="text-align:center;padding-bottom:0.5rem;"><small><b>SO:</b> ${soName}</small></div>
               <div style="font-size:13px;line-height:1.5;">
+                <div><b>${__("Order Name")}:</b> ${orderName}</div>
                 <div><b>${__("Customer")}:</b> ${customerName}</div>
                 <div><b>${__("Sales Associate")}:</b> ${this.escape_html(meta.sales_associate_name || frappe.session.user_fullname || frappe.session.user)}</div>
                 <div><b>${__("Date")}:</b> ${this.escape_html(dt.dateLabel)} &nbsp; <b>${__("Time")}:</b> ${this.escape_html(dt.timeLabel)}</div>
@@ -1743,6 +1787,7 @@ export default {
         cashier_user_id: frappe.session.user,
         customer_id: soDoc.customer || meta.customer,
         customer_name: soDoc.customer_name || meta.customer_name,
+        order_name: meta.order_name || meta.posa_order_name || soDoc.posa_order_name || "",
         source_doctype: "Sales Order",
         source_name: meta.sales_order_name,
         role: this.current_role || "",
@@ -1783,6 +1828,15 @@ export default {
         });
         return null;
       }
+      const orderName = this.normalize_order_name();
+      if (!orderName) {
+        evntBus.$emit("show_mesage", {
+          text: __("Order Name is required before saving the order."),
+          color: "error",
+        });
+        return null;
+      }
+      this.order_name = orderName;
       if (!this.validate()) {
         return null;
       }

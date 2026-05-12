@@ -15,7 +15,7 @@
             <v-row class="mb-4">
               <v-text-field
                 color="primary"
-                :label="frappe._('Order ID')"
+                :label="frappe._('Order Name / Token')"
                 background-color="white"
                 hide-details
                 v-model="order_name"
@@ -121,6 +121,12 @@ export default {
       {
         text: __("Order"),
         value: "name",
+        align: "start",
+        sortable: true,
+      },
+      {
+        text: __("Order Name"),
+        value: "posa_order_name",
         align: "start",
         sortable: true,
       },
@@ -271,6 +277,8 @@ export default {
         token_id: row.token_id || "",
         sales_order: row.token_id || "",
         sales_order_name: row.token_id || "",
+        posa_order_name: row.order_name || row.posa_order_name || "",
+        order_name: row.order_name || row.posa_order_name || "",
         customer: row.customer_id || row.customer_name || "",
         customer_name: row.customer_name || row.customer_id || "",
         company: (this.pos_profile && this.pos_profile.company) || "",

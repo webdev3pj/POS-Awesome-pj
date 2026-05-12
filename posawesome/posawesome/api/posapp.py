@@ -1824,7 +1824,7 @@ def update_invoice_from_order(data):
 
 @frappe.whitelist()
 def create_sales_order_token(data):
-    _require_operational_role_for_action(
+    role = _require_operational_role_for_action(
         ("cline-Sales Associate", "cline-Cashier", "cline-Supervisor"),
         "create sales order tokens",
         allow_relay_sync=True,
@@ -1838,6 +1838,7 @@ def create_sales_order_token(data):
     pos_opening_shift = cstr(data.get("pos_opening_shift") or "").strip()
     company = cstr(data.get("company") or "").strip()
     customer = cstr(data.get("customer") or "").strip()
+    order_name = cstr(data.get("order_name") or data.get("posa_order_name") or "").strip()
     items = data.get("items") or []
 
     if not pos_profile:
@@ -1846,6 +1847,8 @@ def create_sales_order_token(data):
         frappe.throw(_("Company is required to create Sales Order token."))
     if not customer:
         frappe.throw(_("Customer is required to create Sales Order token."))
+    if role == "cline-Sales Associate" and not order_name:
+        frappe.throw(_("Order Name is required to create Sales Order token."))
     if not items:
         frappe.throw(_("At least one item is required to create Sales Order token."))
 
@@ -1883,6 +1886,8 @@ def create_sales_order_token(data):
     # POSAwesome custom fields on Sales Order (if migrated)
     if sales_order_doc.meta.has_field("posa_notes"):
         sales_order_doc.posa_notes = data.get("posa_notes") or ""
+    if sales_order_doc.meta.has_field("posa_order_name"):
+        sales_order_doc.posa_order_name = order_name
     if sales_order_doc.meta.has_field("posa_offers") and data.get("posa_offers") is not None:
         sales_order_doc.set("posa_offers", data.get("posa_offers") or [])
     if sales_order_doc.meta.has_field("posa_coupons") and data.get("posa_coupons") is not None:
@@ -1968,6 +1973,8 @@ def create_sales_order_token(data):
         "sales_order_name": sales_order_doc.name,
         "token_id": sales_order_doc.name,
         "token_last4": cstr(sales_order_doc.name)[-4:],
+        "order_name": order_name,
+        "posa_order_name": order_name,
         "customer": sales_order_doc.customer,
         "customer_name": sales_order_doc.customer_name,
         "grand_total": sales_order_doc.grand_total,
@@ -3048,12 +3055,21 @@ def search_orders(
     }
     if policy["naming_series"]:
         filters["naming_series"] = policy["naming_series"]
+    order_name = cstr(order_name or "").strip()
+    or_filters = None
     if order_name:
-        filters["name"] = ["like", f"%{order_name}%"]
+        if frappe.get_meta("Sales Order").has_field("posa_order_name"):
+            or_filters = [
+                ["Sales Order", "name", "like", f"%{order_name}%"],
+                ["Sales Order", "posa_order_name", "like", f"%{order_name}%"],
+            ]
+        else:
+            filters["name"] = ["like", f"%{order_name}%"]
 
     orders_list = frappe.get_list(
         "Sales Order",
         filters=filters,
+        or_filters=or_filters,
         fields=["name", "transaction_date"],
         limit_page_length=0,
         order_by="transaction_date desc, creation desc",
