@@ -1108,23 +1108,11 @@ export default {
 
       if (relayEnabled && !relayConnectedForSubmit) {
         if (allowCloudFallbackWhenRelayDown && cloudReachable) {
-          const confirmMsg = __(
-            "Edge Relay is down/unreachable, but cloud is reachable. Submit directly to cloud for this sale?"
-          );
-          const accepted = window.confirm(confirmMsg);
-          if (accepted) {
-            evntBus.$emit("show_mesage", {
-              text: __("Submitting to cloud (relay fallback confirmed by cashier)."),
-              color: "warning",
-            });
-            vm.submit_invoice_via_cloud(data, print);
-            return;
-          }
           evntBus.$emit("show_mesage", {
-            text: __("Cashier cancelled cloud fallback. Submit remains blocked until relay is reachable."),
+            text: __("Relay is down. Submitting directly to cloud."),
             color: "warning",
           });
-          frappe.utils.play_sound("error");
+          vm.submit_invoice_via_cloud(data, print);
           return;
         }
 
