@@ -269,6 +269,66 @@ def _ensure_user_permission(user, allow, for_value):
     return doc.name
 
 
+def _ensure_doctype_permission(doctype, role, permissions):
+    if not frappe.db.exists("DocType", doctype) or not _role_exists(role):
+        return
+
+    name = frappe.db.get_value(
+        "Custom DocPerm",
+        {
+            "parent": doctype,
+            "role": role,
+            "permlevel": 0,
+            "if_owner": 0,
+        },
+    )
+    if name:
+        docperm = frappe.get_doc("Custom DocPerm", name)
+    else:
+        # Role Permission Manager stores overrides as Custom DocPerm. Copying
+        # standard permissions first keeps existing manager/admin access intact.
+        from frappe.permissions import setup_custom_perms
+
+        setup_custom_perms(doctype)
+        docperm = frappe.get_doc(
+            {
+                "doctype": "Custom DocPerm",
+                "parent": doctype,
+                "parenttype": "DocType",
+                "parentfield": "permissions",
+                "role": role,
+                "permlevel": 0,
+                "if_owner": 0,
+            }
+        )
+
+    for fieldname, value in permissions.items():
+        if fieldname in docperm.meta.get_valid_columns():
+            docperm.set(fieldname, value)
+
+    docperm.flags.ignore_permissions = True
+    if docperm.is_new():
+        docperm.insert(ignore_permissions=True)
+    else:
+        docperm.save(ignore_permissions=True)
+
+
+def _ensure_cashier_shift_permissions():
+    cashier_permissions = {
+        "read": 1,
+        "write": 1,
+        "create": 1,
+        "submit": 1,
+        "report": 1,
+        "print": 1,
+        "email": 1,
+        "delete": 0,
+        "cancel": 0,
+    }
+    for doctype in ("POS Opening Shift", "POS Closing Shift"):
+        _ensure_doctype_permission(doctype, "cline-Cashier", cashier_permissions)
+
+
 def _clear_test_user_pos_profile_permissions(users):
     # POS boot may restore a previously active profile from browser storage.
     # Do not hard-restrict these test users to one profile at permission level.
@@ -291,6 +351,7 @@ def provision(
     """Create reusable SA/Cashier users and a POS Profile for manual POS flow tests."""
     sa_email = _ensure_user(SA_USER, password)
     cashier_email = _ensure_user(CASHIER_USER, password)
+    _ensure_cashier_shift_permissions()
     profile_name = _copy_profile(source_profile, target_profile)
     profile = frappe.get_doc("POS Profile", profile_name)
 
