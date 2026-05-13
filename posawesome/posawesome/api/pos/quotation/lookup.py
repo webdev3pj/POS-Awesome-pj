@@ -5,7 +5,7 @@ import frappe
 from frappe import _
 from frappe.utils import add_days, cint, cstr, getdate, nowdate
 
-from posawesome.posawesome.api.pos.sales_order_lookup import (
+from posawesome.posawesome.api.pos.sales_order.lookup import (
     _age_days_from_date,
     _profile_so_policy,
     _resolve_allow_stale,

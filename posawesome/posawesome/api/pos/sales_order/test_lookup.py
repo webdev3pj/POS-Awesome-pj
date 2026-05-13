@@ -6,7 +6,7 @@ from unittest.mock import Mock, patch
 import frappe
 from frappe.tests.utils import FrappeTestCase
 
-from posawesome.posawesome.api.pos import sales_order_lookup
+from posawesome.posawesome.api.pos.sales_order import lookup as sales_order_lookup
 
 
 class TestSalesOrderLookup(FrappeTestCase):

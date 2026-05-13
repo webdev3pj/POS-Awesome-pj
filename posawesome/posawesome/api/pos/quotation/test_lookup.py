@@ -6,7 +6,7 @@ from unittest.mock import patch
 import frappe
 from frappe.tests.utils import FrappeTestCase
 
-from posawesome.posawesome.api.pos import quotation_lookup
+from posawesome.posawesome.api.pos.quotation import lookup as quotation_lookup
 
 
 class TestQuotationLookup(FrappeTestCase):

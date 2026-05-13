@@ -33,12 +33,12 @@ from posawesome.posawesome.doctype.pos_coupon.pos_coupon import check_coupon_cod
 from posawesome.posawesome.doctype.delivery_charges.delivery_charges import (
     get_applicable_delivery_charges as _get_applicable_delivery_charges,
 )
-from posawesome.posawesome.api.pos.sales_order_lookup import search_sales_orders
-from posawesome.posawesome.api.pos.quotation_lookup import (
+from posawesome.posawesome.api.pos.sales_order.lookup import search_sales_orders
+from posawesome.posawesome.api.pos.quotation.lookup import (
     require_quotation_permission as _require_quotation_permission,
     search_pos_quotations,
 )
-from posawesome.posawesome.api.pos.sales_order_invoice import (
+from posawesome.posawesome.api.pos.sales_invoice.from_sales_order import (
     make_or_get_sales_invoice_from_order,
     update_invoice_from_order_data,
 )

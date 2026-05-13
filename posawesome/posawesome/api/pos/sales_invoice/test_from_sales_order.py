@@ -6,7 +6,7 @@ from unittest.mock import Mock, patch
 import frappe
 from frappe.tests.utils import FrappeTestCase
 
-from posawesome.posawesome.api.pos import sales_order_invoice
+from posawesome.posawesome.api.pos.sales_invoice import from_sales_order as sales_order_invoice
 
 
 class TestSalesOrderInvoice(FrappeTestCase):
