@@ -35,6 +35,10 @@ from posawesome.posawesome.doctype.delivery_charges.delivery_charges import (
     get_applicable_delivery_charges as _get_applicable_delivery_charges,
 )
 from posawesome.posawesome.api.sales_order_lookup import search_sales_orders
+from posawesome.posawesome.api.quotation_lookup import (
+    require_quotation_permission as _require_quotation_permission,
+    search_pos_quotations,
+)
 from frappe.utils.caching import redis_cache
 
 OPERATIONAL_ROLES = (
@@ -3061,24 +3065,6 @@ def _resolve_allow_stale(arg_allow_stale, default_allow_stale):
     return 1 if cint(arg_allow_stale) else 0
 
 
-def _require_quotation_permission(pos_profile, role):
-    role = cstr(role or "").strip()
-    if role not in ("cline-Sales Associate", "cline-Cashier"):
-        return
-    if not pos_profile:
-        frappe.throw(_("POS Profile is required for quotation permission checks."))
-    if role == "cline-Sales Associate":
-        allowed = cint(frappe.get_cached_value("POS Profile", pos_profile, "posa_allow_sa_quotation") or 1)
-        if not allowed:
-            frappe.throw(_("Sales Associate quotation is disabled in POS Profile {0}.").format(pos_profile))
-    if role == "cline-Cashier":
-        allowed = cint(
-            frappe.get_cached_value("POS Profile", pos_profile, "posa_allow_cashier_quotation") or 1
-        )
-        if not allowed:
-            frappe.throw(_("Cashier quotation is disabled in POS Profile {0}.").format(pos_profile))
-
-
 def _latest_item_rate_for_profile(item_code, pos_profile, company=None, customer=None, currency=None):
     item_code = cstr(item_code or "").strip()
     if not item_code:
@@ -3294,57 +3280,14 @@ def search_quotations(
         "search quotations",
     )
     _require_quotation_permission(pos_profile, role)
-
-    company = cstr(company or frappe.get_cached_value("POS Profile", pos_profile, "company") or "").strip()
-    currency = cstr(currency or frappe.get_cached_value("POS Profile", pos_profile, "currency") or "").strip()
-
-    so_policy = _profile_so_policy(pos_profile)
-    validity_days = max(
-        1, cint(frappe.get_cached_value("POS Profile", pos_profile, "posa_quotation_validity_days") or 7)
+    return search_pos_quotations(
+        company=company,
+        currency=currency,
+        pos_profile=pos_profile,
+        quote_name=quote_name,
+        allow_stale=allow_stale,
+        history_days=history_days,
     )
-    max_age_days = max(validity_days, cint(so_policy["max_age_days"] or 1))
-    allow_stale = _resolve_allow_stale(allow_stale, so_policy["allow_stale"])
-    if history_days in (None, ""):
-        history_days = max(cint(so_policy["history_days"] or 30), max_age_days)
-    history_days = max(max_age_days, cint(history_days or 30))
-
-    lookback_days = history_days if allow_stale else max_age_days
-    filters = {
-        "docstatus": 1,
-        "company": company,
-        "transaction_date": [">=", add_days(nowdate(), -lookback_days)],
-    }
-    if currency:
-        filters["currency"] = currency
-    if quote_name:
-        filters["name"] = ["like", f"%{quote_name}%"]
-
-    rows = frappe.get_list(
-        "Quotation",
-        filters=filters,
-        fields=["name", "transaction_date", "valid_till"],
-        limit_page_length=0,
-        order_by="transaction_date desc, creation desc",
-    )
-    out = []
-    for row in rows:
-        age_days = _age_days_from_date(row.get("transaction_date"))
-        is_stale = 1 if age_days > max_age_days else 0
-        if not allow_stale and is_stale:
-            continue
-        doc = frappe.get_doc("Quotation", row.get("name")).as_dict()
-        valid_till = cstr(doc.get("valid_till") or row.get("valid_till") or "")
-        is_expired = 1 if (valid_till and getdate(valid_till) < getdate(nowdate())) else 0
-        doc["quote_name"] = doc.get("name")
-        doc["order_age_days"] = age_days
-        doc["age_days"] = age_days
-        doc["is_stale"] = is_stale
-        doc["is_expired"] = is_expired
-        doc["stale_policy_allow"] = 1 if allow_stale else 0
-        doc["stale_policy_max_age_days"] = max_age_days
-        doc["stale_policy_history_days"] = history_days
-        out.append(doc)
-    return out
 
 
 @frappe.whitelist()
