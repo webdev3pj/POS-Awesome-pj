@@ -3154,23 +3154,52 @@ def search_orders(
         else:
             filters["name"] = ["like", f"%{order_name}%"]
 
+    fields = [
+        "name",
+        "transaction_date",
+        "customer",
+        "customer_name",
+        "grand_total",
+        "currency",
+        "billing_status",
+        "status",
+    ]
+    for fieldname in (
+        "posa_order_name",
+        "posa_notes",
+        "posa_offers",
+        "posa_coupons",
+        "discount_amount",
+        "additional_discount_percentage",
+    ):
+        if _doctype_has_column("Sales Order", fieldname):
+            fields.append(fieldname)
+
     orders_list = frappe.get_list(
         "Sales Order",
         filters=filters,
         or_filters=or_filters,
-        fields=["name", "transaction_date"],
-        limit_page_length=0,
+        fields=fields,
+        limit_page_length=50,
         order_by="transaction_date desc, creation desc",
     )
+    order_names = [order["name"] for order in orders_list]
+    invoiced_orders = _get_sales_orders_with_submitted_invoice(order_names)
+    items_by_order = _get_sales_order_items_for_lookup(
+        [name for name in order_names if name not in invoiced_orders]
+    )
+
     data = []
     for order in orders_list:
-        if _sales_order_has_submitted_invoice(order["name"]):
+        if order["name"] in invoiced_orders:
             continue
         age_days = _age_days_from_date(order.get("transaction_date"))
         is_stale = 1 if age_days > days_back else 0
         if not allow_stale and is_stale:
             continue
-        doc = frappe.get_doc("Sales Order", order["name"]).as_dict()
+        doc = frappe._dict(order)
+        doc["doctype"] = "Sales Order"
+        doc["items"] = items_by_order.get(order["name"], [])
         doc["order_age_days"] = age_days
         doc["is_stale"] = is_stale
         doc["stale_policy_allow"] = 1 if allow_stale else 0
@@ -3180,23 +3209,75 @@ def search_orders(
     return data
 
 
-def _sales_order_has_submitted_invoice(sales_order):
-    sales_order = cstr(sales_order or "").strip()
-    if not sales_order:
-        return False
+def _get_sales_orders_with_submitted_invoice(sales_orders):
+    sales_orders = [cstr(name).strip() for name in (sales_orders or []) if cstr(name).strip()]
+    if not sales_orders:
+        return set()
 
     rows = frappe.db.sql(
         """
-        select si.name
+        select distinct sii.sales_order
         from `tabSales Invoice` si
         inner join `tabSales Invoice Item` sii on sii.parent = si.name
         where si.docstatus = 1
-            and sii.sales_order = %s
-        limit 1
+            and sii.sales_order in %(sales_orders)s
         """,
-        (sales_order,),
+        {"sales_orders": tuple(sales_orders)},
+        as_dict=True,
     )
-    return bool(rows)
+    return {row.sales_order for row in rows}
+
+
+def _get_sales_order_items_for_lookup(sales_orders):
+    sales_orders = [cstr(name).strip() for name in (sales_orders or []) if cstr(name).strip()]
+    if not sales_orders:
+        return {}
+
+    fields = [
+        "parent",
+        "name",
+        "item_code",
+        "item_name",
+        "qty",
+        "uom",
+        "rate",
+        "amount",
+        "conversion_factor",
+    ]
+    for fieldname in (
+        "serial_no",
+        "batch_no",
+        "discount_percentage",
+        "discount_amount",
+        "price_list_rate",
+        "warehouse",
+        "delivery_warehouse",
+        "posa_notes",
+        "posa_delivery_date",
+    ):
+        if _doctype_has_column("Sales Order Item", fieldname):
+            fields.append(fieldname)
+
+    rows = frappe.get_all(
+        "Sales Order Item",
+        filters={"parent": ["in", sales_orders]},
+        fields=fields,
+        order_by="parent asc, idx asc",
+        limit_page_length=0,
+        ignore_permissions=True,
+    )
+    items_by_order = {}
+    for row in rows:
+        item = frappe._dict(row)
+        item["doctype"] = "Sales Order Item"
+        items_by_order.setdefault(item.parent, []).append(item)
+    return items_by_order
+
+
+def _doctype_has_column(doctype, fieldname):
+    return frappe.get_meta(doctype).has_field(fieldname) and frappe.db.has_column(
+        doctype, fieldname
+    )
 
 
 @frappe.whitelist()
