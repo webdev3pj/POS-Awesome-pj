@@ -56,6 +56,15 @@ from posawesome.posawesome.api.pos.customer.info import (
 from posawesome.posawesome.api.pos.delivery.charges import (
     get_applicable_delivery_charges as get_pos_delivery_charges,
 )
+from posawesome.posawesome.api.pos.item.attributes import (
+    build_item_cache as build_pos_item_cache,
+    get_item_attributes as get_pos_item_attributes,
+    get_item_optional_attributes as get_pos_item_optional_attributes,
+)
+from posawesome.posawesome.api.pos.item.lookup import (
+    get_seearch_items_conditions as get_pos_search_items_conditions,
+    search_serial_or_batch_or_barcode_number as search_pos_serial_or_batch_or_barcode_number,
+)
 from posawesome.posawesome.api.pos.session.profile import (
     get_default_pos_profile_for_user as _get_default_pos_profile_for_user,
     require_user_default_pos_profile as _require_user_default_pos_profile,
@@ -2881,89 +2890,16 @@ def make_address(args):
 
 
 def build_item_cache(item_code):
-    parent_item_code = item_code
-
-    attributes = [
-        a.attribute
-        for a in frappe.db.get_all(
-            "Item Variant Attribute",
-            {"parent": parent_item_code},
-            ["attribute"],
-            order_by="idx asc",
-        )
-    ]
-
-    item_variants_data = frappe.db.get_all(
-        "Item Variant Attribute",
-        {"variant_of": parent_item_code},
-        ["parent", "attribute", "attribute_value"],
-        order_by="name",
-        as_list=1,
-    )
-
-    disabled_items = set([i.name for i in frappe.db.get_all("Item", {"disabled": 1})])
-
-    attribute_value_item_map = frappe._dict({})
-    item_attribute_value_map = frappe._dict({})
-
-    item_variants_data = [r for r in item_variants_data if r[0] not in disabled_items]
-    for row in item_variants_data:
-        item_code, attribute, attribute_value = row
-        # (attr, value) => [item1, item2]
-        attribute_value_item_map.setdefault((attribute, attribute_value), []).append(
-            item_code
-        )
-        # item => {attr1: value1, attr2: value2}
-        item_attribute_value_map.setdefault(item_code, {})[attribute] = attribute_value
-
-    optional_attributes = set()
-    for item_code, attr_dict in item_attribute_value_map.items():
-        for attribute in attributes:
-            if attribute not in attr_dict:
-                optional_attributes.add(attribute)
-
-    frappe.cache().hset(
-        "attribute_value_item_map", parent_item_code, attribute_value_item_map
-    )
-    frappe.cache().hset(
-        "item_attribute_value_map", parent_item_code, item_attribute_value_map
-    )
-    frappe.cache().hset("item_variants_data", parent_item_code, item_variants_data)
-    frappe.cache().hset("optional_attributes", parent_item_code, optional_attributes)
+    return build_pos_item_cache(item_code)
 
 
 def get_item_optional_attributes(item_code):
-    val = frappe.cache().hget("optional_attributes", item_code)
-
-    if not val:
-        build_item_cache(item_code)
-
-    return frappe.cache().hget("optional_attributes", item_code)
+    return get_pos_item_optional_attributes(item_code)
 
 
 @frappe.whitelist()
 def get_item_attributes(item_code):
-    attributes = frappe.db.get_all(
-        "Item Variant Attribute",
-        fields=["attribute"],
-        filters={"parenttype": "Item", "parent": item_code},
-        order_by="idx asc",
-    )
-
-    optional_attributes = get_item_optional_attributes(item_code)
-
-    for a in attributes:
-        values = frappe.db.get_all(
-            "Item Attribute Value",
-            fields=["attribute_value", "abbr"],
-            filters={"parenttype": "Item Attribute", "parent": a.attribute},
-            order_by="idx asc",
-        )
-        a.values = values
-        if a.attribute in optional_attributes:
-            a.optional = True
-
-    return attributes
+    return get_pos_item_attributes(item_code)
 
 
 @frappe.whitelist()
@@ -3228,37 +3164,11 @@ def auto_create_items():
 
 @frappe.whitelist()
 def search_serial_or_batch_or_barcode_number(search_value, search_serial_no):
-    # search barcode no
-    barcode_data = frappe.db.get_value(
-        "Item Barcode",
-        {"barcode": search_value},
-        ["barcode", "parent as item_code"],
-        as_dict=True,
-    )
-    if barcode_data:
-        return barcode_data
-    # search serial no
-    if search_serial_no:
-        serial_no_data = frappe.db.get_value(
-            "Serial No", search_value, ["name as serial_no", "item_code"], as_dict=True
-        )
-        if serial_no_data:
-            return serial_no_data
-    # search batch no
-    batch_no_data = frappe.db.get_value(
-        "Batch", search_value, ["name as batch_no", "item as item_code"], as_dict=True
-    )
-    if batch_no_data:
-        return batch_no_data
-    return {}
+    return search_pos_serial_or_batch_or_barcode_number(search_value, search_serial_no)
 
 
 def get_seearch_items_conditions(item_code, serial_no, batch_no, barcode):
-    if serial_no or batch_no or barcode:
-        return " and name = {0}".format(frappe.db.escape(item_code))
-    return """ and (name like {item_code} or item_name like {item_code})""".format(
-        item_code=frappe.db.escape("%" + item_code + "%")
-    )
+    return get_pos_search_items_conditions(item_code, serial_no, batch_no, barcode)
 
 
 @frappe.whitelist()
