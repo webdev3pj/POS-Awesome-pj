@@ -19,13 +19,11 @@ def require_quotation_permission(pos_profile, role):
     if not pos_profile:
         frappe.throw(_("POS Profile is required for quotation permission checks."))
     if role == "cline-Sales Associate":
-        allowed = cint(frappe.get_cached_value("POS Profile", pos_profile, "posa_allow_sa_quotation") or 1)
+        allowed = _get_profile_check_value(pos_profile, "posa_allow_sa_quotation", default=1)
         if not allowed:
             frappe.throw(_("Sales Associate quotation is disabled in POS Profile {0}.").format(pos_profile))
     if role == "cline-Cashier":
-        allowed = cint(
-            frappe.get_cached_value("POS Profile", pos_profile, "posa_allow_cashier_quotation") or 1
-        )
+        allowed = _get_profile_check_value(pos_profile, "posa_allow_cashier_quotation", default=1)
         if not allowed:
             frappe.throw(_("Cashier quotation is disabled in POS Profile {0}.").format(pos_profile))
 
@@ -92,3 +90,10 @@ def search_pos_quotations(
         doc["stale_policy_history_days"] = history_days
         out.append(doc)
     return out
+
+
+def _get_profile_check_value(pos_profile, fieldname, default=1):
+    value = frappe.get_cached_value("POS Profile", pos_profile, fieldname)
+    if value in (None, ""):
+        return cint(default)
+    return cint(value)
