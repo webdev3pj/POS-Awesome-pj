@@ -47,6 +47,7 @@ from posawesome.posawesome.api.pos.sales_invoice.from_sales_order import (
     make_or_get_sales_invoice_from_order,
     update_invoice_from_order_data,
 )
+from posawesome.posawesome.api.pos.offers.lookup import get_pos_offers
 from frappe.utils.caching import redis_cache
 
 OPERATIONAL_ROLES = (
@@ -3173,34 +3174,7 @@ def get_app_branch(app):
 
 @frappe.whitelist()
 def get_offers(profile):
-    pos_profile = frappe.get_doc("POS Profile", profile)
-    company = pos_profile.company
-    warehouse = pos_profile.warehouse
-    date = nowdate()
-
-    values = {
-        "company": company,
-        "pos_profile": profile,
-        "warehouse": warehouse,
-        "valid_from": date,
-        "valid_upto": date,
-    }
-    data = frappe.db.sql(
-        """
-        SELECT *
-        FROM `tabPOS Offer`
-        WHERE 
-        disable = 0 AND
-        company = %(company)s AND
-        (pos_profile is NULL OR pos_profile  = '' OR  pos_profile = %(pos_profile)s) AND
-        (warehouse is NULL OR warehouse  = '' OR  warehouse = %(warehouse)s) AND
-        (valid_from is NULL OR valid_from  = '' OR  valid_from <= %(valid_from)s) AND
-        (valid_upto is NULL OR valid_from  = '' OR  valid_upto >= %(valid_upto)s)
-    """,
-        values=values,
-        as_dict=1,
-    )
-    return data
+    return get_pos_offers(profile)
 
 
 @frappe.whitelist()
