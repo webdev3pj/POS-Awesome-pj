@@ -48,16 +48,20 @@ from posawesome.posawesome.api.pos.sales_invoice.from_sales_order import (
     update_invoice_from_order_data,
 )
 from posawesome.posawesome.api.pos.offers.lookup import get_pos_offers
-from frappe.utils.caching import redis_cache
-
-OPERATIONAL_ROLES = (
-    "cline-Sales Associate",
-    "cline-Cashier",
-    "cline-Picker",
-    "cline-Dispatch",
-    "cline-Supervisor",
+from posawesome.posawesome.api.pos.session.profile import (
+    get_default_pos_profile_for_user as _get_default_pos_profile_for_user,
+    require_user_default_pos_profile as _require_user_default_pos_profile,
 )
-
+from posawesome.posawesome.api.pos.session.roles import (
+    OPERATIONAL_ROLES,
+    admin_requested_test_role as _admin_requested_test_role,
+    get_single_operational_role as _get_single_operational_role,
+    is_admin_role_testing_enabled as _is_admin_role_testing_enabled,
+    is_relay_sync_request as _is_relay_sync_request,
+    require_operational_role_for_action as _require_operational_role_for_action,
+    request_header as _request_header,
+)
+from frappe.utils.caching import redis_cache
 
 @frappe.whitelist()
 def get_opening_dialog_data():
@@ -157,20 +161,6 @@ def get_opening_dialog_data():
     return data
 
 
-def _is_admin_role_testing_enabled():
-    return frappe.session.user == "Administrator" and cint(frappe.conf.get("developer_mode") or 0) == 1
-
-
-def _admin_requested_test_role():
-    if not _is_admin_role_testing_enabled():
-        return ""
-    for key in ("role", "session_role", "posa_test_role"):
-        role = cstr(frappe.form_dict.get(key) or "").strip()
-        if role in OPERATIONAL_ROLES:
-            return role
-    return "cline-Supervisor"
-
-
 @frappe.whitelist()
 def create_opening_voucher(pos_profile, company, balance_details):
     pos_profile = _require_user_default_pos_profile(pos_profile)
@@ -241,56 +231,6 @@ def check_opening_shift(user):
     return data
 
 
-def _get_default_pos_profile_for_user(user):
-    user = cstr(user or "").strip()
-    if not user:
-        return ""
-
-    rows = frappe.db.sql(
-        """
-        select pf.name
-        from `tabPOS Profile` pf
-        inner join `tabPOS Profile User` pfu on pfu.parent = pf.name
-        where pfu.user = %s
-            and pfu.default = 1
-            and pf.disabled = 0
-        order by pf.modified desc
-        limit 1
-        """,
-        (user,),
-        as_dict=True,
-    )
-    if rows:
-        return cstr(rows[0].name or "").strip()
-
-    rows = frappe.db.sql(
-        """
-        select pf.name
-        from `tabPOS Profile` pf
-        inner join `tabPOS Profile User` pfu on pfu.parent = pf.name
-        where pfu.user = %s
-            and pf.disabled = 0
-        order by pf.modified desc
-        limit 1
-        """,
-        (user,),
-        as_dict=True,
-    )
-    if rows:
-        return cstr(rows[0].name or "").strip()
-    return ""
-
-
-def _require_user_default_pos_profile(pos_profile):
-    pos_profile = cstr(pos_profile or "").strip()
-    default_pos_profile = _get_default_pos_profile_for_user(frappe.session.user)
-    if not default_pos_profile:
-        frappe.throw(_("No default POS Profile is assigned to this user."))
-    if pos_profile != default_pos_profile:
-        frappe.throw(_("You can only use your default POS Profile {0}.").format(default_pos_profile))
-    return default_pos_profile
-
-
 def update_opening_shift_data(data, pos_profile):
     data["pos_profile"] = frappe.get_doc("POS Profile", pos_profile)
     data["company"] = frappe.get_doc("Company", data["pos_profile"].company)
@@ -314,60 +254,6 @@ def _bootstrap_non_cash_pos_session(pos_profile, role):
     }
     update_opening_shift_data(data, pos_profile)
     return data
-
-
-def _get_single_operational_role():
-    admin_role = _admin_requested_test_role()
-    if admin_role:
-        return admin_role
-    user_roles = frappe.get_roles() or []
-    cline_roles = [r for r in user_roles if cstr(r).startswith("cline-")]
-    if len(cline_roles) != 1:
-        return ""
-    return cstr(cline_roles[0]).strip()
-
-
-def _request_header(name):
-    name = cstr(name or "").strip()
-    if not name:
-        return ""
-    try:
-        getter = getattr(frappe, "get_request_header", None)
-        if callable(getter):
-            return cstr(getter(name) or "").strip()
-    except Exception:
-        pass
-    try:
-        req = getattr(frappe.local, "request", None)
-        if req and getattr(req, "headers", None):
-            return cstr(req.headers.get(name) or "").strip()
-    except Exception:
-        pass
-    return ""
-
-
-def _is_relay_sync_request():
-    return bool(_request_header("X-Relay-Event-ID"))
-
-
-def _require_operational_role_for_action(allowed_roles, action_label, allow_relay_sync=False):
-    allowed_roles = tuple(cstr(r).strip() for r in (allowed_roles or []) if cstr(r).strip())
-
-    if allow_relay_sync and _is_relay_sync_request():
-        return "__relay_sync__"
-
-    role = _get_single_operational_role()
-    if not role:
-        frappe.throw(
-            _(
-                "A single operational role is required to {0}. Assign exactly one cline-* role."
-            ).format(action_label)
-        )
-    if allowed_roles and role not in allowed_roles:
-        frappe.throw(
-            _("Role {0} is not allowed to {1}.").format(role, action_label)
-        )
-    return role
 
 
 @frappe.whitelist()
