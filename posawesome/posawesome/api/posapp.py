@@ -3164,6 +3164,8 @@ def search_orders(
     )
     data = []
     for order in orders_list:
+        if _sales_order_has_submitted_invoice(order["name"]):
+            continue
         age_days = _age_days_from_date(order.get("transaction_date"))
         is_stale = 1 if age_days > days_back else 0
         if not allow_stale and is_stale:
@@ -3176,6 +3178,25 @@ def search_orders(
         doc["stale_policy_history_days"] = history_days
         data.append(doc)
     return data
+
+
+def _sales_order_has_submitted_invoice(sales_order):
+    sales_order = cstr(sales_order or "").strip()
+    if not sales_order:
+        return False
+
+    rows = frappe.db.sql(
+        """
+        select si.name
+        from `tabSales Invoice` si
+        inner join `tabSales Invoice Item` sii on sii.parent = si.name
+        where si.docstatus = 1
+            and sii.sales_order = %s
+        limit 1
+        """,
+        (sales_order,),
+    )
+    return bool(rows)
 
 
 @frappe.whitelist()
