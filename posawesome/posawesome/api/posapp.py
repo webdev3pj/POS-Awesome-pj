@@ -26,13 +26,6 @@ from erpnext.accounts.doctype.payment_request.payment_request import (
     get_existing_payment_request_amount,
 )
 
-from erpnext.accounts.doctype.loyalty_program.loyalty_program import (
-    get_loyalty_program_details_with_points,
-)
-from posawesome.posawesome.doctype.pos_coupon.pos_coupon import check_coupon_code
-from posawesome.posawesome.doctype.delivery_charges.delivery_charges import (
-    get_applicable_delivery_charges as _get_applicable_delivery_charges,
-)
 from posawesome.posawesome.api.pos.sales_order.lookup import search_sales_orders
 from posawesome.posawesome.api.pos.quotation.lookup import (
     require_quotation_permission as _require_quotation_permission,
@@ -48,6 +41,21 @@ from posawesome.posawesome.api.pos.sales_invoice.from_sales_order import (
     update_invoice_from_order_data,
 )
 from posawesome.posawesome.api.pos.offers.lookup import get_pos_offers
+from posawesome.posawesome.api.pos.customer.address import (
+    get_customer_addresses as get_pos_customer_addresses,
+    make_address as make_pos_address,
+)
+from posawesome.posawesome.api.pos.customer.coupon import (
+    get_active_gift_coupons as get_pos_active_gift_coupons,
+    get_pos_coupon as get_pos_coupon_code,
+)
+from posawesome.posawesome.api.pos.customer.info import (
+    get_company_domain as get_pos_company_domain,
+    get_customer_info as get_pos_customer_info,
+)
+from posawesome.posawesome.api.pos.delivery.charges import (
+    get_applicable_delivery_charges as get_pos_delivery_charges,
+)
 from posawesome.posawesome.api.pos.session.profile import (
     get_default_pos_profile_for_user as _get_default_pos_profile_for_user,
     require_user_default_pos_profile as _require_user_default_pos_profile,
@@ -2864,52 +2872,12 @@ def get_offers(profile):
 
 @frappe.whitelist()
 def get_customer_addresses(customer):
-    return frappe.db.sql(
-        """
-        SELECT 
-            address.name,
-            address.address_line1,
-            address.address_line2,
-            address.address_title,
-            address.city,
-            address.state,
-            address.country,
-            address.address_type
-        FROM `tabAddress` as address
-        INNER JOIN `tabDynamic Link` AS link
-				ON address.name = link.parent
-        WHERE link.link_doctype = 'Customer'
-            AND link.link_name = '{0}'
-            AND address.disabled = 0
-        ORDER BY address.name
-        """.format(
-            customer
-        ),
-        as_dict=1,
-    )
+    return get_pos_customer_addresses(customer)
 
 
 @frappe.whitelist()
 def make_address(args):
-    args = json.loads(args)
-    address = frappe.get_doc(
-        {
-            "doctype": "Address",
-            "address_title": args.get("name"),
-            "address_line1": args.get("address_line1"),
-            "address_line2": args.get("address_line2"),
-            "city": args.get("city"),
-            "state": args.get("state"),
-            "pincode": args.get("pincode"),
-            "country": args.get("country"),
-            "address_type": "Shipping",
-            "links": [
-                {"link_doctype": args.get("doctype"), "link_name": args.get("customer")}
-            ],
-        }
-    ).insert()
-
-    return address
+    return make_pos_address(args)
 
 
 def build_item_cache(item_code):
@@ -3199,76 +3167,28 @@ def get_amount(ref_doc, payment_account=None):
 
 @frappe.whitelist()
 def get_pos_coupon(coupon, customer, company):
-    res = check_coupon_code(coupon, customer, company)
-    return res
+    return get_pos_coupon_code(coupon, customer, company)
 
 
 @frappe.whitelist()
 def get_active_gift_coupons(customer, company):
-    coupons = []
-    coupons_data = frappe.get_all(
-        "POS Coupon",
-        filters={
-            "company": company,
-            "coupon_type": "Gift Card",
-            "customer": customer,
-            "used": 0,
-        },
-        fields=["coupon_code"],
-    )
-    if len(coupons_data):
-        coupons = [i.coupon_code for i in coupons_data]
-    return coupons
+    return get_pos_active_gift_coupons(customer, company)
 
 
 @frappe.whitelist()
 def get_customer_info(customer):
-    customer = frappe.get_doc("Customer", customer)
-
-    res = {"loyalty_points": None, "conversion_factor": None}
-
-    res["email_id"] = customer.email_id
-    res["mobile_no"] = customer.mobile_no
-    res["image"] = customer.image
-    res["loyalty_program"] = customer.loyalty_program
-    res["customer_price_list"] = customer.default_price_list
-    res["customer_group"] = customer.customer_group
-    res["customer_type"] = customer.customer_type
-    res["territory"] = customer.territory
-    res["birthday"] = customer.posa_birthday
-    res["gender"] = customer.gender
-    res["tax_id"] = customer.tax_id
-    res["posa_discount"] = customer.posa_discount
-    res["name"] = customer.name
-    res["customer_name"] = customer.customer_name
-    res["customer_group_price_list"] = frappe.get_value(
-        "Customer Group", customer.customer_group, "default_price_list"
-    )
-
-    if customer.loyalty_program:
-        lp_details = get_loyalty_program_details_with_points(
-            customer.name,
-            customer.loyalty_program,
-            silent=True,
-            include_expired_entry=False,
-        )
-        res["loyalty_points"] = lp_details.get("loyalty_points")
-        res["conversion_factor"] = lp_details.get("conversion_factor")
-
-    return res
+    return get_pos_customer_info(customer)
 
 
 def get_company_domain(company):
-    return frappe.get_cached_value("Company", cstr(company), "domain")
+    return get_pos_company_domain(company)
 
 
 @frappe.whitelist()
 def get_applicable_delivery_charges(
     company, pos_profile, customer, shipping_address_name=None
 ):
-    return _get_applicable_delivery_charges(
-        company, pos_profile, customer, shipping_address_name
-    )
+    return get_pos_delivery_charges(company, pos_profile, customer, shipping_address_name)
 
 
 def auto_create_items():
