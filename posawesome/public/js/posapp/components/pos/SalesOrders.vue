@@ -370,24 +370,22 @@ export default {
             if (r && r.exc) {
               cloudFailed = true;
             } else if (r && r.message) {
-              const cloudRows = Array.isArray(r.message) ? r.message : [];
-              if (cloudRows.length > 0) {
-                let rows = cloudRows;
-                if (vm.relay_order_fallback_enabled()) {
-                  try {
-                    const relayRows = await vm.fetch_relay_token_rows(String(vm.order_name || "").trim());
-                    rows = vm.merge_sales_order_rows(
-                      cloudRows,
-                      relayRows.map((row) => vm.normalize_relay_token_row(row))
-                    );
-                  } catch (e) {
-                    rows = cloudRows;
-                  }
-                }
-                vm.dialog_data = rows;
-                resolve(true);
-                return;
-              }
+	              const cloudRows = Array.isArray(r.message) ? r.message : [];
+	              if (cloudRows.length > 0) {
+	                vm.dialog_data = cloudRows;
+	                resolve(true);
+	                if (vm.relay_order_fallback_enabled()) {
+	                  vm.fetch_relay_token_rows(String(vm.order_name || "").trim())
+	                    .then((relayRows) => {
+	                      vm.dialog_data = vm.merge_sales_order_rows(
+	                        cloudRows,
+	                        relayRows.map((row) => vm.normalize_relay_token_row(row))
+	                      );
+	                    })
+	                    .catch(() => {});
+	                }
+	                return;
+	              }
               if (!vm.relay_order_fallback_enabled()) {
                 vm.dialog_data = r.message;
                 resolve(true);

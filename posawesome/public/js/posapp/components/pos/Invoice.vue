@@ -2937,20 +2937,18 @@ export default {
         async: true,
         callback: async function (r) {
           if (r && !r.exc && r.message) {
-            const cloudRows = Array.isArray(r.message) ? r.message : [];
-            if (cloudRows.length > 0) {
-              let rows = cloudRows;
-              if (vm.relayWorkflowEnabled() && vm.get_relay_base_url()) {
-                try {
-                  const relayRows = await vm.fetch_open_orders_from_relay("");
-                  rows = vm.merge_sales_order_rows(cloudRows, relayRows);
-                } catch (e) {
-                  rows = cloudRows;
-                }
-              }
-              evntBus.$emit("open_orders", rows);
-              if (cloudRows.some((row) => Number(row && row.is_stale ? 1 : 0) === 1)) {
-                evntBus.$emit("show_mesage", {
+	            const cloudRows = Array.isArray(r.message) ? r.message : [];
+	            if (cloudRows.length > 0) {
+	              evntBus.$emit("open_orders", cloudRows);
+	              if (vm.relayWorkflowEnabled() && vm.get_relay_base_url()) {
+	                vm.fetch_open_orders_from_relay("")
+	                  .then((relayRows) => {
+	                    evntBus.$emit("open_orders", vm.merge_sales_order_rows(cloudRows, relayRows));
+	                  })
+	                  .catch(() => {});
+	              }
+	              if (cloudRows.some((row) => Number(row && row.is_stale ? 1 : 0) === 1)) {
+	                evntBus.$emit("show_mesage", {
                   text: __("Some Sales Orders are stale (allowed by profile policy)."),
                   color: "warning",
                 });
