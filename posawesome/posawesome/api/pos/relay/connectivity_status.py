@@ -2,21 +2,12 @@
 
 from __future__ import unicode_literals
 
-
-
 import requests
-
 from urllib.parse import urlparse
 
-
-
 import frappe
-
 from frappe import _
-
 from frappe.utils import cint, cstr, now_datetime
-
-
 
 from posawesome.posawesome.api.pos.relay.connectivity_config import (
     _get_edge_relay_base_url,
@@ -25,10 +16,7 @@ from posawesome.posawesome.api.pos.relay.connectivity_config import (
     _get_pos_profile_relay_connectivity_mode,
     _is_private_lan_host,
 )
-
 from posawesome.posawesome.api.pos.relay.state import _is_relay_workflow_enabled
-
-
 
 def get_relay_connectivity_status(pos_profile):
     pos_profile = cstr(pos_profile or "").strip()

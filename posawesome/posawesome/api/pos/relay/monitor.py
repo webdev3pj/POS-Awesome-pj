@@ -12,7 +12,13 @@ from frappe.utils import cint, cstr, now_datetime, nowdate
 
 from posawesome.posawesome.api.pos.relay.state import (
     _relay_workflow_doctype_exists,
-    _relay_workflow_has_field,
+)
+from posawesome.posawesome.api.pos.relay.monitor_helpers import (
+    derived_business_date,
+    get_sales_invoice_map,
+    get_sales_order_map,
+    get_user_display_map,
+    monitor_state_fields,
 )
 
 
@@ -46,36 +52,6 @@ def get_relay_workflow_monitor_board(
     if not _relay_workflow_doctype_exists():
         return {"summary": {"pending_count": 0, "server_time": str(now_datetime())}, "rows": []}
 
-    state_fields = [
-        "name",
-        "sales_invoice",
-        "pos_profile",
-        "token_id",
-        "token_status",
-        "picking_status",
-        "dispatch_status",
-        "exceptions_note",
-        "released_by",
-        "released_at",
-        "modified",
-    ]
-    for maybe_field in (
-        "sales_order",
-        "business_date",
-        "pos_opening_shift",
-        "status_changed_at",
-        "order_taken_at",
-        "paid_at",
-        "pick_started_at",
-        "picked_at",
-        "dispatch_exception_state",
-        "cashier_adjustment_required",
-        "dispatch_proof",
-        "dispatch_proof_payload",
-    ):
-        if _relay_workflow_has_field(maybe_field):
-            state_fields.append(maybe_field)
-
     scope_mode = cstr(scope_mode or "business_date").strip().lower()
     if scope_mode not in ("business_date", "opening_shift"):
         scope_mode = "business_date"
@@ -86,7 +62,7 @@ def get_relay_workflow_monitor_board(
         filters["pos_profile"] = pos_profile
     if (
         scope_mode == "opening_shift"
-        and _relay_workflow_has_field("pos_opening_shift")
+        and "pos_opening_shift" in monitor_state_fields()
         and pos_opening_shift
     ):
         filters["pos_opening_shift"] = pos_opening_shift
@@ -96,82 +72,14 @@ def get_relay_workflow_monitor_board(
     state_rows = frappe.get_all(
         "POS Relay Workflow State",
         filters=filters,
-        fields=state_fields,
+        fields=monitor_state_fields(),
         order_by="modified asc",
         limit_page_length=max(1, cint(limit_page_length) or 200),
     )
 
-    so_names = sorted(
-        {cstr((row.get("sales_order") or "")).strip() for row in state_rows if row.get("sales_order")}
-    )
-    si_names = sorted(
-        {cstr((row.get("sales_invoice") or "")).strip() for row in state_rows if row.get("sales_invoice")}
-    )
-
-    so_map = {}
-    if so_names:
-        for doc in frappe.get_all(
-            "Sales Order",
-            filters={"name": ["in", so_names]},
-            fields=[
-                "name",
-                "customer",
-                "customer_name",
-                "grand_total",
-                "currency",
-                "owner",
-                "transaction_date",
-                "creation",
-                "modified",
-            ],
-            limit_page_length=len(so_names),
-        ):
-            so_map[doc.name] = doc
-
-    si_map = {}
-    if si_names:
-        for doc in frappe.get_all(
-            "Sales Invoice",
-            filters={"name": ["in", si_names]},
-            fields=[
-                "name",
-                "customer",
-                "customer_name",
-                "grand_total",
-                "currency",
-                "owner",
-                "posting_date",
-                "posting_time",
-                "creation",
-                "modified",
-                "posa_pos_opening_shift",
-            ],
-            limit_page_length=len(si_names),
-        ):
-            si_map[doc.name] = doc
-
-    user_ids = set()
-    for so in so_map.values():
-        if so.get("owner"):
-            user_ids.add(so.get("owner"))
-    for si in si_map.values():
-        if si.get("owner"):
-            user_ids.add(si.get("owner"))
-
-    user_map = {}
-    if user_ids:
-        for user in frappe.get_all(
-            "User",
-            filters={"name": ["in", list(user_ids)]},
-            fields=["name", "full_name", "first_name", "last_name"],
-            limit_page_length=len(user_ids),
-        ):
-            full_name = cstr(user.get("full_name") or "").strip()
-            if not full_name:
-                full_name = " ".join(
-                    [cstr(user.get("first_name") or "").strip(), cstr(user.get("last_name") or "").strip()]
-                ).strip()
-            user_map[user.name] = full_name or user.name
+    so_map = get_sales_order_map(state_rows)
+    si_map = get_sales_invoice_map(state_rows)
+    user_map = get_user_display_map(so_map, si_map)
 
     mine_only = cint(mine_only)
     current_user = frappe.session.user
@@ -179,27 +87,11 @@ def get_relay_workflow_monitor_board(
     rows = []
     status_counts = {}
 
-    def _derived_business_date(row_obj, so_doc_obj=None, si_doc_obj=None):
-        if row_obj and row_obj.get("business_date"):
-            return cstr(row_obj.get("business_date"))
-        if so_doc_obj and so_doc_obj.get("transaction_date"):
-            return cstr(so_doc_obj.get("transaction_date"))
-        if si_doc_obj and si_doc_obj.get("posting_date"):
-            return cstr(si_doc_obj.get("posting_date"))
-        raw_dt = (row_obj or {}).get("order_taken_at") or (row_obj or {}).get("modified")
-        if raw_dt:
-            raw_text = cstr(raw_dt)
-            if " " in raw_text:
-                return raw_text.split(" ", 1)[0]
-            if "T" in raw_text:
-                return raw_text.split("T", 1)[0]
-        return ""
-
     for row in state_rows:
         so_doc = so_map.get(row.get("sales_order")) if row.get("sales_order") else None
         si_doc = si_map.get(row.get("sales_invoice")) if row.get("sales_invoice") else None
 
-        row_business_date = _derived_business_date(row, so_doc, si_doc)
+        row_business_date = derived_business_date(row, so_doc, si_doc)
         if scope_mode == "business_date" and target_business_date:
             if row_business_date and row_business_date != target_business_date:
                 continue
