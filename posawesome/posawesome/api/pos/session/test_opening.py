@@ -7,16 +7,16 @@ from unittest.mock import Mock, patch
 import frappe
 from frappe.tests.utils import FrappeTestCase
 
-from posawesome.posawesome.api.pos.session import opening
+from posawesome.posawesome.api.pos.session import bootstrap, dialog, opening
 
 
 class TestSessionOpening(FrappeTestCase):
-    @patch.object(opening.frappe, "get_cached_value")
-    @patch.object(opening.frappe, "get_list")
-    @patch.object(opening.frappe, "get_cached_doc")
-    @patch.object(opening.frappe, "get_roles", return_value=["cline-Sales Associate"])
-    @patch.object(opening, "is_admin_role_testing_enabled", return_value=False)
-    @patch.object(opening, "get_default_pos_profile_for_user", return_value="POS TEST")
+    @patch.object(dialog.frappe, "get_cached_value")
+    @patch.object(dialog.frappe, "get_list")
+    @patch.object(dialog.frappe, "get_cached_doc")
+    @patch.object(dialog.frappe, "get_roles", return_value=["cline-Sales Associate"])
+    @patch.object(dialog, "is_admin_role_testing_enabled", return_value=False)
+    @patch.object(dialog, "get_default_pos_profile_for_user", return_value="POS TEST")
     def test_opening_dialog_uses_user_default_profile(
         self,
         _default_profile,
@@ -35,8 +35,8 @@ class TestSessionOpening(FrappeTestCase):
         )
         get_list.return_value = [frappe._dict({"parent": "POS TEST"})]
 
-        with patch.object(opening.frappe, "session", SimpleNamespace(user="sa@example.com")):
-            with patch.object(opening.frappe, "conf", {}):
+        with patch.object(dialog.frappe, "session", SimpleNamespace(user="sa@example.com")):
+            with patch.object(dialog.frappe, "conf", {}):
                 data = opening.get_opening_dialog_data(erpnext_version=13)
 
         self.assertEqual(data["default_pos_profile"], "POS TEST")
@@ -46,9 +46,9 @@ class TestSessionOpening(FrappeTestCase):
         self.assertEqual(data["payments_method"][0].currency, "JMD")
         self.assertEqual(get_list.call_args.kwargs["filters"], {"parent": ["in", ["POS TEST"]]})
 
-    @patch.object(opening.frappe, "get_cached_value")
-    @patch.object(opening.frappe, "get_list")
-    @patch.object(opening, "get_default_pos_profile_for_user", return_value="LEGACY POS")
+    @patch.object(dialog.frappe, "get_cached_value")
+    @patch.object(dialog.frappe, "get_list")
+    @patch.object(dialog, "get_default_pos_profile_for_user", return_value="LEGACY POS")
     def test_opening_dialog_uses_production_style_data_when_token_workflow_off(
         self, _default_profile, get_list, get_cached_value
     ):
@@ -62,8 +62,8 @@ class TestSessionOpening(FrappeTestCase):
             [frappe._dict({"parent": "LEGACY POS"})],
         ]
 
-        with patch.object(opening.frappe, "session", SimpleNamespace(user="cashier@example.com")):
-            with patch.object(opening.frappe, "conf", {}):
+        with patch.object(dialog.frappe, "session", SimpleNamespace(user="cashier@example.com")):
+            with patch.object(dialog.frappe, "conf", {}):
                 data = opening.get_opening_dialog_data(erpnext_version=13)
 
         self.assertEqual(data["token_workflow_enabled"], 0)
@@ -174,9 +174,9 @@ class TestSessionOpening(FrappeTestCase):
         bootstrap_session.assert_not_called()
         self.assertEqual(data, "")
 
-    @patch.object(opening, "get_single_operational_role", return_value="cline-Cashier")
-    @patch.object(opening.frappe, "get_doc")
-    @patch.object(opening, "require_user_default_pos_profile", return_value="POS TEST")
+    @patch.object(bootstrap, "get_single_operational_role", return_value="cline-Cashier")
+    @patch.object(bootstrap.frappe, "get_doc")
+    @patch.object(bootstrap, "require_user_default_pos_profile", return_value="POS TEST")
     def test_bootstrap_pos_session_blocks_cashier_virtual_session(
         self, _require_default_profile, get_doc, _role
     ):
