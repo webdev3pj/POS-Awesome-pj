@@ -955,14 +955,18 @@ export default {
   },
 
   computed: {
+    token_workflow_enabled() {
+      return parseInt((this.pos_profile && this.pos_profile.custom_have_token) || 0, 10) === 1;
+    },
     is_sales_associate_role() {
-      return (this.current_role || "") === "cline-Sales Associate";
+      return this.token_workflow_enabled && (this.current_role || "") === "cline-Sales Associate";
     },
     is_cashier_role() {
-      return (this.current_role || "") === "cline-Cashier";
+      return this.token_workflow_enabled && (this.current_role || "") === "cline-Cashier";
     },
     simplified_sa_cashier_ui_enabled() {
       return (
+        this.token_workflow_enabled &&
         parseInt((this.pos_profile && this.pos_profile.posa_simplified_sa_cashier_ui) || 0, 10) === 1
       );
     },
@@ -976,12 +980,13 @@ export default {
       return !(this.simplified_sa_cashier_ui_enabled && this.is_sales_associate_role);
     },
     show_order_name_field() {
-      return this.is_sales_associate_role;
+      return this.token_workflow_enabled && this.is_sales_associate_role;
     },
     save_new_label() {
       return this.is_sales_associate_role ? __("Save Order") : __("Save/New");
     },
     can_use_quotation_actions() {
+      if (!this.token_workflow_enabled) return false;
       const role = (this.current_role || "").trim();
       if (role === "cline-Sales Associate") {
         return parseInt((this.pos_profile && this.pos_profile.posa_allow_sa_quotation) || 1, 10) === 1;
@@ -1125,11 +1130,7 @@ export default {
       return !!(payload && typeof payload === "object" && payload.target && payload.preventDefault);
     },
     relayWorkflowEnabled() {
-      const browserConfig = this.get_browser_relay_config();
-      return (
-        parseInt((this.pos_profile && this.pos_profile.custom_have_token) || 0, 10) === 1 ||
-        !!(browserConfig && browserConfig.relay_url)
-      );
+      return this.token_workflow_enabled;
     },
     normalize_order_name(value = this.order_name) {
       return String(value || "").trim();

@@ -135,9 +135,15 @@ export default {
   },
 
   computed: {
+    token_workflow_enabled() {
+      return parseInt((this.pos_profile && this.pos_profile.custom_have_token) || 0, 10) === 1;
+    },
     is_fulfillment_role() {
-      return ['cline-Picker', 'cline-Dispatch', 'cline-Supervisor'].includes(
-        (this.current_role || '').trim()
+      return (
+        this.token_workflow_enabled &&
+        ['cline-Picker', 'cline-Dispatch', 'cline-Supervisor'].includes(
+          (this.current_role || '').trim()
+        )
       );
     },
   },

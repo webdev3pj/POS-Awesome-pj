@@ -5,7 +5,7 @@ import json
 
 import frappe
 from frappe import _
-from frappe.utils import cstr, nowdate
+from frappe.utils import cint, cstr, nowdate
 
 from posawesome.posawesome.api.pos.session.profile import (
     get_default_pos_profile_for_user,
@@ -19,11 +19,44 @@ from posawesome.posawesome.api.pos.session.roles import (
 )
 
 
+def is_token_workflow_enabled(pos_profile):
+    if not pos_profile:
+        return False
+    return cint(frappe.get_cached_value("POS Profile", pos_profile, "custom_have_token") or 0) == 1
+
+
+def get_legacy_opening_dialog_data(erpnext_version=13):
+    data = {}
+    data["companies"] = frappe.get_list("Company", limit_page_length=0, order_by="name")
+    data["pos_profiles_data"] = frappe.get_list(
+        "POS Profile",
+        filters={"disabled": 0},
+        fields=["name", "company", "currency"],
+        limit_page_length=0,
+        order_by="name",
+    )
+    data["default_pos_profile"] = ""
+    data["default_company"] = ""
+    data["token_workflow_enabled"] = 0
+
+    pos_profiles_list = []
+    for i in data["pos_profiles_data"]:
+        pos_profiles_list.append(cstr(i.get("name") if isinstance(i, dict) else i.name))
+
+    _set_payment_methods(data, pos_profiles_list, erpnext_version)
+    _set_role_defaults(data, token_workflow_enabled=False)
+    return data
+
+
 def get_opening_dialog_data(erpnext_version=13):
     data = {}
     default_pos_profile = get_default_pos_profile_for_user(frappe.session.user)
+    if not is_token_workflow_enabled(default_pos_profile):
+        return get_legacy_opening_dialog_data(erpnext_version=erpnext_version)
+
     data["default_pos_profile"] = default_pos_profile
     data["default_company"] = ""
+    data["token_workflow_enabled"] = 1
     if default_pos_profile:
         default_profile_doc = frappe.get_cached_doc("POS Profile", default_pos_profile)
         data["default_company"] = default_profile_doc.company
@@ -43,6 +76,21 @@ def get_opening_dialog_data(erpnext_version=13):
     for i in data["pos_profiles_data"]:
         pos_profiles_list.append(cstr(i.get("name") if isinstance(i, dict) else i.name))
 
+    _set_payment_methods(data, pos_profiles_list, erpnext_version)
+    _set_role_defaults(
+        data,
+        token_workflow_enabled=True,
+        default_pos_profile=default_pos_profile,
+    )
+
+    relay_client_auth_key = cstr(frappe.conf.get("posa_edge_relay_client_key") or "").strip()
+    data["relay_client_auth_key"] = relay_client_auth_key
+    data["relay_client_auth_required"] = 1 if relay_client_auth_key else 0
+
+    return data
+
+
+def _set_payment_methods(data, pos_profiles_list, erpnext_version):
     payment_method_table = (
         "POS Payment Method" if erpnext_version == 13 else "Sales Invoice Payment"
     )
@@ -59,9 +107,24 @@ def get_opening_dialog_data(erpnext_version=13):
             "POS Profile", mode["parent"], "currency"
         )
 
+
+def _set_role_defaults(data, token_workflow_enabled, default_pos_profile=""):
     admin_role_testing_enabled = is_admin_role_testing_enabled()
-    data["admin_role_testing_enabled"] = 1 if admin_role_testing_enabled else 0
-    data["admin_test_roles"] = list(OPERATIONAL_ROLES) if admin_role_testing_enabled else []
+    data["admin_role_testing_enabled"] = (
+        1 if token_workflow_enabled and admin_role_testing_enabled else 0
+    )
+    data["admin_test_roles"] = (
+        list(OPERATIONAL_ROLES)
+        if token_workflow_enabled and admin_role_testing_enabled
+        else []
+    )
+
+    if not token_workflow_enabled:
+        data["user_role"] = ""
+        data["role_error"] = ""
+        data["relay_client_auth_key"] = ""
+        data["relay_client_auth_required"] = 0
+        return
 
     user_roles = frappe.get_roles()
     cline_roles = [r for r in user_roles if r.startswith("cline-")]
@@ -99,28 +162,30 @@ def get_opening_dialog_data(erpnext_version=13):
             data["user_role"] = ""
             data["role_error"] = ""
 
-    relay_client_auth_key = cstr(frappe.conf.get("posa_edge_relay_client_key") or "").strip()
-    data["relay_client_auth_key"] = relay_client_auth_key
-    data["relay_client_auth_required"] = 1 if relay_client_auth_key else 0
-
-    return data
-
 
 def create_opening_voucher(pos_profile, company, balance_details, relay_workflow_enabled_fn=None):
-    pos_profile = require_user_default_pos_profile(pos_profile)
     relay_workflow_enabled_fn = relay_workflow_enabled_fn or (lambda _pos_profile: False)
-    if relay_workflow_enabled_fn(cstr(pos_profile or "").strip()):
+    token_workflow_enabled = relay_workflow_enabled_fn(cstr(pos_profile or "").strip())
+    if token_workflow_enabled:
+        pos_profile = require_user_default_pos_profile(pos_profile)
         require_operational_role_for_action(
             ("cline-Cashier", "cline-Supervisor"),
             "create POS opening shifts",
         )
+    else:
+        pos_profile = cstr(pos_profile or "").strip()
+        if not pos_profile:
+            frappe.throw(_("POS Profile is required"))
+
     company = cstr(company or "").strip()
     profile_company = cstr(
         frappe.get_cached_value("POS Profile", pos_profile, "company") or ""
     ).strip()
-    if company and company != profile_company:
+    if token_workflow_enabled and company and company != profile_company:
         frappe.throw(_("Selected Company does not match your default POS Profile."))
-    company = profile_company
+    company = profile_company if token_workflow_enabled else company
+    if not company:
+        company = profile_company
 
     balance_details = json.loads(balance_details)
 
@@ -172,7 +237,7 @@ def check_opening_shift(user):
     role = get_single_operational_role()
     if role and role != "cline-Cashier":
         pos_profile = get_default_pos_profile_for_user(user)
-        if pos_profile:
+        if pos_profile and is_token_workflow_enabled(pos_profile):
             return bootstrap_non_cash_pos_session(pos_profile, role)
     return data
 
@@ -242,4 +307,3 @@ def bootstrap_pos_session(pos_profile, company=None):
         )
 
     return bootstrap_non_cash_pos_session(pos_profile, role)
-

@@ -650,11 +650,11 @@ export default {
     },
     apply_browser_relay_config_to_profile(profile) {
       if (!profile || !profile.name) return profile;
+      if (parseInt(profile.custom_have_token || 0, 10) !== 1) return profile;
       const browserConfig = this.load_browser_relay_config(profile.name);
       if (!browserConfig) return profile;
       return {
         ...profile,
-        custom_have_token: parseInt(profile.custom_have_token || 0, 10) === 1 ? profile.custom_have_token : 1,
         posa_edge_relay_connectivity_mode: browserConfig.connectivity_mode,
       };
     },
@@ -688,7 +688,12 @@ export default {
         return;
       }
       if (!this.pos_profile || !this.pos_profile.name) {
-        this.pos_profile = { name: profileName, custom_have_token: 1 };
+        this.show_mesage({ text: __('Open a token-enabled POS Profile before saving relay settings.'), color: 'warning' });
+        return;
+      }
+      if (parseInt(this.pos_profile.custom_have_token || 0, 10) !== 1) {
+        this.show_mesage({ text: __('Enable Token Workflow on this POS Profile before saving relay settings.'), color: 'warning' });
+        return;
       }
       const config = {
         relay_url: relayUrl,

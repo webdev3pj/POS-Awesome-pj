@@ -15,6 +15,7 @@
             <v-row>
               <v-col cols="12">
                 <v-text-field
+                  v-if="token_workflow_enabled"
                   :label="frappe._('Company')"
                   v-model="company"
                   readonly
@@ -23,9 +24,17 @@
                   hide-details="auto"
                   required
                 ></v-text-field>
+                <v-autocomplete
+                  v-else
+                  :items="companies"
+                  :label="frappe._('Company')"
+                  v-model="company"
+                  required
+                ></v-autocomplete>
               </v-col>
               <v-col cols="12">
                 <v-text-field
+                  v-if="token_workflow_enabled"
                   :label="frappe._('POS Profile')"
                   v-model="pos_profile"
                   readonly
@@ -34,13 +43,20 @@
                   hide-details="auto"
                   required
                 ></v-text-field>
+                <v-autocomplete
+                  v-else
+                  :items="pos_profiles"
+                  :label="frappe._('POS Profile')"
+                  v-model="pos_profile"
+                  required
+                ></v-autocomplete>
               </v-col>
-              <v-col cols="12" v-if="detected_role">
+              <v-col cols="12" v-if="token_workflow_enabled && detected_role">
                 <v-alert type="info" dense outlined>
                   <strong>Role:</strong> {{ detected_role_display }}
                 </v-alert>
               </v-col>
-              <v-col cols="12" v-if="admin_role_testing_enabled">
+              <v-col cols="12" v-if="token_workflow_enabled && admin_role_testing_enabled">
                 <v-select
                   v-model="detected_role"
                   :items="admin_test_role_options"
@@ -51,12 +67,12 @@
                   @change="set_admin_test_role"
                 ></v-select>
               </v-col>
-              <v-col cols="12" v-if="role_error">
+              <v-col cols="12" v-if="token_workflow_enabled && role_error">
                 <v-alert type="error" dense>
                   {{ role_error }}
                 </v-alert>
               </v-col>
-              <v-col cols="12" v-if="is_non_cash_role_session">
+              <v-col cols="12" v-if="token_workflow_enabled && is_non_cash_role_session">
                 <v-alert type="info" dense outlined>
                   {{
                     __(
@@ -130,6 +146,7 @@ export default {
       pos_profiles_data: [],
       pos_profiles: [],
       pos_profile: '',
+      token_workflow_enabled: false,
       // Role derived from ERPNext user roles (not user-selectable)
       detected_role: '',
       role_error: '',
@@ -195,6 +212,7 @@ export default {
       return this.detected_role;
     },
     is_non_cash_role_session() {
+      if (!this.token_workflow_enabled) return false;
       const role = (this.detected_role || '').trim();
       if (!role) return false;
       return role !== 'cline-Cashier';
@@ -203,6 +221,9 @@ export default {
       return !this.is_non_cash_role_session;
     },
     dialog_title() {
+      if (!this.token_workflow_enabled) {
+        return __('Create POS Opening Shift');
+      }
       return this.requires_cash_opening
         ? __('Create POS Opening Shift')
         : __('Start POS Session');
@@ -227,8 +248,10 @@ export default {
             vm.pos_profiles = vm.pos_profiles_data.map((element) => element.name);
             vm.pos_profile = r.message.default_pos_profile || vm.pos_profiles[0] || "";
             vm.payments_method_data = r.message.payments_method;
+            vm.token_workflow_enabled = parseInt(r.message.token_workflow_enabled || 0, 10) === 1;
             // Get role from user's ERPNext roles (derived, not user-selected)
-            vm.admin_role_testing_enabled = parseInt(r.message.admin_role_testing_enabled || 0, 10) === 1;
+            vm.admin_role_testing_enabled =
+              vm.token_workflow_enabled && parseInt(r.message.admin_role_testing_enabled || 0, 10) === 1;
             try {
               if (vm.admin_role_testing_enabled) {
                 localStorage.setItem("posa_admin_role_testing_enabled", "1");
@@ -270,16 +293,20 @@ export default {
       }
       this.is_loading = true;
       const vm = this;
-      // Store role in localStorage for session
-      if (this.admin_role_testing_enabled) {
-        setAdminTestRole(this.detected_role);
+      if (this.token_workflow_enabled) {
+        // Store role in localStorage for token workflow sessions only.
+        if (this.admin_role_testing_enabled) {
+          setAdminTestRole(this.detected_role);
+        } else {
+          localStorage.setItem('pos_current_role', this.detected_role);
+        }
       } else {
-        localStorage.setItem('pos_current_role', this.detected_role);
+        localStorage.removeItem('pos_current_role');
       }
-      const method = this.requires_cash_opening
-        ? 'posawesome.posawesome.api.posapp.create_opening_voucher'
-        : 'posawesome.posawesome.api.posapp.bootstrap_pos_session';
-      const args = this.requires_cash_opening
+      const method = this.token_workflow_enabled && !this.requires_cash_opening
+        ? 'posawesome.posawesome.api.posapp.bootstrap_pos_session'
+        : 'posawesome.posawesome.api.posapp.create_opening_voucher';
+      const args = method === 'posawesome.posawesome.api.posapp.create_opening_voucher'
         ? {
             pos_profile: this.pos_profile,
             company: this.company,
