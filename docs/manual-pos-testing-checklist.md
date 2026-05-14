@@ -52,6 +52,18 @@ Goal: prove that a normal POS Profile still behaves like production/default POS 
 
 Evidence to capture: POS Profile, Sales Invoice ID, payment mode screenshot, submitted invoice screenshot.
 
+Backend verification:
+
+| Document | Field / Check | Expected Result | Pass/Fail | Notes |
+| --- | --- | --- | --- | --- |
+| POS Opening Shift | `user`, `pos_profile`, `company`, `status`, `docstatus` | Matches cashier/user and selected token-OFF profile; status is Open while testing. | | |
+| Sales Invoice | `docstatus` | Submitted, value `1`. | | |
+| Sales Invoice | `is_pos`, `pos_profile`, `company`, `currency` | POS invoice fields match the token-OFF profile. | | |
+| Sales Invoice | `posa_pos_opening_shift` | Linked to current POS Opening Shift if opening shift is used. | | |
+| Sales Invoice Payments | payment rows | Payment mode and amount match what was entered in POS. | | |
+| Sales Invoice Items | item rows | Item code, quantity, rate, warehouse, and taxes match POS cart. | | |
+| POS Relay Workflow State | related state | No relay workflow state is required for token-OFF/default POS sale. | | |
+
 ## Flow 2: Sales Associate Token Flow
 
 Goal: prove Sales Associate can create an order/token without cash opening and without payment access.
@@ -76,6 +88,20 @@ Goal: prove Sales Associate can create an order/token without cash opening and w
 
 Evidence to capture: no-opening-dialog screenshot/video, auto-selected POS Profile, mandatory Order Name validation, token dialog, Sales Order ID.
 
+Backend verification:
+
+| Document | Field / Check | Expected Result | Pass/Fail | Notes |
+| --- | --- | --- | --- | --- |
+| User | roles | Sales Associate user has exactly one `cline-*` role: `cline-Sales Associate`. | | |
+| POS Profile | `custom_have_token` | Enabled, value `1`. | | |
+| Sales Order | `docstatus` | Submitted, value `1`. | | |
+| Sales Order | `company`, `currency`, `customer`, `pos_profile` if present | Matches token POS Profile and POS cart. | | |
+| Sales Order | `posa_order_name` or configured order-name field | Contains the Order Name entered in POS. | | |
+| Sales Order | `name` suffix | Last 5 digits match token shown in dialog. | | |
+| Sales Order Items | item rows | Item code, quantity, rate, warehouse, and delivery/date fields match POS cart. | | |
+| Sales Order | `billing_status` | Not Billed before cashier payment. | | |
+| POS Relay Workflow State | `sales_order`, `token_id`, `token_status` | State exists when relay/token workflow state is enabled; linked to Sales Order and token is pending/unpaid before payment. | | |
+
 ## Flow 3: Cashier Retrieve Sales Order And Pay
 
 Goal: prove Cashier can retrieve a Sales Associate order by name/token and complete exactly one invoice.
@@ -99,6 +125,22 @@ Goal: prove Cashier can retrieve a Sales Associate order by name/token and compl
 | 15 | Reselect the same SO if it still appears, then click Pay. | System must not create another SI for already paid/fully billed SO. | | |
 
 Evidence to capture: Sales Order search by name, search by token, selected SO UI, Sales Invoice ID, backend link between SI and SO.
+
+Backend verification:
+
+| Document | Field / Check | Expected Result | Pass/Fail | Notes |
+| --- | --- | --- | --- | --- |
+| User | roles | Cashier user has exactly one `cline-*` role: `cline-Cashier`. | | |
+| POS Opening Shift | `user`, `pos_profile`, `company`, `status`, `docstatus` | Matches cashier and token POS Profile; status is Open during payment. | | |
+| Sales Invoice | `docstatus` | Submitted, value `1`, after payment. | | |
+| Sales Invoice | `is_pos`, `pos_profile`, `company`, `currency` | Matches token POS Profile. | | |
+| Sales Invoice | `posa_pos_opening_shift` | Linked to cashier's current POS Opening Shift. | | |
+| Sales Invoice Items | `sales_order`, `so_detail` | Every item created from SO links back to the selected Sales Order and item row. | | |
+| Sales Invoice Payments | payment rows | Payment mode and amount match POS payment screen. | | |
+| Sales Order | `billing_status` | Fully Billed after successful payment. | | |
+| Sales Order | search result | Same SO no longer appears in unpaid cashier retrieval list. | | |
+| POS Relay Workflow State | `sales_invoice`, `token_status`, `picking_status`, `dispatch_status` | State links to the submitted Sales Invoice; token status is Paid where workflow state is enabled. | | |
+| Duplicate invoice check | Sales Invoice list filtered by selected Sales Order | Exactly one submitted SI exists for the paid Sales Order unless a deliberate partial billing test was performed. | | |
 
 ## Flow 4: Duplicate And Permission Guard Tests
 
@@ -126,6 +168,16 @@ Evidence to capture: Sales Order search by name, search by token, selected SO UI
 
 Evidence to capture: button visibility for ON/OFF, Quotation ID, converted Sales Order ID, Sales Invoice ID.
 
+Backend verification:
+
+| Document | Field / Check | Expected Result | Pass/Fail | Notes |
+| --- | --- | --- | --- | --- |
+| POS Profile | quotation/print quote setting | Matches the UI visibility tested. | | |
+| Quotation | `docstatus`, `company`, `currency`, `customer` | Submitted/valid as expected and matches POS Profile/customer. | | |
+| Quotation Items | item rows | Item code, quantity, and rate match POS cart. | | |
+| Sales Order | created from quotation | Created token SO matches quotation customer/items and expected repriced values. | | |
+| Sales Invoice | item links | Invoice created by cashier links to converted Sales Order items. | | |
+
 ## Flow 6: Relay And Connectivity Behavior
 
 | # | Step | Expected Result | Pass/Fail | Notes |
@@ -136,6 +188,16 @@ Evidence to capture: button visibility for ON/OFF, Quotation ID, converted Sales
 | 4 | If relay-down message appears, record exact POS Profile and action. | Message should be explainable by token profile relay setting. | | |
 | 5 | Open browser console during payment. | No blocking JS errors related to relay submit flow. | | |
 
+Backend verification:
+
+| Document | Field / Check | Expected Result | Pass/Fail | Notes |
+| --- | --- | --- | --- | --- |
+| POS Profile | `custom_have_token` | Relay/token behavior only applies when token workflow is ON. | | |
+| POS Profile | relay URL / connectivity mode / fallback fields if present | Values explain observed relay behavior. | | |
+| POS Relay Workflow State | token/SO/SI linkage | For token workflow orders, state links to Sales Order and Sales Invoice as the order moves through payment. | | |
+| POS Relay Workflow State | sync fields if present | `last_sync_status`, offline flags, and local refs are consistent with online test path. | | |
+| Sales Invoice | submitted state | Token-OFF default sale submits even if relay is unreachable. | | |
+
 ## Flow 7: Closing Shift
 
 | # | Step | Expected Result | Pass/Fail | Notes |
@@ -145,6 +207,17 @@ Evidence to capture: button visibility for ON/OFF, Quotation ID, converted Sales
 | 3 | Confirm payment reconciliation values. | Expected amount includes opening cash, invoices, and payment entries. | | |
 | 4 | Submit closing shift. | Closing shift submits without deadlock/permission error. | | |
 | 5 | Open POS Opening Shift in backend. | Opening shift is marked closed and linked to closing shift. | | |
+
+Backend verification:
+
+| Document | Field / Check | Expected Result | Pass/Fail | Notes |
+| --- | --- | --- | --- | --- |
+| POS Closing Shift | `docstatus`, `pos_opening_shift`, `pos_profile`, `user`, `company` | Submitted, value `1`, and linked to the correct opening shift/cashier/profile. | | |
+| POS Closing Shift | `pos_transactions` | Contains submitted POS Sales Invoices from the shift. | | |
+| POS Closing Shift | `payment_reconciliation` | Expected amount matches opening balance plus invoice/payment entries. | | |
+| POS Closing Shift | `pos_payments` | Contains Payment Entry rows created through POS payments if applicable. | | |
+| POS Opening Shift | `pos_closing_shift`, `status` | Linked to closing shift and no longer Open. | | |
+| Sales Invoice | `posa_pos_opening_shift` | Paid invoices from the shift point to the closed opening shift. | | |
 
 ## Browser Console Checks
 
