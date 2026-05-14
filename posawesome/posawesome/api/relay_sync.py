@@ -16,12 +16,20 @@ from posawesome.posawesome.api.posapp import (
     submit_invoice,
     update_invoice,
 )
+from posawesome.posawesome.api.pos.relay.sync_utils import (
+    as_dict,
+    invoice_response,
+    normalize_doc_payload,
+    resolve_local_sale_ref,
+    resolve_local_token_id,
+    sales_order_response,
+)
 
 
 class RelaySyncService:
     def sync_sales_order_token(self, data, local_token_id=None):
-        token_payload = self._as_dict(data)
-        local_token_id = self._resolve_local_token_id(local_token_id, token_payload)
+        token_payload = as_dict(data)
+        local_token_id = resolve_local_token_id(local_token_id, token_payload)
         if not local_token_id:
             frappe.throw(_("Relay local token ID is required."))
 
@@ -51,16 +59,12 @@ class RelaySyncService:
             state_doc.flags.ignore_permissions = True
             state_doc.save()
 
-        return self._sales_order_response(
-            frappe.get_doc("Sales Order", sales_order_name), local_token_id
-        )
+        return sales_order_response(frappe.get_doc("Sales Order", sales_order_name), local_token_id)
 
     def submit_offline_invoice(self, invoice, data=None, local_ref=None):
-        invoice_payload = self._as_dict(invoice)
-        data_payload = self._as_dict(data)
-        local_sale_ref = self._resolve_local_sale_ref(
-            local_ref, invoice_payload, data_payload
-        )
+        invoice_payload = as_dict(invoice)
+        data_payload = as_dict(data)
+        local_sale_ref = resolve_local_sale_ref(local_ref, invoice_payload, data_payload)
 
         if not local_sale_ref:
             frappe.throw(_("Relay local sale reference is required."))
@@ -71,7 +75,7 @@ class RelaySyncService:
                 return self._submit_existing_invoice(
                     existing_invoice, invoice_payload, data_payload, local_sale_ref
                 )
-            return self._response(existing_invoice, local_sale_ref)
+            return invoice_response(existing_invoice, local_sale_ref)
 
         pos_profile = cstr(invoice_payload.get("pos_profile") or "").strip()
         if pos_profile and not _is_relay_workflow_enabled(pos_profile):
@@ -115,7 +119,7 @@ class RelaySyncService:
             sync_error="",
         )
         _set_relay_state_local_sale_ref(state_doc, local_sale_ref)
-        return self._response(submitted_invoice, local_sale_ref)
+        return invoice_response(submitted_invoice, local_sale_ref)
 
     def _prepare_invoice_payload(self, invoice_payload):
         prepared = copy.deepcopy(invoice_payload or {})
@@ -130,7 +134,7 @@ class RelaySyncService:
         for fieldname in ("docstatus", "owner", "creation", "modified", "modified_by"):
             prepared.pop(fieldname, None)
 
-        return self._normalize_doc_payload(prepared, "Sales Invoice")
+        return normalize_doc_payload(prepared, "Sales Invoice")
 
     def _prepare_sales_order_token_payload(self, token_payload):
         prepared = copy.deepcopy(token_payload or {})
@@ -151,31 +155,6 @@ class RelaySyncService:
         if not prepared.get("customer") and prepared.get("customer_id"):
             prepared["customer"] = prepared.get("customer_id")
         return prepared
-
-    def _resolve_local_sale_ref(self, local_ref, invoice_payload, data_payload):
-        for value in (
-            local_ref,
-            data_payload.get("local_sale_ref"),
-            data_payload.get("local_ref"),
-            invoice_payload.get("local_sale_ref"),
-            invoice_payload.get("local_ref"),
-        ):
-            value = cstr(value or "").strip()
-            if value:
-                return value
-        return ""
-
-    def _resolve_local_token_id(self, local_token_id, token_payload):
-        for value in (
-            local_token_id,
-            token_payload.get("local_token_id"),
-            token_payload.get("token_id"),
-            token_payload.get("sales_order"),
-        ):
-            value = cstr(value or "").strip()
-            if value:
-                return value
-        return ""
 
     def _get_sales_order_by_local_token_id(self, local_token_id):
         local_token_id = cstr(local_token_id or "").strip()
@@ -198,60 +177,6 @@ class RelaySyncService:
         if not frappe.db.exists("DocType", "POS Relay Workflow State"):
             return False
         return frappe.get_meta("POS Relay Workflow State").has_field(fieldname)
-
-    def _normalize_doc_payload(self, payload, doctype):
-        if not isinstance(payload, dict) or not doctype:
-            return payload
-
-        meta = frappe.get_meta(doctype)
-        normalized = copy.deepcopy(payload)
-        normalized["doctype"] = doctype
-
-        for fieldname, value in list(normalized.items()):
-            df = meta.get_field(fieldname)
-            if not df:
-                continue
-
-            if df.fieldtype == "Table":
-                if isinstance(value, list) and df.options:
-                    normalized[fieldname] = [
-                        self._normalize_doc_payload(row, df.options)
-                        if isinstance(row, dict)
-                        else row
-                        for row in value
-                    ]
-                continue
-
-            if isinstance(value, (list, dict)):
-                normalized[fieldname] = json.dumps(value)
-
-        return normalized
-
-    def _as_dict(self, value):
-        if isinstance(value, dict):
-            return value
-        if isinstance(value, str):
-            parsed = json.loads(value or "{}")
-            return parsed if isinstance(parsed, dict) else {}
-        return {}
-
-    def _response(self, invoice_doc, local_sale_ref):
-        return {
-            "name": invoice_doc.name,
-            "status": invoice_doc.docstatus,
-            "local_sale_ref": local_sale_ref,
-            "sales_invoice": invoice_doc.name,
-        }
-
-    def _sales_order_response(self, sales_order_doc, local_token_id):
-        return {
-            "name": sales_order_doc.name,
-            "sales_order_name": sales_order_doc.name,
-            "sales_order": sales_order_doc.name,
-            "token_id": sales_order_doc.name,
-            "local_token_id": local_token_id,
-            "status": sales_order_doc.docstatus,
-        }
 
 
 @frappe.whitelist()
