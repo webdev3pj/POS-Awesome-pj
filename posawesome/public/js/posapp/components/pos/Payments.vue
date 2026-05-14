@@ -1645,8 +1645,11 @@ export default {
   },
 
   computed: {
+    token_workflow_enabled() {
+      return parseInt((this.pos_profile && this.pos_profile.custom_have_token) || 0, 10) === 1;
+    },
     is_sales_associate_role() {
-      return (this.current_role || "") === "cline-Sales Associate";
+      return this.token_workflow_enabled && (this.current_role || "") === "cline-Sales Associate";
     },
     total_payments() {
       let total = this.safe_flt(this.invoice_doc && this.invoice_doc.loyalty_amount);

@@ -167,10 +167,8 @@ export default {
       return headers;
     },
     relay_quote_fallback_enabled() {
-      const browserConfig = this.get_browser_relay_config();
       return (
-        (parseInt((this.pos_profile && this.pos_profile.custom_have_token) || 0, 10) === 1 ||
-          !!(browserConfig && browserConfig.relay_url)) &&
+        parseInt((this.pos_profile && this.pos_profile.custom_have_token) || 0, 10) === 1 &&
         !!this.get_relay_base_url()
       );
     },
