@@ -983,7 +983,7 @@ export default {
       return this.token_workflow_enabled && this.is_sales_associate_role;
     },
     save_new_label() {
-      return this.is_sales_associate_role ? __("Save Order") : __("Save/New");
+      return this.token_workflow_enabled ? __("Save Order") : __("Save/New");
     },
     can_use_quotation_actions() {
       if (!this.token_workflow_enabled) return false;
