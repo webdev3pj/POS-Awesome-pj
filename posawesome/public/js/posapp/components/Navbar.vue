@@ -22,270 +22,55 @@
       </v-toolbar-title>
 
       <v-spacer></v-spacer>
-      <v-menu v-if="relay_status.enabled" bottom offset-y>
-        <template v-slot:activator="{ on, attrs }">
-          <v-chip
-            small
-            class="mr-2"
-            :color="relay_status_chip_color"
-            text-color="white"
-            v-bind="attrs"
-            v-on="on"
-          >
-            {{ relay_status_chip_text }}
-          </v-chip>
-        </template>
-        <v-card max-width="520" class="pa-2">
-          <v-card-title class="text-subtitle-1 pb-1">
-            {{ __('Edge Relay Diagnostics') }}
-          </v-card-title>
-          <v-divider></v-divider>
-          <v-card-text class="pt-3">
-            <div class="mb-2"><b>{{ __('Status') }}:</b> {{ relay_status.status || '-' }}</div>
-            <div class="mb-2"><b>{{ __('Effective Submit Gate') }}:</b> {{ relay_status.submit_gate_source || '-' }}</div>
-            <div class="mb-2"><b>{{ __('Connectivity Mode') }}:</b> {{ relay_status.connectivity_mode || 'cloud_checked' }}</div>
-            <div class="mb-2"><b>{{ __('Message') }}:</b> {{ relay_status.message || '-' }}</div>
-            <div class="mb-2"><b>{{ __('Cloud Diagnostic Status') }}:</b> {{ relay_status.cloud_status || relay_status.status || '-' }}</div>
-            <div class="mb-2"><b>{{ __('Cloud Diagnostic Message') }}:</b> {{ relay_status.cloud_message || relay_status.message || '-' }}</div>
-            <div class="mb-2"><b>{{ __('Cloud Relay Reachable') }}:</b> {{ relay_status.cloud_connected ? __('Yes') : __('No') }}</div>
-            <div class="mb-2"><b>{{ __('Browser-LAN Relay Reachable') }}:</b> {{ relay_status.browser_checked ? (relay_status.browser_connected ? __('Yes') : __('No')) : __('Not checked') }}</div>
-            <div class="mb-2" v-if="relay_status.browser_checked"><b>{{ __('Browser-LAN Status') }}:</b> {{ relay_status.browser_status || '-' }}</div>
-            <div class="mb-2" v-if="relay_status.browser_checked"><b>{{ __('Browser-LAN Message') }}:</b> {{ relay_status.browser_message || '-' }}</div>
-            <div class="mb-2" v-if="relay_status.browser_checked"><b>{{ __('Browser-LAN Checked At') }}:</b> {{ relay_status.browser_checked_at || '-' }}</div>
-            <div class="mb-2"><b>{{ __('POS Profile Relay URL') }}:</b> {{ relay_status.profile_relay_url || __('Not set') }}</div>
-            <div class="mb-2"><b>{{ __('Site Relay URL') }}:</b> {{ relay_status.site_relay_url || __('Not set') }}</div>
-            <div class="mb-2"><b>{{ __('Using') }}:</b> {{ relay_status.relay_source || '-' }}</div>
-            <div class="mb-2"><b>{{ __('Relay Identified') }}:</b> {{ relay_status.relay_config_identified ? __('Yes') : __('No') }}</div>
-            <div class="mb-2"><b>{{ __('Relay Host') }}:</b> {{ relay_status.relay_host || '-' }}</div>
-            <div class="mb-2"><b>{{ __('Relay Host Type') }}:</b> {{ relay_status.relay_host_type || '-' }}</div>
-            <div class="mb-2" v-if="relay_status.relay_host_type === 'private_lan'">
-              <b>{{ __('LAN Note') }}:</b>
-              {{ __('Private LAN address detected. Frappe Cloud can identify this relay config, but it is reachable only if cloud has a network route (VPN/tunnel/public mapping).') }}
-            </div>
-            <div class="mb-2"><b>{{ __('Health URL') }}:</b> {{ relay_status.debug && relay_status.debug.relay_health_url ? relay_status.debug.relay_health_url : '-' }}</div>
-            <div class="mb-2" v-if="relay_status.http_status"><b>{{ __('HTTP Status') }}:</b> {{ relay_status.http_status }}</div>
-            <div class="mb-2" v-if="relay_status.cloud_http_status"><b>{{ __('Cloud Relay HTTP Status') }}:</b> {{ relay_status.cloud_http_status }}</div>
-            <div class="mb-2" v-if="relay_status.browser_http_status"><b>{{ __('Browser-LAN HTTP Status') }}:</b> {{ relay_status.browser_http_status }}</div>
-            <div class="mb-2"><b>{{ __('Checked At') }}:</b> {{ relay_status.checked_at || '-' }}</div>
-            <div class="mb-2" v-if="relay_status.debug && relay_status.debug.hint"><b>{{ __('Hint') }}:</b> {{ relay_status.debug.hint }}</div>
-            <div class="mb-2" v-if="relay_status.debug && relay_status.debug.mode_note"><b>{{ __('Mode Note') }}:</b> {{ relay_status.debug.mode_note }}</div>
-            <div class="mb-2" v-if="relay_status.debug && relay_status.debug.cloud_reachability_note"><b>{{ __('Cloud Reachability Note') }}:</b> {{ relay_status.debug.cloud_reachability_note }}</div>
-            <div class="mb-2" v-if="relay_status.queue && relay_status.cloud_connected">
-              <b>{{ __('Queue') }}:</b>
-              {{ __('Queued') }} {{ relay_status.queue.queued || 0 }},
-              {{ __('Processing') }} {{ relay_status.queue.processing || 0 }},
-              {{ __('Failed') }} {{ relay_status.queue.failed || 0 }}
-            </div>
-          </v-card-text>
-          <v-card-actions>
-            <v-spacer></v-spacer>
-            <v-btn small text color="primary" @click="fetch_relay_status(pos_profile && pos_profile.name, false)">
-              {{ __('Refresh') }}
-            </v-btn>
-          </v-card-actions>
-        </v-card>
-      </v-menu>
-      <v-chip
-        v-if="relay_status.enabled && !relay_status.connected"
-        small
-        class="mr-2"
-        color="error"
-        text-color="white"
-      >
-        {{ relay_status.connectivity_mode === 'lan_only_browser_checked' ? __('RELAY DOWN (LAN relay unavailable)') : __('RELAY DOWN (Offline continuity unavailable)') }}
-      </v-chip>
-      <v-chip
-        v-if="relay_status.enabled && relay_status.connected && !cloud_status.server_online"
-        small
-        class="mr-2"
-        color="warning"
-        text-color="white"
-      >
-        {{ __('OFFLINE MODE (Relay Active)') }}
-      </v-chip>
-      <v-menu bottom offset-y>
-        <template v-slot:activator="{ on, attrs }">
-          <v-chip
-            small
-            class="mr-2"
-            :color="cloud_status_chip_color"
-            text-color="white"
-            v-bind="attrs"
-            v-on="on"
-          >
-            {{ cloud_status_chip_text }}
-          </v-chip>
-        </template>
-        <v-card max-width="420" class="pa-2">
-          <v-card-title class="text-subtitle-1 pb-1">
-            {{ __('Cloud Connectivity') }}
-          </v-card-title>
-          <v-divider></v-divider>
-          <v-card-text class="pt-3">
-            <div class="mb-2"><b>{{ __('Browser Internet') }}:</b> {{ cloud_status.navigator_online ? __('Online') : __('Offline') }}</div>
-            <div class="mb-2"><b>{{ __('Cloud Reachability') }}:</b> {{ cloud_status.server_online ? __('Reachable') : __('Unreachable') }}</div>
-            <div class="mb-2"><b>{{ __('URL') }}:</b> {{ cloud_status.url || browser_origin }}</div>
-            <div class="mb-2" v-if="cloud_status.response_ms"><b>{{ __('Latency') }}:</b> {{ cloud_status.response_ms }} ms</div>
-            <div class="mb-2" v-if="cloud_status.http_status"><b>{{ __('HTTP Status') }}:</b> {{ cloud_status.http_status }}</div>
-            <div class="mb-2"><b>{{ __('Checked At') }}:</b> {{ cloud_status.checked_at || '-' }}</div>
-            <div class="mb-2"><b>{{ __('Message') }}:</b> {{ cloud_status.message || '-' }}</div>
-          </v-card-text>
-          <v-card-actions>
-            <v-spacer></v-spacer>
-            <v-btn small text color="primary" @click="check_cloud_connectivity(false)">
-              {{ __('Refresh') }}
-            </v-btn>
-          </v-card-actions>
-        </v-card>
-      </v-menu>
+      <ConnectivityStatus
+        :show="show_connectivity_status"
+        :relay-status="relay_status"
+        :relay-chip-text="relay_status_chip_text"
+        :relay-chip-color="relay_status_chip_color"
+        :cloud-status="cloud_status"
+        :cloud-chip-text="cloud_status_chip_text"
+        :cloud-chip-color="cloud_status_chip_color"
+        :browser-origin="browser_origin"
+        @refresh-relay="fetch_relay_status(pos_profile && pos_profile.name, false)"
+        @refresh-cloud="check_cloud_connectivity(false)"
+      />
       <v-btn style="cursor: unset" text color="primary">
         <span right>{{ pos_profile.name }}</span>
       </v-btn>
-      <div class="text-center">
-        <v-menu offset-y>
-          <template v-slot:activator="{ on, attrs }">
-            <v-btn color="primary" dark text v-bind="attrs" v-on="on"
-              >Menu</v-btn
-            >
-          </template>
-          <v-card class="mx-auto" max-width="300" tile>
-            <v-list dense>
-              <v-list-item-group v-model="menu_item" color="primary">
-                <v-list-item
-                  @click="close_shift_dialog"
-                  v-if="can_show_close_shift_action && item == 0"
-                >
-                  <v-list-item-icon>
-                    <v-icon>mdi-content-save-move-outline</v-icon>
-                  </v-list-item-icon>
-                  <v-list-item-content>
-                    <v-list-item-title>{{
-                      __('Close Shift')
-                    }}</v-list-item-title>
-                  </v-list-item-content>
-                </v-list-item>
-                <v-list-item
-                  @click="print_last_invoice"
-                  v-if="
-                    pos_profile.posa_allow_print_last_invoice &&
-                    this.last_invoice
-                  "
-                >
-                  <v-list-item-icon>
-                    <v-icon>mdi-printer</v-icon>
-                  </v-list-item-icon>
-                  <v-list-item-content>
-                    <v-list-item-title>{{
-                      __('Print Last Invoice')
-                    }}</v-list-item-title>
-                  </v-list-item-content>
-                </v-list-item>
-                <v-divider class="my-0"></v-divider>
-                <v-list-item @click="logOut">
-                  <v-list-item-icon>
-                    <v-icon>mdi-logout</v-icon>
-                  </v-list-item-icon>
-                  <v-list-item-content>
-                    <v-list-item-title>{{ __('Logout') }}</v-list-item-title>
-                  </v-list-item-content>
-                </v-list-item>
-                <v-list-item @click="go_about">
-                  <v-list-item-icon>
-                    <v-icon>mdi-information-outline</v-icon>
-                  </v-list-item-icon>
-                  <v-list-item-content>
-                    <v-list-item-title>{{ __('About') }}</v-list-item-title>
-                  </v-list-item-content>
-                </v-list-item>
-                <v-list-item @click="open_relay_settings">
-                  <v-list-item-icon>
-                    <v-icon>mdi-lan-connect</v-icon>
-                  </v-list-item-icon>
-                  <v-list-item-content>
-                    <v-list-item-title>{{ __('Relay Settings') }}</v-list-item-title>
-                  </v-list-item-content>
-                </v-list-item>
-                <template v-if="show_admin_role_testing">
-                  <v-divider class="my-0"></v-divider>
-                  <v-subheader>{{ __('Admin Test Role') }}</v-subheader>
-                  <v-list-item>
-                    <v-list-item-content>
-                      <v-select
-                        v-model="admin_test_role"
-                        :items="admin_test_role_options"
-                        dense
-                        outlined
-                        hide-details
-                        @change="change_admin_test_role"
-                      ></v-select>
-                    </v-list-item-content>
-                  </v-list-item>
-                </template>
-              </v-list-item-group>
-            </v-list>
-          </v-card>
-        </v-menu>
-      </div>
+      <AppMenu
+        :active-item="item"
+        :menu-item="menu_item"
+        :pos-profile="pos_profile || {}"
+        :last-invoice="last_invoice"
+        :can-show-close-shift-action="can_show_close_shift_action"
+        :token-workflow-enabled="token_workflow_enabled"
+        :show-admin-role-testing="show_admin_role_testing"
+        :admin-test-role="admin_test_role"
+        :admin-test-role-options="admin_test_role_options"
+        @close-shift="close_shift_dialog"
+        @print-last-invoice="print_last_invoice"
+        @logout="logOut"
+        @about="go_about"
+        @open-relay-settings="open_relay_settings"
+        @admin-role-change="change_admin_test_role"
+      />
     </v-app-bar>
-    <v-navigation-drawer
-      v-model="drawer"
-      :mini-variant.sync="mini"
-      app
-      class="primary margen-top"
-      width="170"
-    >
-      <v-list dark>
-        <v-list-item class="px-2">
-          <v-list-item-avatar>
-            <v-img :src="company_img"></v-img>
-          </v-list-item-avatar>
-
-          <v-list-item-title>{{ company }}</v-list-item-title>
-
-          <v-btn icon @click.stop="mini = !mini">
-            <v-icon>mdi-chevron-left</v-icon>
-          </v-btn>
-        </v-list-item>
-        <!-- <MyPopup/> -->
-        <v-list-item-group v-model="item" color="white">
-          <v-list-item
-            v-for="item in items"
-            :key="item.text"
-            @click="changePage(item.text)"
-          >
-            <v-list-item-icon>
-              <v-icon v-text="item.icon"></v-icon>
-            </v-list-item-icon>
-            <v-list-item-content>
-              <v-list-item-title v-text="item.text"></v-list-item-title>
-            </v-list-item-content>
-          </v-list-item>
-        </v-list-item-group>
-        <v-divider v-if="show_workflow_monitor_toggle" class="my-2"></v-divider>
-        <v-list-item
-          v-if="show_workflow_monitor_toggle"
-          class="workflow-monitor-drawer-item"
-          @click="toggle_workflow_monitor"
-        >
-          <v-list-item-icon>
-            <v-badge
-              :content="String(workflow_monitor_pending_count)"
-              :value="workflow_monitor_pending_count > 0"
-              color="error"
-              overlap
-            >
-              <v-icon>mdi-ticket-outline</v-icon>
-            </v-badge>
-          </v-list-item-icon>
-          <v-list-item-content>
-            <v-list-item-title>{{ __('Order Monitor') }}</v-list-item-title>
-            <v-list-item-subtitle>
-              {{ workflow_monitor_expanded ? __('Open') : __('Show pending orders') }}
-            </v-list-item-subtitle>
-          </v-list-item-content>
-        </v-list-item>
-      </v-list>
-    </v-navigation-drawer>
+    <AppDrawer
+      :drawer="drawer"
+      :mini="mini"
+      :active-item="item"
+      :company="company"
+      :company-img="company_img"
+      :items="items"
+      :show-workflow-monitor-toggle="show_workflow_monitor_toggle"
+      :workflow-monitor-pending-count="workflow_monitor_pending_count"
+      :workflow-monitor-expanded="workflow_monitor_expanded"
+      @update-drawer="drawer = $event"
+      @update-mini="mini = $event"
+      @update-active-item="item = $event"
+      @change-page="changePage"
+      @toggle-workflow-monitor="toggle_workflow_monitor"
+    />
     <v-snackbar v-model="snack" :timeout="5000" :color="snackColor" top right>
       {{ snackText }}
     </v-snackbar>
@@ -297,54 +82,15 @@
         <v-card-text>{{ freezeMsg }}</v-card-text>
       </v-card>
     </v-dialog>
-    <v-dialog v-model="relay_settings_dialog" max-width="520">
-      <v-card>
-        <v-card-title class="text-subtitle-1">
-          {{ __('Edge Relay Settings') }}
-        </v-card-title>
-        <v-card-text>
-          <v-text-field
-            v-model="relay_settings_form.relay_url"
-            :label="__('Relay URL')"
-            dense
-            outlined
-            hide-details="auto"
-            class="mb-3"
-            placeholder="http://192.168.1.9:8787"
-          ></v-text-field>
-          <v-select
-            v-model="relay_settings_form.connectivity_mode"
-            :items="relay_connectivity_modes"
-            :label="__('Connectivity Mode')"
-            dense
-            outlined
-            hide-details="auto"
-            class="mb-3"
-          ></v-select>
-          <v-text-field
-            v-model="relay_settings_form.client_key"
-            :label="__('Relay Client Key')"
-            dense
-            outlined
-            hide-details="auto"
-            type="password"
-            autocomplete="off"
-          ></v-text-field>
-        </v-card-text>
-        <v-card-actions>
-          <v-btn text color="error" @click="clear_browser_relay_config">
-            {{ __('Clear') }}
-          </v-btn>
-          <v-spacer></v-spacer>
-          <v-btn text @click="relay_settings_dialog = false">
-            {{ __('Cancel') }}
-          </v-btn>
-          <v-btn color="primary" @click="save_browser_relay_config">
-            {{ __('Save') }}
-          </v-btn>
-        </v-card-actions>
-      </v-card>
-    </v-dialog>
+    <RelaySettingsDialog
+      v-model="relay_settings_dialog"
+      :enabled="token_workflow_enabled"
+      :form="relay_settings_form"
+      :modes="relay_connectivity_modes"
+      @update-form="relay_settings_form = $event"
+      @clear="clear_browser_relay_config"
+      @save="save_browser_relay_config"
+    />
   </nav>
 </template>
 
@@ -356,9 +102,18 @@ import {
   resolveCurrentRole,
   setAdminTestRole,
 } from '../utils/posRole';
+import AppDrawer from './navbar/AppDrawer.vue';
+import AppMenu from './navbar/AppMenu.vue';
+import ConnectivityStatus from './navbar/ConnectivityStatus.vue';
+import RelaySettingsDialog from './navbar/RelaySettingsDialog.vue';
 
 export default {
-  // components: {MyPopup},
+  components: {
+    AppDrawer,
+    AppMenu,
+    ConnectivityStatus,
+    RelaySettingsDialog,
+  },
   data() {
     return {
       drawer: false,
@@ -447,12 +202,19 @@ export default {
     };
   },
   computed: {
-    is_sales_associate_role() {
-      return (this.current_role || '') === 'cline-Sales Associate';
+	    is_sales_associate_role() {
+	      return (this.current_role || '') === 'cline-Sales Associate';
+	    },
+    token_workflow_enabled() {
+      const profile = this.pos_profile || {};
+      return parseInt(profile.custom_have_token || 0, 10) === 1;
     },
-    can_show_close_shift_action() {
-      if (!this.pos_profile || this.pos_profile.posa_hide_closing_shift) return false;
-      return !this.is_sales_associate_role;
+    show_connectivity_status() {
+      return this.token_workflow_enabled;
+    },
+	    can_show_close_shift_action() {
+	      if (!this.pos_profile || this.pos_profile.posa_hide_closing_shift) return false;
+	      return !this.is_sales_associate_role;
     },
     relay_status_chip_text() {
       const relayDownText =
@@ -503,10 +265,9 @@ export default {
       }
       return this.cloud_status.server_online ? 'success' : 'warning';
     },
-    show_workflow_monitor_toggle() {
-      const profile = this.pos_profile || {};
-      return parseInt(profile.custom_have_token || 0, 10) === 1;
-    },
+	    show_workflow_monitor_toggle() {
+	      return this.token_workflow_enabled;
+	    },
     show_admin_role_testing() {
       return this.admin_role_testing_enabled;
     },
@@ -630,8 +391,9 @@ export default {
         return null;
       }
     },
-    cache_profile_relay_config_if_missing(profile) {
-      if (!profile || !profile.name || !navigator.onLine) return;
+	    cache_profile_relay_config_if_missing(profile) {
+      if (parseInt((profile && profile.custom_have_token) || 0, 10) !== 1) return;
+	      if (!profile || !profile.name || !navigator.onLine) return;
       if (this.load_browser_relay_config(profile.name)) return;
       const relayUrl = this.normalize_relay_url(profile.custom_edge_relay_url || '');
       if (!relayUrl) return;
@@ -658,8 +420,9 @@ export default {
         posa_edge_relay_connectivity_mode: browserConfig.connectivity_mode,
       };
     },
-    open_relay_settings() {
-      const profileName = this.active_pos_profile_name();
+	    open_relay_settings() {
+      if (!this.token_workflow_enabled) return;
+	      const profileName = this.active_pos_profile_name();
       const browserConfig = this.load_browser_relay_config(profileName);
       this.relay_settings_form = {
         relay_url:
@@ -676,8 +439,12 @@ export default {
       };
       this.relay_settings_dialog = true;
     },
-    save_browser_relay_config() {
-      const profileName = this.active_pos_profile_name();
+	    save_browser_relay_config() {
+      if (!this.token_workflow_enabled) {
+        this.show_mesage({ text: __('Enable Token Workflow on this POS Profile before saving relay settings.'), color: 'warning' });
+        return;
+      }
+	      const profileName = this.active_pos_profile_name();
       const relayUrl = this.normalize_relay_url(this.relay_settings_form.relay_url);
       if (!profileName) {
         this.show_mesage({ text: __('Open a POS Profile before saving relay settings.'), color: 'warning' });
@@ -758,12 +525,12 @@ export default {
       this.show_mesage({ text: __('Browser relay settings cleared.'), color: 'warning' });
       this.fetch_relay_status(profileName, false);
     },
-    apply_pos_profile_registration(data) {
-      if (!data || !data.pos_profile) return;
-      this.sync_current_role();
-      this.remember_active_pos_profile(data.pos_profile.name);
-      this.cache_profile_relay_config_if_missing(data.pos_profile);
-      this.pos_profile = this.apply_browser_relay_config_to_profile(data.pos_profile);
+	    apply_pos_profile_registration(data) {
+	      if (!data || !data.pos_profile) return;
+	      this.sync_current_role();
+	      this.remember_active_pos_profile(data.pos_profile.name);
+	      this.cache_profile_relay_config_if_missing(data.pos_profile);
+	      this.pos_profile = this.apply_browser_relay_config_to_profile(data.pos_profile);
       const payments = { text: 'Payments', icon: 'mdi-cash-register' };
       if (
         this.pos_profile.posa_use_pos_awesome_payments &&
@@ -771,9 +538,9 @@ export default {
       ) {
         this.items.push(payments);
       }
-      this.start_relay_poll(this.pos_profile.name);
+      this.refresh_connectivity_monitors();
     },
-    recover_pos_profile_if_missed() {
+	    recover_pos_profile_if_missed() {
       if (this.pos_profile && this.pos_profile.name) return;
       frappe.call({
         method: 'posawesome.posawesome.api.posapp.check_opening_shift',
@@ -795,10 +562,10 @@ export default {
             this.apply_pos_profile_registration({ pos_profile: profile });
           })
           .catch(() => {});
-      } else if (storedProfile) {
-        this.pos_profile = { name: storedProfile, custom_have_token: 1 };
-      }
-    },
+	      } else if (storedProfile) {
+	        this.pos_profile = { name: storedProfile, custom_have_token: 0 };
+	      }
+	    },
     emit_cloud_status_changed() {
       evntBus.$emit('cloud_status_changed', { ...(this.cloud_status || {}) });
     },
@@ -1011,10 +778,10 @@ export default {
         true
       );
     },
-    fetch_relay_status(profileName, silent = true) {
-      if (!profileName) {
-        this.relay_status = this.build_empty_relay_status();
-        evntBus.$emit('relay_status_changed', this.relay_status);
+	    fetch_relay_status(profileName, silent = true) {
+	      if (!this.token_workflow_enabled || !profileName) {
+	        this.relay_status = this.build_empty_relay_status();
+	        evntBus.$emit('relay_status_changed', this.relay_status);
         return;
       }
       if (!navigator.onLine) {
@@ -1089,13 +856,13 @@ export default {
         },
       });
     },
-    start_relay_poll(profileName) {
+	    start_relay_poll(profileName) {
       if (this.relay_poll_timer) {
         clearInterval(this.relay_poll_timer);
         this.relay_poll_timer = null;
       }
 
-      if (!profileName) return;
+	      if (!this.token_workflow_enabled || !profileName) return;
       this.fetch_relay_status(profileName, false);
       this.relay_poll_timer = setInterval(() => {
         this.fetch_relay_status(profileName, true);
@@ -1107,8 +874,12 @@ export default {
         this.relay_poll_timer = null;
       }
     },
-    async check_cloud_connectivity(silent = true) {
-      const targetUrl = window.location.origin;
+	    async check_cloud_connectivity(silent = true) {
+      if (!this.token_workflow_enabled) {
+        this.emit_cloud_status_changed();
+        return;
+      }
+	      const targetUrl = window.location.origin;
       const startedAt = Date.now();
       const online = typeof navigator !== 'undefined' ? !!navigator.onLine : true;
 
@@ -1177,12 +948,13 @@ export default {
         this.emit_cloud_status_changed();
       }
     },
-    start_cloud_poll() {
+	    start_cloud_poll() {
       if (this.cloud_poll_timer) {
         clearInterval(this.cloud_poll_timer);
         this.cloud_poll_timer = null;
       }
-      this.check_cloud_connectivity(true);
+	      if (!this.token_workflow_enabled) return;
+	      this.check_cloud_connectivity(true);
       this.cloud_poll_timer = setInterval(() => {
         this.check_cloud_connectivity(true);
       }, 15000);
@@ -1193,16 +965,28 @@ export default {
         this.cloud_poll_timer = null;
       }
     },
-    on_online_status_change() {
-      this.check_cloud_connectivity(false);
+	    on_online_status_change() {
+      if (!this.token_workflow_enabled) return;
+	      this.check_cloud_connectivity(false);
+	    },
+    refresh_connectivity_monitors() {
+      this.stop_cloud_poll();
+      this.stop_relay_poll();
+      if (!this.token_workflow_enabled) {
+        this.relay_status = this.build_empty_relay_status();
+        evntBus.$emit('relay_status_changed', this.relay_status);
+        this.emit_cloud_status_changed();
+        return;
+      }
+      this.start_cloud_poll();
+      this.start_relay_poll(this.pos_profile && this.pos_profile.name);
     },
-  },
+	  },
   created: function () {
     // Register event-bus listeners synchronously to avoid missing the initial
     // `register_pos_profile` emit during fast POS boot / role-switch flows.
     this.sync_current_role();
-    this.start_cloud_poll();
-    window.addEventListener('online', this.on_online_status_change);
+	    window.addEventListener('online', this.on_online_status_change);
     window.addEventListener('offline', this.on_online_status_change);
     evntBus.$on('show_mesage', (data) => {
       this.show_mesage(data);
@@ -1219,9 +1003,10 @@ export default {
     evntBus.$on('register_pos_data', (data) => {
       this.apply_pos_profile_registration(data);
     });
-    evntBus.$on('check_relay_connectivity', () => {
-      this.fetch_relay_status(this.pos_profile && this.pos_profile.name, false);
-    });
+	    evntBus.$on('check_relay_connectivity', () => {
+      if (!this.token_workflow_enabled) return;
+	      this.fetch_relay_status(this.pos_profile && this.pos_profile.name, false);
+	    });
     evntBus.$on('set_last_invoice', (data) => {
       this.last_invoice = data;
     });
@@ -1259,13 +1044,3 @@ export default {
   },
 };
 </script>
-
-<style scoped>
-.margen-top {
-  margin-top: 0px;
-}
-
-.workflow-monitor-drawer-item :deep(.v-list-item__subtitle) {
-  color: rgba(255, 255, 255, 0.72);
-}
-</style>
