@@ -12,6 +12,20 @@ from frappe import _
 
 
 
+def _as_dict(value):
+    if isinstance(value, str):
+        return frappe._dict(json.loads(value or "{}"))
+    return frappe._dict(value or {})
+
+
+def _first_existing(doctype, candidates):
+    for candidate in candidates:
+        candidate = (candidate or "").strip()
+        if candidate and frappe.db.exists(doctype, candidate):
+            return candidate
+    return ""
+
+
 def create_customer(
     customer_id,
     customer_name,
@@ -28,7 +42,35 @@ def create_customer(
     gender=None,
     method="create",
 ):
-    pos_profile = json.loads(pos_profile_doc)
+    pos_profile = _as_dict(pos_profile_doc)
+    customer_name = (customer_name or customer_id or "").strip()
+    customer_group = _first_existing(
+        "Customer Group",
+        [
+            customer_group,
+            pos_profile.get("customer_group"),
+            frappe.db.get_single_value("Selling Settings", "customer_group"),
+            "All Customer Groups",
+        ],
+    )
+    territory = _first_existing(
+        "Territory",
+        [
+            territory,
+            pos_profile.get("territory"),
+            frappe.defaults.get_user_default("Territory"),
+            frappe.db.get_single_value("Selling Settings", "territory"),
+            "All Territories",
+        ],
+    )
+
+    if not customer_name:
+        frappe.throw(_("Customer name is required."))
+    if not customer_group:
+        frappe.throw(_("Customer Group is required to create Customer."))
+    if not territory:
+        frappe.throw(_("Territory is required to create Customer."))
+
     if method == "create":
         is_exist = frappe.db.exists("Customer", {"customer_name": customer_name})
         if pos_profile.get("posa_allow_duplicate_customer_names") or not is_exist:
@@ -44,16 +86,11 @@ def create_customer(
                     "posa_birthday": birthday,
                     "customer_type": customer_type,
                     "gender": gender,
+                    "customer_group": customer_group,
+                    "territory": territory,
                 }
             )
-            if customer_group:
-                customer.customer_group = customer_group
-            else:
-                customer.customer_group = "All Customer Groups"
-            if territory:
-                customer.territory = territory
-            else:
-                customer.territory = "All Territories"
+            customer.flags.ignore_permissions = True
             customer.save()
             return customer
         else:
@@ -61,6 +98,7 @@ def create_customer(
 
     elif method == "update":
         customer_doc = frappe.get_doc("Customer", customer_id)
+        customer_doc.flags.ignore_permissions = True
         customer_doc.customer_name = customer_name
         customer_doc.posa_referral_company = company
         customer_doc.tax_id = tax_id
@@ -87,6 +125,7 @@ def set_customer_info(customer, fieldname, value=""):
 
     if contact:
         contact_doc = frappe.get_doc("Contact", contact)
+        contact_doc.flags.ignore_permissions = True
         if fieldname == "email_id":
             contact_doc.set("email_ids", [{"email_id": value, "is_primary": 1}])
             frappe.db.set_value("Customer", customer, "email_id", value)
@@ -109,6 +148,7 @@ def set_customer_info(customer, fieldname, value=""):
         contact_doc.append("links", {"link_doctype": "Customer", "link_name": customer})
 
         contact_doc.flags.ignore_mandatory = True
+        contact_doc.flags.ignore_permissions = True
         contact_doc.save()
         frappe.set_value(
             "Customer", customer, "customer_primary_contact", contact_doc.name
