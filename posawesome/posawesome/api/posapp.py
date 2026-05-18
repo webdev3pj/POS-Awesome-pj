@@ -74,7 +74,10 @@ from posawesome.posawesome.api.pos.sales_invoice.from_sales_order import (
 from posawesome.posawesome.api.pos.sales_order.create import (
     create_sales_order_token as create_pos_sales_order_token,
 )
-from posawesome.posawesome.api.pos.sales_order.lookup import search_sales_orders
+from posawesome.posawesome.api.pos.sales_order.lookup import (
+    get_sales_order_for_pos as get_pos_sales_order_for_pos,
+    search_sales_orders,
+)
 from posawesome.posawesome.api.pos.session import opening as session_opening
 from posawesome.posawesome.api.pos.session import roles as session_roles
 
@@ -158,6 +161,7 @@ get_items_from_barcode = _whitelist(catalog_details.get_items_from_barcode)
 set_customer_info = _whitelist(customer_create.set_customer_info)
 search_invoices_for_return = _whitelist(catalog_returns.search_invoices_for_return)
 search_orders = _whitelist(search_sales_orders)
+get_sales_order_for_pos = _whitelist(get_pos_sales_order_for_pos)
 get_offers = _whitelist(get_pos_offers)
 get_customer_addresses = _whitelist(get_pos_customer_addresses)
 make_address = _whitelist(make_pos_address)

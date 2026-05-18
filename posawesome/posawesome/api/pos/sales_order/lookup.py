@@ -2,6 +2,7 @@
 from __future__ import unicode_literals
 
 import frappe
+from frappe import _
 from frappe.utils import add_days, cint, cstr, nowdate
 
 from posawesome.posawesome.api.pos.sales_order.policy import (
@@ -73,9 +74,6 @@ def search_sales_orders(
     )
     order_names = [order["name"] for order in orders_list]
     invoiced_orders = _get_sales_orders_with_submitted_invoice(order_names)
-    items_by_order = _get_sales_order_items_for_lookup(
-        [name for name in order_names if name not in invoiced_orders]
-    )
 
     data = []
     for order in orders_list:
@@ -87,7 +85,6 @@ def search_sales_orders(
             continue
         doc = frappe._dict(order)
         doc["doctype"] = "Sales Order"
-        doc["items"] = items_by_order.get(order["name"], [])
         doc["order_age_days"] = age_days
         doc["is_stale"] = is_stale
         doc["stale_policy_allow"] = 1 if allow_stale else 0
@@ -95,6 +92,13 @@ def search_sales_orders(
         doc["stale_policy_history_days"] = history_days
         data.append(doc)
     return data
+
+
+def get_sales_order_for_pos(sales_order):
+    sales_order = cstr(sales_order or "").strip()
+    if not sales_order:
+        frappe.throw(_("Sales Order is required"))
+    return frappe.get_doc("Sales Order", sales_order).as_dict()
 
 
 def _sales_order_lookup_fields():
@@ -138,50 +142,4 @@ def _get_sales_orders_with_submitted_invoice(sales_orders):
         as_dict=True,
     )
     return {row.sales_order for row in rows}
-
-
-def _get_sales_order_items_for_lookup(sales_orders):
-    sales_orders = [cstr(name).strip() for name in (sales_orders or []) if cstr(name).strip()]
-    if not sales_orders:
-        return {}
-
-    fields = [
-        "parent",
-        "name",
-        "item_code",
-        "item_name",
-        "qty",
-        "uom",
-        "rate",
-        "amount",
-        "conversion_factor",
-    ]
-    for fieldname in (
-        "serial_no",
-        "batch_no",
-        "discount_percentage",
-        "discount_amount",
-        "price_list_rate",
-        "warehouse",
-        "delivery_warehouse",
-        "posa_notes",
-        "posa_delivery_date",
-    ):
-        if _doctype_has_column("Sales Order Item", fieldname):
-            fields.append(fieldname)
-
-    rows = frappe.get_all(
-        "Sales Order Item",
-        filters={"parent": ["in", sales_orders]},
-        fields=fields,
-        order_by="parent asc, idx asc",
-        limit_page_length=0,
-        ignore_permissions=True,
-    )
-    items_by_order = {}
-    for row in rows:
-        item = frappe._dict(row)
-        item["doctype"] = "Sales Order Item"
-        items_by_order.setdefault(item.parent, []).append(item)
-    return items_by_order
 

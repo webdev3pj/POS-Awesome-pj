@@ -28,6 +28,7 @@
                 class="ml-2"
                 color="primary"
                 dark
+                :loading="loading"
                 @click="search_orders"
                 >{{ __("Search") }}</v-btn
               >
@@ -41,6 +42,7 @@
                     item-key="name"
                     class="elevation-1"
                     :single-select="singleSelect"
+                    :loading="loading"
                     show-select
                     v-model="selected"
                   >
@@ -97,8 +99,9 @@ export default {
     singleSelect: true,
     pos_profile: {},
     selected: [],
-    dialog_data: {},
+    dialog_data: [],
     order_name: "",
+    loading: false,
     headers: [
       {
         text: __("Customer"),
@@ -351,6 +354,7 @@ export default {
     },
     search_orders() {
       const vm = this;
+      this.loading = true;
       return new Promise((resolve) => {
         let cloudFailed = false;
         const policy = vm.soPolicy();
@@ -373,6 +377,7 @@ export default {
 	              const cloudRows = Array.isArray(r.message) ? r.message : [];
 	              if (cloudRows.length > 0) {
 	                vm.dialog_data = cloudRows;
+                  vm.loading = false;
 	                resolve(true);
 	                if (vm.relay_order_fallback_enabled()) {
 	                  vm.fetch_relay_token_rows(String(vm.order_name || "").trim())
@@ -388,6 +393,7 @@ export default {
 	              }
               if (!vm.relay_order_fallback_enabled()) {
                 vm.dialog_data = r.message;
+                vm.loading = false;
                 resolve(true);
                 return;
               }
@@ -396,10 +402,12 @@ export default {
               cloudFailed = true;
             }
             if (!cloudFailed) {
+              vm.loading = false;
               resolve(true);
               return;
             }
             if (!vm.relay_order_fallback_enabled()) {
+              vm.loading = false;
               resolve(false);
               return;
             }
@@ -415,6 +423,7 @@ export default {
                 color: "error",
               });
             }
+            vm.loading = false;
             resolve(true);
           },
           error: async function () {
@@ -432,6 +441,7 @@ export default {
                 });
               }
             }
+            vm.loading = false;
             resolve(true);
           },
         });
@@ -455,12 +465,30 @@ export default {
           this.draftsDialog = false;
           return;
         }
+        this.loading = true;
+        let selected_order = {};
+        const selected_row = this.selected[0];
+        await frappe.call({
+          method: "posawesome.posawesome.api.posapp.get_sales_order_for_pos",
+          args: {
+            sales_order: selected_row.name,
+          },
+          callback: function (r) {
+            if (r.message) {
+              selected_order = Object.assign({}, selected_row, r.message);
+            }
+          },
+        });
+        if (!selected_order.name) {
+          this.loading = false;
+          return;
+        }
         var invoice_doc_for_load = {};
         await frappe.call({
           method:
             "posawesome.posawesome.api.posapp.create_sales_invoice_from_order",
           args: {
-            sales_order: this.selected[0].name,
+            sales_order: selected_order.name,
             pos_profile: this.pos_profile.name,
           },
           callback: function (r) {
@@ -470,7 +498,7 @@ export default {
           },
         });
         if (invoice_doc_for_load.items) {
-          const selectedItems = this.selected[0].items;
+          const selectedItems = selected_order.items || [];
           const loadedItems = invoice_doc_for_load.items;
 
           const loadedItemsMap = {};
@@ -497,8 +525,9 @@ export default {
             }
           }
         }
-        evntBus.$emit("load_order", this.selected[0]);
+        evntBus.$emit("load_order", selected_order);
         this.draftsDialog = false;
+        this.loading = false;
       }
     },
   },
@@ -506,7 +535,7 @@ export default {
     evntBus.$on("open_orders", (data) => {
       this.clearSelected();
       this.draftsDialog = true;
-      this.dialog_data = data;
+      this.dialog_data = data || [];
       this.order_name = "";
     });
   },
