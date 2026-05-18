@@ -862,6 +862,16 @@ export default {
       evntBus.$emit("show_payment", "false");
       evntBus.$emit("set_customer_readonly", false);
     },
+    reset_after_submit() {
+      this.customer_credit_dict = [];
+      this.redeem_customer_credit = false;
+      this.is_cashback = true;
+      this.sales_person = "";
+      this.sales_partner = "";
+
+      evntBus.$emit("new_invoice", "false");
+      this.back_to_invoice();
+    },
     normalize_relay_url(relayUrl) {
       return String(relayUrl || "").trim().replace(/\/$/, "");
     },
@@ -887,7 +897,7 @@ export default {
     is_cloud_reachable_for_fallback() {
       return !!(this.cloud_status && this.cloud_status.server_online);
     },
-    submit_invoice_via_cloud(data, print) {
+    submit_invoice_via_cloud(data, print, onSuccess) {
       const vm = this;
       frappe.call({
         method: "posawesome.posawesome.api.posapp.submit_invoice",
@@ -934,6 +944,9 @@ export default {
             });
             frappe.utils.play_sound("submit");
             vm.addresses = [];
+            if (onSuccess) {
+              onSuccess();
+            }
           }
         },
       });
@@ -1051,19 +1064,11 @@ export default {
         return;
       }
 
-      this.submit_invoice(print);
-      this.customer_credit_dict = [];
-      this.redeem_customer_credit = false;
-      this.is_cashback = true;
-      this.sales_person = "";
-      this.sales_partner = "";
-
-      evntBus.$emit("new_invoice", "false");
-      this.back_to_invoice();
+      this.submit_invoice(print, () => this.reset_after_submit());
     },
-    submit_invoice(print) {
+    submit_invoice(print, onSuccess) {
       if (this.block_sales_associate_payment()) {
-        return;
+        return false;
       }
       let totalPayedAmount = 0;
       this.invoice_doc.payments.forEach((payment) => {
@@ -1112,8 +1117,8 @@ export default {
             text: __("Relay is down. Submitting directly to cloud."),
             color: "warning",
           });
-          vm.submit_invoice_via_cloud(data, print);
-          return;
+          vm.submit_invoice_via_cloud(data, print, onSuccess);
+          return true;
         }
 
         const relayDownBlockMessage =
@@ -1131,7 +1136,7 @@ export default {
           color: "error",
         });
         frappe.utils.play_sound("error");
-        return;
+        return false;
       }
 
       if (relayEnabled && relayBaseUrl) {
@@ -1142,15 +1147,16 @@ export default {
             color: "error",
           });
           frappe.utils.play_sound("error");
-          return;
+          return false;
         }
-        vm.submit_invoice_via_relay(relayBaseUrl, data, print);
-        return;
+        vm.submit_invoice_via_relay(relayBaseUrl, data, print, onSuccess);
+        return true;
       }
 
-      vm.submit_invoice_via_cloud(data, print);
+      vm.submit_invoice_via_cloud(data, print, onSuccess);
+      return true;
     },
-    submit_invoice_via_relay(relayBaseUrl, data, print) {
+    submit_invoice_via_relay(relayBaseUrl, data, print, onSuccess) {
       const vm = this;
       const base = relayBaseUrl.replace(/\/$/, "");
       const endpoint = `${base}/relay/commit-invoice`;
@@ -1261,6 +1267,9 @@ export default {
             color: "success",
           });
           frappe.utils.play_sound("submit");
+          if (onSuccess) {
+            onSuccess();
+          }
         })
         .catch((error) => {
           evntBus.$emit("show_mesage", {
