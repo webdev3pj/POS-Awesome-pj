@@ -64,7 +64,7 @@ def search_sales_orders(
             filters["name"] = ["like", f"%{order_name}%"]
 
     fields = _sales_order_lookup_fields()
-    orders_list = frappe.get_list(
+    orders_list = frappe.get_all(
         "Sales Order",
         filters=filters,
         or_filters=or_filters,
@@ -98,7 +98,9 @@ def get_sales_order_for_pos(sales_order):
     sales_order = cstr(sales_order or "").strip()
     if not sales_order:
         frappe.throw(_("Sales Order is required"))
-    return frappe.get_doc("Sales Order", sales_order).as_dict()
+    doc = frappe.get_doc("Sales Order", sales_order)
+    doc.flags.ignore_permissions = True
+    return doc.as_dict()
 
 
 def _sales_order_lookup_fields():
@@ -142,4 +144,3 @@ def _get_sales_orders_with_submitted_invoice(sales_orders):
         as_dict=True,
     )
     return {row.sales_order for row in rows}
-

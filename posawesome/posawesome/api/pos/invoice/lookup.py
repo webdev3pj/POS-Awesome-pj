@@ -15,7 +15,7 @@ from frappe import _
 
 
 def get_draft_invoices(pos_opening_shift):
-    invoices_list = frappe.get_list(
+    invoices_list = frappe.get_all(
         "Sales Invoice",
         filters={
             "posa_pos_opening_shift": pos_opening_shift,
@@ -28,14 +28,21 @@ def get_draft_invoices(pos_opening_shift):
     )
     data = []
     for invoice in invoices_list:
-        data.append(frappe.get_cached_doc("Sales Invoice", invoice["name"]))
+        doc = frappe.get_cached_doc("Sales Invoice", invoice["name"])
+        doc.flags.ignore_permissions = True
+        data.append(doc)
     return data
 
 def _delete_sales_invoice_with_retry(sales_invoice, force=0, attempts=3):
     last_error = None
     for attempt in range(attempts):
         try:
-            frappe.delete_doc("Sales Invoice", sales_invoice, force=force)
+            frappe.delete_doc(
+                "Sales Invoice",
+                sales_invoice,
+                force=force,
+                ignore_permissions=True,
+            )
             return
         except frappe.QueryDeadlockError as exc:
             last_error = exc
@@ -53,12 +60,15 @@ def delete_invoice(invoice):
 
 def get_sales_invoice_child_table(sales_invoice, sales_invoice_item=None):
     parent_doc = frappe.get_doc("Sales Invoice", sales_invoice)
+    parent_doc.flags.ignore_permissions = True
 
     if sales_invoice_item:
         # fetch specific item row
-        return frappe.get_doc(
+        child_doc = frappe.get_doc(
             "Sales Invoice Item", {"parent": parent_doc.name, "name": sales_invoice_item}
         )
+        child_doc.flags.ignore_permissions = True
+        return child_doc
     else:
         # fetch all child rows for that invoice
         return frappe.get_all(

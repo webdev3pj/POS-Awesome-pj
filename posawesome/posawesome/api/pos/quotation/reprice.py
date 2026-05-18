@@ -20,6 +20,7 @@ def get_quotation_reprice_preview(quotation_name, pos_profile, role):
     require_quotation_permission(pos_profile, role)
 
     doc = frappe.get_doc("Quotation", quotation_name)
+    doc.flags.ignore_permissions = True
     repriced_lines = []
     old_total = 0.0
     new_total = 0.0

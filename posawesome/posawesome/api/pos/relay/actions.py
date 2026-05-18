@@ -39,6 +39,7 @@ def update_relay_picking_status(sales_invoice, picking_status, exceptions_note=N
         frappe.throw(_("Relay workflow state DocType is missing. Please run migration."))
 
     invoice_doc = frappe.get_doc("Sales Invoice", sales_invoice)
+    invoice_doc.flags.ignore_permissions = True
     effective_pos_profile = _resolve_relay_workflow_pos_profile(
         invoice_doc, pos_profile, pos_profile_id
     )
@@ -80,6 +81,7 @@ def release_relay_dispatch(sales_invoice, allow_exception_release=0, pos_profile
         frappe.throw(_("Relay workflow state DocType is missing. Please run migration."))
 
     invoice_doc = frappe.get_doc("Sales Invoice", sales_invoice)
+    invoice_doc.flags.ignore_permissions = True
     effective_pos_profile = _resolve_relay_workflow_pos_profile(
         invoice_doc, pos_profile, pos_profile_id
     )

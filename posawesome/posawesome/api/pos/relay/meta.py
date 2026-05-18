@@ -77,7 +77,9 @@ def _get_relay_invoice_by_local_sale_ref(local_sale_ref):
         or ""
     ).strip()
     if sales_invoice and frappe.db.exists("Sales Invoice", sales_invoice):
-        return frappe.get_doc("Sales Invoice", sales_invoice)
+        invoice_doc = frappe.get_doc("Sales Invoice", sales_invoice)
+        invoice_doc.flags.ignore_permissions = True
+        return invoice_doc
     return None
 
 def _set_relay_state_local_sale_ref(state_doc, local_sale_ref):

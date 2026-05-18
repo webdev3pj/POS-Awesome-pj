@@ -42,6 +42,7 @@ def submit_invoice(invoice, data):
         invoice = {}
 
     invoice_doc = frappe.get_doc("Sales Invoice", invoice.get("name"))
+    invoice_doc.flags.ignore_permissions = True
     invoice_doc.update(invoice)
 
     _set_invoice_cashier_attribution(invoice_doc, data=data, invoice_payload=invoice)
@@ -100,6 +101,7 @@ def submit_invoice(invoice, data):
         for row in data.get("customer_credit_dict"):
             if row["type"] == "Advance" and row["credit_to_redeem"]:
                 advance = frappe.get_doc("Payment Entry", row["credit_origin"])
+                advance.flags.ignore_permissions = True
 
                 advance_payment = {
                     "reference_type": "Payment Entry",
@@ -238,6 +240,7 @@ def submit_in_background_job(kwargs):
     payments = kwargs.get("payments")
 
     invoice_doc = frappe.get_doc("Sales Invoice", invoice)
+    invoice_doc.flags.ignore_permissions = True
     invoice_doc.submit()
     redeeming_customer_credit(
         invoice_doc, data, is_payment_entry, total_cash, cash_account, payments

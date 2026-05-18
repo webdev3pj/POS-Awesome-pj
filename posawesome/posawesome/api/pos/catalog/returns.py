@@ -13,7 +13,7 @@ import frappe
 
 
 def search_invoices_for_return(invoice_name, company):
-    invoices_list = frappe.get_list(
+    invoices_list = frappe.get_all(
         "Sales Invoice",
         filters={
             "name": ["like", f"%{invoice_name}%"],
@@ -29,6 +29,7 @@ def search_invoices_for_return(invoice_name, company):
 
     for invoice in invoices_list:
         original = frappe.get_doc("Sales Invoice", invoice["name"])
+        original.flags.ignore_permissions = True
 
         # Get all return invoices for this invoice
         return_invoices = frappe.get_all(
@@ -41,6 +42,7 @@ def search_invoices_for_return(invoice_name, company):
         returned_qty_map = {}
         for ret in return_invoices:
             ret_doc = frappe.get_doc("Sales Invoice", ret.name)
+            ret_doc.flags.ignore_permissions = True
             for item in ret_doc.items:
                 returned_qty_map[item.item_code] = returned_qty_map.get(item.item_code, 0) + abs(item.qty)
 

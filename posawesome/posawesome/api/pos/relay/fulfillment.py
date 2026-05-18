@@ -26,6 +26,7 @@ def get_relay_workflow_state(sales_invoice):
         return {}
 
     invoice_doc = frappe.get_doc("Sales Invoice", sales_invoice)
+    invoice_doc.flags.ignore_permissions = True
     if not _is_relay_workflow_enabled(invoice_doc.pos_profile):
         return {}
 
@@ -37,6 +38,7 @@ def get_relay_fulfillment_detail(sales_invoice, pos_profile=None, pos_profile_id
         return {}
 
     invoice_doc = frappe.get_doc("Sales Invoice", sales_invoice)
+    invoice_doc.flags.ignore_permissions = True
     effective_pos_profile = _resolve_relay_workflow_pos_profile(
         invoice_doc, pos_profile, pos_profile_id
     )

@@ -27,6 +27,7 @@ def update_invoice(data):
 
     if data.get("name"):
         invoice_doc = frappe.get_doc("Sales Invoice", data.get("name"))
+        invoice_doc.flags.ignore_permissions = True
         invoice_doc.update(data)
     else:
         invoice_doc = frappe.get_doc(data)
@@ -38,6 +39,7 @@ def update_invoice(data):
     # Handle returns
     if invoice_doc.is_return and invoice_doc.return_against:
         ref_doc = frappe.get_doc("Sales Invoice", invoice_doc.return_against)
+        ref_doc.flags.ignore_permissions = True
 
         if not ref_doc.update_stock:
             invoice_doc.update_stock = 0

@@ -64,7 +64,7 @@ def search_pos_quotations(
     if quote_name:
         filters["name"] = ["like", f"%{quote_name}%"]
 
-    rows = frappe.get_list(
+    rows = frappe.get_all(
         "Quotation",
         filters=filters,
         fields=["name", "transaction_date", "valid_till"],
@@ -77,7 +77,9 @@ def search_pos_quotations(
         is_stale = 1 if age_days > max_age_days else 0
         if not allow_stale and is_stale:
             continue
-        doc = frappe.get_doc("Quotation", row.get("name")).as_dict()
+        quotation_doc = frappe.get_doc("Quotation", row.get("name"))
+        quotation_doc.flags.ignore_permissions = True
+        doc = quotation_doc.as_dict()
         valid_till = cstr(doc.get("valid_till") or row.get("valid_till") or "")
         is_expired = 1 if (valid_till and getdate(valid_till) < getdate(nowdate())) else 0
         doc["quote_name"] = doc.get("name")

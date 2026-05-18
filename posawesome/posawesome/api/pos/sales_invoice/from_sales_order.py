@@ -13,7 +13,9 @@ def make_or_get_sales_invoice_from_order(sales_order, pos_profile=None, pos_open
         sales_order, pos_profile=pos_profile, pos_opening_shift=pos_opening_shift
     )
     if existing_invoice:
-        return frappe.get_doc("Sales Invoice", existing_invoice).as_dict()
+        invoice_doc = frappe.get_doc("Sales Invoice", existing_invoice)
+        invoice_doc.flags.ignore_permissions = True
+        return invoice_doc.as_dict()
 
     sales_invoice = make_sales_invoice(sales_order, ignore_permissions=True)
     return sales_invoice.as_dict()
@@ -26,6 +28,7 @@ def update_invoice_from_order_data(data):
 
     if data.get("name"):
         invoice_doc = frappe.get_doc("Sales Invoice", data.get("name"))
+        invoice_doc.flags.ignore_permissions = True
         invoice_doc.update(data)
     else:
         data.pop("name", None)

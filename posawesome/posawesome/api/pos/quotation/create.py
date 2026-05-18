@@ -122,6 +122,7 @@ def _get_existing_quotation_payload(relay_quote_fieldname, relay_quote_id):
         return None
 
     existing_doc = frappe.get_doc("Quotation", existing_quote_name)
+    existing_doc.flags.ignore_permissions = True
     existing_valid_till = cstr(existing_doc.get("valid_till") or "")
     existing_is_expired = (
         1 if (existing_valid_till and getdate(existing_valid_till) < getdate(nowdate())) else 0

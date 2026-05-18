@@ -26,6 +26,7 @@ def convert_quotation_to_sales_order_token(
     require_quotation_permission(pos_profile, role)
 
     doc = frappe.get_doc("Quotation", quotation_name)
+    doc.flags.ignore_permissions = True
     validity_days = max(
         1, cint(frappe.get_cached_value("POS Profile", pos_profile, "posa_quotation_validity_days") or 7)
     )
