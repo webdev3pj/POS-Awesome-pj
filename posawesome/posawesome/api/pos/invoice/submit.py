@@ -26,6 +26,8 @@ from posawesome.posawesome.api.pos.invoice.batch import set_batch_nos_for_bundel
 
 from posawesome.posawesome.api.pos.invoice.credit import redeeming_customer_credit
 
+from posawesome.posawesome.api.pos.invoice.document import strip_client_system_fields
+
 from posawesome.posawesome.api.pos.relay.state import _is_relay_workflow_enabled, _upsert_relay_workflow_state
 
 from posawesome.posawesome.api.pos.session.roles import require_operational_role_for_action
@@ -40,6 +42,7 @@ def submit_invoice(invoice, data):
     invoice = json.loads(invoice or "{}")
     if not isinstance(invoice, dict):
         invoice = {}
+    strip_client_system_fields(invoice)
 
     invoice_doc = frappe.get_doc("Sales Invoice", invoice.get("name"))
     invoice_doc.flags.ignore_permissions = True

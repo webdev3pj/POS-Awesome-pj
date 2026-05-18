@@ -22,8 +22,36 @@ from posawesome.posawesome.api.pos.relay.state import _upsert_relay_workflow_sta
 
 
 
+SYSTEM_FIELDS_FROM_CLIENT = {
+    "creation",
+    "modified",
+    "modified_by",
+    "owner",
+    "_user_tags",
+    "_comments",
+    "_assign",
+    "_liked_by",
+    "__last_sync_on",
+    "__unsaved",
+}
+
+
+def strip_client_system_fields(value):
+    if isinstance(value, dict):
+        for fieldname in SYSTEM_FIELDS_FROM_CLIENT:
+            value.pop(fieldname, None)
+        for child in value.values():
+            strip_client_system_fields(child)
+    elif isinstance(value, list):
+        for child in value:
+            strip_client_system_fields(child)
+    return value
+
+
+
 def update_invoice(data):
     data = json.loads(data)
+    strip_client_system_fields(data)
 
     if data.get("name"):
         invoice_doc = frappe.get_doc("Sales Invoice", data.get("name"))
