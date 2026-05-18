@@ -908,6 +908,13 @@ export default {
         async: true,
         callback: function (r) {
           if (r.message) {
+            if (parseInt(r.message.status || 0, 10) !== 1) {
+              evntBus.$emit("show_mesage", {
+                text: __("Invoice {0} is queued for submission.", [r.message.name]),
+                color: "warning",
+              });
+              return;
+            }
             if (parseInt(vm.pos_profile.custom_have_token || 0, 10) === 1) {
               frappe.call({
                 method: "posawesome.posawesome.api.posapp.get_relay_workflow_state",

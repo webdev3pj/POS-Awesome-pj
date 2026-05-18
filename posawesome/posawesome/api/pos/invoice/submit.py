@@ -133,11 +133,14 @@ def submit_invoice(invoice, data):
             update_modified=False,
         )
 
-    if frappe.get_value(
+    has_sales_order = any(cstr(item.get("sales_order") or "").strip() for item in invoice_doc.items)
+    allow_background_submission = frappe.get_value(
         "POS Profile",
         invoice_doc.pos_profile,
         "posa_allow_submissions_in_background_job",
-    ):
+    )
+
+    if allow_background_submission and not has_sales_order:
         invoices_list = frappe.get_all(
             "Sales Invoice",
             filters={
