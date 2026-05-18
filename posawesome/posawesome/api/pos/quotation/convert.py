@@ -15,9 +15,11 @@ def convert_quotation_to_sales_order_token(
     role,
     reprice_preview_fn,
     create_sales_order_token_fn,
+    order_name=None,
 ):
     quotation_name = cstr(quotation_name or "").strip()
     pos_profile = cstr(pos_profile or "").strip()
+    order_name = cstr(order_name or "").strip()
     if not quotation_name:
         frappe.throw(_("Quotation name is required"))
     if not pos_profile:
@@ -46,6 +48,8 @@ def convert_quotation_to_sales_order_token(
             "customer": cstr(doc.get("customer") or doc.get("party_name") or ""),
             "currency": cstr(doc.get("currency") or ""),
             "posting_date": cstr(nowdate()),
+            "order_name": order_name,
+            "posa_order_name": order_name,
             "items": so_items,
             "discount_amount": flt(doc.get("discount_amount") or 0),
             "additional_discount_percentage": flt(doc.get("additional_discount_percentage") or 0),

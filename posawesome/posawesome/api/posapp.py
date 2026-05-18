@@ -225,13 +225,19 @@ def quotation_reprice_preview(quotation_name, pos_profile):
 
 
 @frappe.whitelist()
-def convert_quotation_to_sales_order_token(quotation_name, pos_profile, confirm_reprice=1):
+def convert_quotation_to_sales_order_token(quotation_name, pos_profile, confirm_reprice=1, order_name=None):
     role = session_roles.require_operational_role_for_action(
         ("cline-Sales Associate", "cline-Cashier", "cline-Supervisor"),
         "convert quotation to sales order token",
     )
     return convert_pos_quotation_to_sales_order_token(
-        quotation_name, pos_profile, confirm_reprice, role, quotation_reprice_preview, create_sales_order_token
+        quotation_name,
+        pos_profile,
+        confirm_reprice,
+        role,
+        quotation_reprice_preview,
+        create_sales_order_token,
+        order_name=order_name,
     )
 
 

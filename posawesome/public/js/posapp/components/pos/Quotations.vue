@@ -227,6 +227,8 @@ export default {
           posa_row_id: payload.posa_row_id || `${token.token_id || "TOKEN"}-${idx + 1}`,
           sales_order: token.token_id || "",
           sales_order_name: token.token_id || "",
+          posa_order_name: token.order_name || token.posa_order_name || "",
+          order_name: token.order_name || token.posa_order_name || "",
         };
       });
       const grandTotal = flt(token.grand_total || 0);
@@ -238,6 +240,8 @@ export default {
         token_id: token.token_id || "",
         sales_order: token.token_id || "",
         sales_order_name: token.token_id || "",
+        posa_order_name: token.order_name || token.posa_order_name || "",
+        order_name: token.order_name || token.posa_order_name || "",
         customer: token.customer_id || token.customer_name || "",
         customer_name: token.customer_name || token.customer_id || "",
         company: (this.pos_profile && this.pos_profile.company) || "",
@@ -348,7 +352,11 @@ export default {
         });
       });
     },
-    async convertCloudQuote(row) {
+    promptOrderName() {
+      const value = window.prompt(__("Enter Order Name"));
+      return String(value || "").trim();
+    },
+    async convertCloudQuote(row, orderName) {
       const quoteName = String((row && (row.quote_name || row.name)) || "").trim();
       if (!quoteName) throw new Error(__("Quotation name is missing."));
 
@@ -379,6 +387,7 @@ export default {
           quotation_name: quoteName,
           pos_profile: this.pos_profile.name,
           confirm_reprice: 1,
+          order_name: orderName,
         },
       });
       const converted = (convertResp && convertResp.message) || {};
@@ -387,7 +396,7 @@ export default {
       }
       return converted.sales_order;
     },
-    async convertRelayQuote(row) {
+    async convertRelayQuote(row, orderName) {
       const base = this.get_relay_base_url();
       if (!base) throw new Error(__("Relay URL is not configured."));
       const quoteId = String((row && (row.quote_id || row.name)) || "").trim();
@@ -426,6 +435,7 @@ export default {
           cashier_user_id: (frappe.session && frappe.session.user) || "",
           role: this.getCurrentRole() || "",
           confirm_reprice: 1,
+          order_name: orderName,
         }),
       });
       const convertBody = await convertResp.json().catch(() => ({}));
@@ -453,9 +463,17 @@ export default {
       if (!this.selected.length) return;
       const row = this.selected[0];
       try {
+        const orderName = this.promptOrderName();
+        if (!orderName) {
+          evntBus.$emit("show_mesage", {
+            text: __("Order Name is required to create Sales Order token."),
+            color: "error",
+          });
+          return;
+        }
         const orderDoc = row.relay_offline_quote
-          ? await this.convertRelayQuote(row)
-          : await this.convertCloudQuote(row);
+          ? await this.convertRelayQuote(row, orderName)
+          : await this.convertCloudQuote(row, orderName);
         if (!orderDoc) return;
         evntBus.$emit("load_order", orderDoc);
         this.quotesDialog = false;

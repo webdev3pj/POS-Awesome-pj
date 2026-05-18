@@ -81,10 +81,14 @@ class TestQuotationConvert(FrappeTestCase):
                 role="cline-Cashier",
                 reprice_preview_fn=reprice_preview_fn,
                 create_sales_order_token_fn=create_sales_order_token_fn,
+                order_name="WALKIN-7",
             )
 
         require_permission.assert_called_once_with("POS TEST SA CASHIER", "cline-Cashier")
         create_sales_order_token_fn.assert_called_once()
+        payload = create_sales_order_token_fn.call_args[0][0]
+        self.assertEqual(payload["order_name"], "WALKIN-7")
+        self.assertEqual(payload["posa_order_name"], "WALKIN-7")
         self.assertEqual(token["sales_order_name"], "SO-1")
         self.assertEqual(token["quote_name"], "SAL-QTN-1")
         self.assertEqual(token["quote_valid_till"], "2026-05-20")
