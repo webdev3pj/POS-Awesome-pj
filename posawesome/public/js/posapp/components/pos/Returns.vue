@@ -76,6 +76,7 @@ export default {
     selected: [],
     dialog_data: '',
     company: '',
+    pos_opening_shift: '',
     invoice_name: '',
     headers: [
       {
@@ -121,6 +122,7 @@ export default {
         args: {
           invoice_name: vm.invoice_name,
           company: vm.company,
+          pos_opening_shift: vm.pos_opening_shift,
         },
         async: false,
         callback: function (r) {
@@ -161,7 +163,9 @@ export default {
   created: function () {
     evntBus.$on('open_returns', (data) => {
       this.invoicesDialog = true;
-      this.company = data;
+      this.company = data && data.company ? data.company : data;
+      this.pos_opening_shift =
+        data && data.pos_opening_shift ? data.pos_opening_shift : '';
       this.invoice_name = '';
       this.dialog_data = '';
       this.selected = [];

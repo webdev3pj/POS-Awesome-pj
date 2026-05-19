@@ -10,14 +10,23 @@ import copy
 
 import frappe
 
+from frappe import _
+
+from frappe.utils import cstr
 
 
-def search_invoices_for_return(invoice_name, company):
+
+def search_invoices_for_return(invoice_name, company, pos_opening_shift=None):
+    pos_opening_shift = cstr(pos_opening_shift or "").strip()
+    if not pos_opening_shift:
+        frappe.throw(_("POS Opening Shift is required to search return invoices."))
+
     invoices_list = frappe.get_all(
         "Sales Invoice",
         filters={
             "name": ["like", f"%{invoice_name}%"],
             "company": company,
+            "posa_pos_opening_shift": pos_opening_shift,
             "docstatus": 1,
             "is_return": 0,
         },

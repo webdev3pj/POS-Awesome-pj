@@ -3144,7 +3144,10 @@ export default {
     },
 
     open_returns() {
-      evntBus.$emit("open_returns", this.pos_profile.company);
+      evntBus.$emit("open_returns", {
+        company: this.pos_profile.company,
+        pos_opening_shift: (this.pos_opening_shift && this.pos_opening_shift.name) || "",
+      });
     },
 
     close_payments() {
