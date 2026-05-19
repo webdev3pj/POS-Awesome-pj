@@ -3,6 +3,8 @@ from frappe import _
 from frappe.model.mapper import get_mapped_doc
 from frappe.utils import flt
 
+from posawesome.posawesome.api.pos.invoice.document import apply_pos_profile_tax_inclusive
+
 
 def create_sales_order(doc):
     # Cashier SO to SI flow already links items to a Sales Order.
@@ -46,6 +48,7 @@ def make_sales_order(source_name, target_doc=None, ignore_permissions=True):
         target.ignore_pricing_rule = 1
         target.flags.ignore_permissions = ignore_permissions
         target.run_method("set_missing_values")
+        apply_pos_profile_tax_inclusive(target, source.pos_profile)
         target.run_method("calculate_taxes_and_totals")
 
     def update_item(obj, target, source_parent):

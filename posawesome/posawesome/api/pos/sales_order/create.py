@@ -16,6 +16,7 @@ from frappe.utils import cint, cstr, flt, now_datetime, nowdate
 
 
 
+from posawesome.posawesome.api.pos.invoice.document import apply_pos_profile_tax_inclusive
 from posawesome.posawesome.api.pos.relay.state import _upsert_relay_workflow_state_for_sales_order
 
 from posawesome.posawesome.api.pos.session.roles import require_operational_role_for_action
@@ -149,6 +150,7 @@ def create_sales_order_token(data):
     sales_order_doc.flags.ignore_permissions = True
     frappe.flags.ignore_account_permission = True
     sales_order_doc.run_method("set_missing_values")
+    apply_pos_profile_tax_inclusive(sales_order_doc, pos_profile)
     if hasattr(sales_order_doc, "calculate_taxes_and_totals"):
         sales_order_doc.calculate_taxes_and_totals()
     sales_order_doc.save()
