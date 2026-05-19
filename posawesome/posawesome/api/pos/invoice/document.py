@@ -12,7 +12,7 @@ import frappe
 
 from frappe import _
 
-from frappe.utils import flt, getdate
+from frappe.utils import cstr, flt, getdate
 
 
 
@@ -34,6 +34,23 @@ SYSTEM_FIELDS_FROM_CLIENT = {
     "__last_sync_on",
     "__unsaved",
 }
+
+
+def apply_pos_profile_naming_series(invoice_doc):
+    pos_profile = invoice_doc.get("pos_profile") if hasattr(invoice_doc, "get") else ""
+    if not isinstance(pos_profile, str):
+        pos_profile = ""
+    pos_profile = cstr(pos_profile).strip()
+
+    has_field = getattr(getattr(invoice_doc, "meta", None), "has_field", None)
+    if not pos_profile or not callable(has_field) or not has_field("naming_series"):
+        return
+
+    naming_series = cstr(
+        frappe.get_cached_value("POS Profile", pos_profile, "naming_series") or ""
+    ).strip()
+    if naming_series:
+        invoice_doc.naming_series = naming_series
 
 
 def strip_client_system_fields(value):
@@ -60,7 +77,9 @@ def update_invoice(data):
     else:
         invoice_doc = frappe.get_doc(data)
 
+    apply_pos_profile_naming_series(invoice_doc)
     invoice_doc.set_missing_values()
+    apply_pos_profile_naming_series(invoice_doc)
     invoice_doc.flags.ignore_permissions = True
     frappe.flags.ignore_account_permission = True
 
