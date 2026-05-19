@@ -65,6 +65,7 @@
         <v-card-actions>
           <v-spacer></v-spacer>
           <v-btn color="error" dark @click="close_dialog">{{ __("Close") }}</v-btn>
+          <v-btn v-if="selected.length" color="primary" dark @click="print_selected_quotation">{{ __("Print") }}</v-btn>
           <v-btn v-if="selected.length" color="success" dark @click="submit_dialog">{{ __("Select") }}</v-btn>
         </v-card-actions>
       </v-card>
@@ -458,6 +459,44 @@ export default {
     },
     clearSelected() {
       this.selected = [];
+    },
+    print_selected_quotation() {
+      if (!this.selected.length) return;
+      const row = this.selected[0] || {};
+      if (row.relay_offline_quote) {
+        evntBus.$emit("show_mesage", {
+          text: __("Relay quotations are not available for ERPNext print."),
+          color: "error",
+        });
+        return;
+      }
+      const quoteName = String(row.quote_name || row.name || "").trim();
+      if (!quoteName) {
+        evntBus.$emit("show_mesage", {
+          text: __("Quotation name is missing."),
+          color: "error",
+        });
+        return;
+      }
+
+      const letterHead = this.pos_profile.letter_head || 0;
+      const url =
+        frappe.urllib.get_base_url() +
+        "/printview?doctype=Quotation&name=" +
+        encodeURIComponent(quoteName) +
+        "&trigger_print=1" +
+        "&no_letterhead=" +
+        letterHead;
+      const printWindow = window.open(url, "Print");
+      if (printWindow) {
+        printWindow.addEventListener(
+          "load",
+          function () {
+            printWindow.print();
+          },
+          true
+        );
+      }
     },
     async submit_dialog() {
       if (!this.selected.length) return;
