@@ -57,6 +57,7 @@ def create_pos_quotation_token(data, role):
     )
 
     quotation_doc = frappe.new_doc("Quotation")
+    _apply_pos_profile_quotation_naming_series(quotation_doc, pos_profile)
     quotation_doc.company = company
     quotation_doc.transaction_date = transaction_date
     if quotation_doc.meta.has_field("valid_till"):
@@ -94,6 +95,7 @@ def create_pos_quotation_token(data, role):
     quotation_doc.flags.ignore_permissions = True
     frappe.flags.ignore_account_permission = True
     quotation_doc.run_method("set_missing_values")
+    _apply_pos_profile_quotation_naming_series(quotation_doc, pos_profile)
     if hasattr(quotation_doc, "calculate_taxes_and_totals"):
         quotation_doc.calculate_taxes_and_totals()
     quotation_doc.save()
@@ -110,6 +112,18 @@ def create_pos_quotation_token(data, role):
         "customer": customer,
         "quotation": quotation_doc.as_dict(),
     }
+
+
+def _apply_pos_profile_quotation_naming_series(quotation_doc, pos_profile):
+    pos_profile = cstr(pos_profile or "").strip()
+    if not pos_profile or not quotation_doc.meta.has_field("naming_series"):
+        return
+
+    naming_series = cstr(
+        frappe.get_cached_value("POS Profile", pos_profile, "posa_quotation_naming_series") or ""
+    ).strip()
+    if naming_series:
+        quotation_doc.naming_series = naming_series
 
 
 def _get_existing_quotation_payload(relay_quote_fieldname, relay_quote_id):

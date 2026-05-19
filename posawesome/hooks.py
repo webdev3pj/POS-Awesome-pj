@@ -274,6 +274,7 @@ fixtures = [
                     "POS Profile-custom_discount_enabled",
                     "POS Profile-custom_discount_request",
                     "POS Profile-naming_series",
+                    "POS Profile-posa_quotation_naming_series",
                     "Item-custom_max_commission_rate",
                     "Item-custom_sales_person_max_commission_rate",
                     "Sales Invoice Item-custom_max_commission_rate",
