@@ -867,7 +867,7 @@
               >
             </v-col>
             <v-col
-              v-if="pos_profile.posa_allow_print_draft_invoices"
+              v-if="pos_profile.posa_allow_print_draft_invoices && !is_sales_associate_role"
               cols="6"
               class="pa-1"
             >
@@ -971,12 +971,15 @@ export default {
       );
     },
     show_held_button() {
+      if (this.is_sales_associate_role) return false;
       return !(this.simplified_sa_cashier_ui_enabled && this.is_sales_associate_role);
     },
     show_return_button() {
+      if (this.is_sales_associate_role) return false;
       return !(this.simplified_sa_cashier_ui_enabled && this.is_sales_associate_role);
     },
     show_pay_button() {
+      if (this.is_sales_associate_role) return false;
       return !(this.simplified_sa_cashier_ui_enabled && this.is_sales_associate_role);
     },
     show_order_name_field() {
