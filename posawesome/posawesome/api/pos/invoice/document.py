@@ -53,6 +53,18 @@ def apply_pos_profile_naming_series(invoice_doc):
         invoice_doc.naming_series = naming_series
 
 
+def apply_pos_opening_shift(invoice_doc, pos_opening_shift=None):
+    has_field = getattr(getattr(invoice_doc, "meta", None), "has_field", None)
+    if not callable(has_field) or not has_field("posa_pos_opening_shift"):
+        return
+
+    pos_opening_shift = cstr(
+        pos_opening_shift or invoice_doc.get("posa_pos_opening_shift") or ""
+    ).strip()
+    if pos_opening_shift:
+        invoice_doc.posa_pos_opening_shift = pos_opening_shift
+
+
 def strip_client_system_fields(value):
     if isinstance(value, dict):
         for fieldname in SYSTEM_FIELDS_FROM_CLIENT:
@@ -78,8 +90,10 @@ def update_invoice(data):
         invoice_doc = frappe.get_doc(data)
 
     apply_pos_profile_naming_series(invoice_doc)
+    apply_pos_opening_shift(invoice_doc)
     invoice_doc.set_missing_values()
     apply_pos_profile_naming_series(invoice_doc)
+    apply_pos_opening_shift(invoice_doc)
     invoice_doc.flags.ignore_permissions = True
     frappe.flags.ignore_account_permission = True
 

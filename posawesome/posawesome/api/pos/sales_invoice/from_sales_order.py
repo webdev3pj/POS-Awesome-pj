@@ -7,7 +7,10 @@ import frappe
 from frappe.utils import cstr
 from erpnext.selling.doctype.sales_order.sales_order import make_sales_invoice
 
-from posawesome.posawesome.api.pos.invoice.document import apply_pos_profile_naming_series
+from posawesome.posawesome.api.pos.invoice.document import (
+    apply_pos_opening_shift,
+    apply_pos_profile_naming_series,
+)
 
 
 def make_or_get_sales_invoice_from_order(sales_order, pos_profile=None, pos_opening_shift=None):
@@ -22,6 +25,7 @@ def make_or_get_sales_invoice_from_order(sales_order, pos_profile=None, pos_open
     sales_invoice = make_sales_invoice(sales_order, ignore_permissions=True)
     if pos_profile:
         sales_invoice.pos_profile = pos_profile
+    apply_pos_opening_shift(sales_invoice, pos_opening_shift)
     apply_pos_profile_naming_series(sales_invoice)
     return sales_invoice.as_dict()
 
@@ -39,6 +43,7 @@ def update_invoice_from_order_data(data):
         data.pop("name", None)
         invoice_doc = frappe.get_doc(data)
 
+    apply_pos_opening_shift(invoice_doc)
     apply_pos_profile_naming_series(invoice_doc)
     invoice_doc.flags.ignore_permissions = True
     frappe.flags.ignore_account_permission = True
