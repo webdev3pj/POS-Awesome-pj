@@ -25,6 +25,7 @@ class TestQuotationLookup(FrappeTestCase):
             "posa_allow_stale_sales_order_fetch": 0,
             "posa_stale_sales_order_history_days": 30,
             "posa_quotation_validity_days": 7,
+            "posa_quotation_naming_series": "SAL-QTN-PJ7-.YYYY.-",
         }.get(fieldname)
         get_list.return_value = [
             frappe._dict(
@@ -54,6 +55,10 @@ class TestQuotationLookup(FrappeTestCase):
         self.assertEqual(rows[0].is_stale, 0)
         self.assertEqual(rows[0].is_expired, 0)
         self.assertEqual(rows[0].stale_policy_max_age_days, 7)
+        self.assertEqual(
+            get_list.call_args.kwargs["filters"]["naming_series"],
+            "SAL-QTN-PJ7-.YYYY.-",
+        )
 
     @patch.object(quotation_lookup.frappe, "get_cached_value", return_value=0)
     def test_require_quotation_permission_blocks_disabled_sales_associate(self, _get_cached_value):

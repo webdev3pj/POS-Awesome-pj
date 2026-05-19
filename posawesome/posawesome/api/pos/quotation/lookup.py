@@ -61,6 +61,11 @@ def search_pos_quotations(
     }
     if currency:
         filters["currency"] = currency
+    naming_series = cstr(
+        frappe.get_cached_value("POS Profile", pos_profile, "posa_quotation_naming_series") or ""
+    ).strip()
+    if naming_series:
+        filters["naming_series"] = naming_series
     if quote_name:
         filters["name"] = ["like", f"%{quote_name}%"]
 
