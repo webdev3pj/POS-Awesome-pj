@@ -26,7 +26,10 @@ from posawesome.posawesome.api.pos.invoice.batch import set_batch_nos_for_bundel
 
 from posawesome.posawesome.api.pos.invoice.credit import redeeming_customer_credit
 
-from posawesome.posawesome.api.pos.invoice.document import strip_client_system_fields
+from posawesome.posawesome.api.pos.invoice.document import (
+    apply_pos_profile_tax_inclusive,
+    strip_client_system_fields,
+)
 
 from posawesome.posawesome.api.pos.relay.state import _is_relay_workflow_enabled, _upsert_relay_workflow_state
 
@@ -127,6 +130,7 @@ def submit_invoice(invoice, data):
     invoice_doc.flags.ignore_permissions = True
     frappe.flags.ignore_account_permission = True
     invoice_doc.posa_is_printed = 1
+    apply_pos_profile_tax_inclusive(invoice_doc)
     invoice_doc.save()
 
     if data.get("due_date"):

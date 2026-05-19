@@ -10,6 +10,7 @@ from erpnext.selling.doctype.sales_order.sales_order import make_sales_invoice
 from posawesome.posawesome.api.pos.invoice.document import (
     apply_pos_opening_shift,
     apply_pos_profile_naming_series,
+    apply_pos_profile_tax_inclusive,
 )
 
 
@@ -27,6 +28,7 @@ def make_or_get_sales_invoice_from_order(sales_order, pos_profile=None, pos_open
         sales_invoice.pos_profile = pos_profile
     apply_pos_opening_shift(sales_invoice, pos_opening_shift)
     apply_pos_profile_naming_series(sales_invoice)
+    apply_pos_profile_tax_inclusive(sales_invoice)
     return sales_invoice.as_dict()
 
 
@@ -45,6 +47,7 @@ def update_invoice_from_order_data(data):
 
     apply_pos_opening_shift(invoice_doc)
     apply_pos_profile_naming_series(invoice_doc)
+    apply_pos_profile_tax_inclusive(invoice_doc)
     invoice_doc.flags.ignore_permissions = True
     frappe.flags.ignore_account_permission = True
     invoice_doc.save()

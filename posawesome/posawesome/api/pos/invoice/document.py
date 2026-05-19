@@ -65,6 +65,18 @@ def apply_pos_opening_shift(invoice_doc, pos_opening_shift=None):
         invoice_doc.posa_pos_opening_shift = pos_opening_shift
 
 
+def apply_pos_profile_tax_inclusive(invoice_doc):
+    pos_profile = cstr(invoice_doc.get("pos_profile") or "").strip()
+    if not pos_profile or not invoice_doc.get("taxes"):
+        return
+
+    tax_inclusive = (
+        frappe.get_cached_value("POS Profile", pos_profile, "posa_tax_inclusive") or 0
+    )
+    for tax in invoice_doc.taxes:
+        tax.included_in_print_rate = 1 if tax_inclusive else 0
+
+
 def strip_client_system_fields(value):
     if isinstance(value, dict):
         for fieldname in SYSTEM_FIELDS_FROM_CLIENT:
@@ -147,13 +159,7 @@ def update_invoice(data):
 
         add_taxes_from_tax_template(item, invoice_doc)
 
-    # Tax inclusion flag
-    if frappe.get_cached_value(
-        "POS Profile", invoice_doc.pos_profile, "posa_tax_inclusive"
-    ):
-        if invoice_doc.get("taxes"):
-            for tax in invoice_doc.taxes:
-                tax.included_in_print_rate = 1
+    apply_pos_profile_tax_inclusive(invoice_doc)
 
     # Set posting time if backdated
     today_date = getdate()
