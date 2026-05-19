@@ -2381,6 +2381,61 @@ export default {
       return old_invoice;
     },
 
+    load_quotation(data = {}) {
+      const quoteItems = Array.isArray(data.items) ? data.items : [];
+      if (!quoteItems.length) {
+        evntBus.$emit("show_mesage", {
+          text: __("Quotation items are not available to load."),
+          color: "error",
+        });
+        return;
+      }
+
+      evntBus.$emit("set_customer_readonly", false);
+      evntBus.$emit("set_pos_coupons", []);
+      this.expanded = [];
+      this.posa_offers = [];
+      this.posa_coupons = [];
+      this.return_doc = "";
+      this.invoice_doc = "";
+      this.customer =
+        data.customer || data.party_name || data.customer_name || this.pos_profile.customer;
+      this.items = quoteItems.map((row) => {
+        const qty = flt(row.qty || 0);
+        const rate = flt(row.rate || 0);
+        return {
+          item_code: row.item_code,
+          item_name: row.item_name || row.item_code,
+          description: row.description,
+          qty,
+          uom: row.uom || row.stock_uom,
+          stock_uom: row.stock_uom || row.uom,
+          conversion_factor: flt(row.conversion_factor || 1) || 1,
+          rate,
+          price_list_rate: flt(row.price_list_rate || rate),
+          discount_percentage: flt(row.discount_percentage || 0),
+          discount_amount: flt(row.discount_amount || 0),
+          amount: flt(row.amount || qty * rate),
+          warehouse: row.warehouse || this.pos_profile.warehouse,
+          posa_delivery_date: row.delivery_date || row.posa_delivery_date || "",
+          posa_notes: row.posa_notes || "",
+          posa_row_id: this.makeid(20),
+        };
+      });
+      this.posting_date = frappe.datetime.nowdate();
+      this.discount_amount = flt(data.discount_amount || 0);
+      this.additional_discount_percentage = flt(
+        data.additional_discount_percentage || 0
+      );
+      this.invoiceType = this.pos_profile.posa_default_sales_order
+        ? "Order"
+        : "Invoice";
+      this.invoiceTypes = ["Invoice", "Order"];
+      this.update_items_details(this.items);
+      evntBus.$emit("set_customer", this.customer);
+      evntBus.$emit("fetch_customer_details");
+    },
+
     get_invoice_doc() {
       let doc = {};
       if (this.invoice_doc.name) {
@@ -4362,6 +4417,9 @@ export default {
       this.new_order(data);
       // evntBus.$emit("set_pos_coupons", data.posa_coupons);
     });
+    evntBus.$on("load_quotation", (data) => {
+      this.load_quotation(data);
+    });
     evntBus.$on("set_offers", (data) => {
       this.posOffers = data;
     });
@@ -4406,6 +4464,7 @@ export default {
     evntBus.$off("update_invoice_offers");
     evntBus.$off("update_invoice_coupons");
     evntBus.$off("set_all_items");
+    evntBus.$off("load_quotation");
     evntBus.$off("relay_status_changed");
   },
   created() {

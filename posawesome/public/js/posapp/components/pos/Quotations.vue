@@ -65,7 +65,7 @@
         <v-card-actions>
           <v-spacer></v-spacer>
           <v-btn color="error" dark @click="close_dialog">{{ __("Close") }}</v-btn>
-          <v-btn v-if="selected.length" color="success" dark @click="submit_dialog">{{ __("Convert + Select") }}</v-btn>
+          <v-btn v-if="selected.length" color="success" dark @click="submit_dialog">{{ __("Select") }}</v-btn>
         </v-card-actions>
       </v-card>
     </v-dialog>
@@ -463,27 +463,22 @@ export default {
       if (!this.selected.length) return;
       const row = this.selected[0];
       try {
-        const orderName = this.promptOrderName();
-        if (!orderName) {
+        if (!Array.isArray(row.items) || !row.items.length) {
           evntBus.$emit("show_mesage", {
-            text: __("Order Name is required to create Sales Order token."),
+            text: __("Quotation items are not available to load."),
             color: "error",
           });
           return;
         }
-        const orderDoc = row.relay_offline_quote
-          ? await this.convertRelayQuote(row, orderName)
-          : await this.convertCloudQuote(row, orderName);
-        if (!orderDoc) return;
-        evntBus.$emit("load_order", orderDoc);
+        evntBus.$emit("load_quotation", row);
         this.quotesDialog = false;
         evntBus.$emit("show_mesage", {
-          text: __("Quotation converted to Sales Order token."),
+          text: __("Quotation loaded."),
           color: "success",
         });
       } catch (e) {
         evntBus.$emit("show_mesage", {
-          text: (e && e.message) || __("Quotation conversion failed."),
+          text: (e && e.message) || __("Quotation load failed."),
           color: "error",
         });
       }
