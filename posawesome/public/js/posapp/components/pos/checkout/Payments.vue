@@ -780,25 +780,6 @@ export default {
     pos_settings: "",
     customer_info: "",
     mpesa_modes: [],
-    relay_status: {
-      enabled: false,
-      connected: false,
-      status: "",
-      effective_connected: false,
-      connectivity_mode: "cloud_checked",
-      allow_cloud_fallback_when_relay_down: false,
-      cloud_connected: false,
-      profile_relay_url: "",
-      relay_url: "",
-    },
-    cloud_status: {
-      navigator_online: true,
-      server_online: false,
-      http_status: null,
-      checked_at: "",
-      message: "",
-    },
-    local_sale_ref: "",
     current_role: "",
   }),
 
@@ -819,32 +800,6 @@ export default {
     },
     get_current_role() {
       return resolveCurrentRole();
-    },
-    get_relay_client_headers(extra = {}) {
-      const headers = { ...extra };
-      try {
-        const relayKey = (localStorage.getItem("posa_relay_client_key") || "").trim();
-        if (relayKey) headers["X-Relay-Client-Key"] = relayKey;
-      } catch (e) {}
-      return headers;
-    },
-    get_explicit_token_ref(source = {}) {
-      const doc = this.invoice_doc || {};
-      const line = (
-        (Array.isArray(doc.items)
-          ? doc.items.find((row) => row && row.sales_order)
-          : null) || {}
-      );
-      return String(
-        source.token_id ||
-          source.sales_order ||
-          source.sales_order_name ||
-          doc.token_id ||
-          doc.sales_order ||
-          doc.sales_order_name ||
-          line.sales_order ||
-          ""
-      ).trim();
     },
     block_sales_associate_payment() {
       this.current_role = this.get_current_role();
@@ -872,31 +827,6 @@ export default {
       evntBus.$emit("new_invoice", "false");
       this.back_to_invoice();
     },
-    normalize_relay_url(relayUrl) {
-      return String(relayUrl || "").trim().replace(/\/$/, "");
-    },
-    get_effective_relay_connected() {
-      if (typeof this.relay_status.effective_connected === "boolean") {
-        return this.relay_status.effective_connected;
-      }
-      return !!this.relay_status.connected;
-    },
-    get_relay_base_url() {
-      const raw =
-        (this.relay_status && this.relay_status.profile_relay_url) ||
-        (this.relay_status && this.relay_status.relay_url) ||
-        "";
-      return this.normalize_relay_url(raw);
-    },
-    relay_allows_cloud_fallback_when_down() {
-      if (typeof this.relay_status.allow_cloud_fallback_when_relay_down === "boolean") {
-        return this.relay_status.allow_cloud_fallback_when_relay_down;
-      }
-      return parseInt((this.pos_profile && this.pos_profile.posa_allow_cloud_fallback_when_relay_down) || 0, 10) === 1;
-    },
-    is_cloud_reachable_for_fallback() {
-      return !!(this.cloud_status && this.cloud_status.server_online);
-    },
     submit_invoice_via_cloud(data, print, onSuccess) {
       const vm = this;
       frappe.call({
@@ -915,38 +845,12 @@ export default {
               });
               return;
             }
-            if (parseInt(vm.pos_profile.custom_have_token || 0, 10) === 1) {
-              frappe.call({
-                method: "posawesome.posawesome.api.posapp.get_relay_workflow_state",
-                args: {
-                  sales_invoice: vm.invoice_doc.name,
-                },
-                async: true,
-                callback: function (relayResponse) {
-                  const relay = relayResponse.message || {};
-                  if (relay.token_status) {
-                    evntBus.$emit("show_mesage", {
-                      text: __(
-                        "Relay Queue: Token {0} is {1}, Picking {2}",
-                        [
-                          vm.get_explicit_token_ref(relay) || __("Unknown"),
-                          relay.token_status,
-                          relay.picking_status || "Not Started",
-                        ]
-                      ),
-                      color: "info",
-                    });
-                  }
-                },
-              });
-            }
             if (print) {
               vm.load_print_page();
             }
-            evntBus.$emit("workflow_monitor_refresh_requested");
             evntBus.$emit("set_last_invoice", vm.invoice_doc.name);
             evntBus.$emit("show_mesage", {
-              text: `Invoice ${r.message.name} is Submited`,
+              text: __("Payment successful. Invoice {0} submitted.", [r.message.name]),
               color: "success",
             });
             frappe.utils.play_sound("submit");
@@ -1103,191 +1007,8 @@ export default {
 
       const vm = this;
 
-      const relayEnabled = parseInt(vm.pos_profile.custom_have_token || 0, 10) === 1;
-      const relayBaseUrl = this.get_relay_base_url();
-      const relayConnectedForSubmit = this.get_effective_relay_connected();
-      const allowCloudFallbackWhenRelayDown = relayEnabled && this.relay_allows_cloud_fallback_when_down();
-      const cloudReachable = this.is_cloud_reachable_for_fallback();
-
-      if (relayEnabled && !relayBaseUrl) {
-        evntBus.$emit("show_mesage", {
-          text: __("Relay workflow is enabled but Edge Relay URL is not configured for this POS Profile."),
-          color: "error",
-        });
-        frappe.utils.play_sound("error");
-        return;
-      }
-
-      if (relayEnabled && !relayConnectedForSubmit) {
-        if (allowCloudFallbackWhenRelayDown && cloudReachable) {
-          evntBus.$emit("show_mesage", {
-            text: __("Relay is down. Submitting directly to cloud."),
-            color: "warning",
-          });
-          vm.submit_invoice_via_cloud(data, print, onSuccess);
-          return true;
-        }
-
-        const relayDownBlockMessage =
-          allowCloudFallbackWhenRelayDown && !cloudReachable
-            ? __(
-                "RELAY DOWN and cloud is unreachable. Submit is blocked until relay or cloud connectivity is restored."
-              )
-            : allowCloudFallbackWhenRelayDown
-            ? __(
-                "RELAY DOWN: Offline continuity unavailable, and cloud fallback cannot be used because cloud is not reachable."
-              )
-            : __("RELAY DOWN: Offline continuity unavailable. Submit is blocked until relay is reachable.");
-        evntBus.$emit("show_mesage", {
-          text: relayDownBlockMessage,
-          color: "error",
-        });
-        frappe.utils.play_sound("error");
-        return false;
-      }
-
-      if (relayEnabled && relayBaseUrl) {
-        // Walk-in/default POS customers are valid for relay-backed commits; only block when customer is truly missing.
-        if (!this.invoice_doc.customer) {
-          evntBus.$emit("show_mesage", {
-            text: __("Customer is required before relay-backed commit."),
-            color: "error",
-          });
-          frappe.utils.play_sound("error");
-          return false;
-        }
-        vm.submit_invoice_via_relay(relayBaseUrl, data, print, onSuccess);
-        return true;
-      }
-
       vm.submit_invoice_via_cloud(data, print, onSuccess);
       return true;
-    },
-    submit_invoice_via_relay(relayBaseUrl, data, print, onSuccess) {
-      const vm = this;
-      const base = relayBaseUrl.replace(/\/$/, "");
-      const endpoint = `${base}/relay/commit-invoice`;
-
-      const tokenId = vm.get_explicit_token_ref();
-      if (!tokenId) {
-        evntBus.$emit("show_mesage", {
-          text: __("Token reference missing. Please select the Sales Order/token again."),
-          color: "error",
-        });
-        frappe.utils.play_sound("error");
-        return;
-      }
-      const idempotencyKey = `${
-        vm.invoice_doc.name || "DRAFT"
-      }|${Date.now()}|${Math.random().toString(36).slice(2, 10)}`;
-
-      const deviceId =
-        localStorage.getItem("posa_relay_device_id") ||
-        `POS-${Math.random().toString(36).slice(2, 8).toUpperCase()}`;
-      localStorage.setItem("posa_relay_device_id", deviceId);
-
-      const ensureSession = async () => {
-        const queryUrl = `${base}/relay/session/current?pos_profile_id=${encodeURIComponent(
-          vm.pos_profile.name
-        )}&cashier_user_id=${encodeURIComponent(frappe.session.user)}&device_id=${encodeURIComponent(
-          deviceId
-        )}`;
-        try {
-          const currentResp = await fetch(queryUrl, {
-            method: "GET",
-            headers: vm.get_relay_client_headers({
-              Accept: "application/json",
-            }),
-          });
-          const currentPayload = await currentResp.json();
-          if (currentResp.ok && currentPayload.ok && currentPayload.session) {
-            return currentPayload.session.session_id;
-          }
-        } catch (e) {
-          // continue to open session
-        }
-
-        const openResp = await fetch(`${base}/relay/session/open`, {
-          method: "POST",
-          headers: vm.get_relay_client_headers({
-            "Content-Type": "application/json",
-          }),
-          body: JSON.stringify({
-            pos_profile_id: vm.pos_profile.name,
-            cashier_user_id: frappe.session.user,
-            device_id: deviceId,
-            role: vm.current_role || "",
-          }),
-        });
-        const openPayload = await openResp.json();
-        if (!openResp.ok || !openPayload.ok || !openPayload.session) {
-          throw new Error(openPayload.message || "Unable to open cashier relay session");
-        }
-        return openPayload.session.session_id;
-      };
-
-      ensureSession()
-        .then((cashierSessionId) => {
-          return fetch(endpoint, {
-            method: "POST",
-            headers: vm.get_relay_client_headers({
-              "Content-Type": "application/json",
-            }),
-            body: JSON.stringify({
-              token_id: tokenId,
-              idempotency_key: idempotencyKey,
-              pos_profile_id: vm.pos_profile.name,
-              cashier_user_id: frappe.session.user,
-              cashier_session_id: cashierSessionId,
-              device_id: deviceId,
-              role: vm.current_role || "",
-              invoice: vm.invoice_doc,
-              data: data,
-            }),
-          });
-        })
-        .then(async (response) => {
-          let payload = {};
-          try {
-            payload = await response.json();
-          } catch (e) {
-            payload = {};
-          }
-
-          if (!response.ok || !payload.ok) {
-            throw new Error(payload.message || payload.code || "Relay commit failed");
-          }
-
-          vm.local_sale_ref = payload.local_sale_ref || "";
-
-          if (print) {
-            vm.load_print_page();
-          }
-
-          evntBus.$emit("workflow_monitor_refresh_requested");
-          evntBus.$emit("set_last_invoice", vm.invoice_doc.name || "Queued");
-          evntBus.$emit("show_mesage", {
-            text: __(
-              "Sale committed locally. Local Sale Ref: {0}. Cloud sync will happen from relay.",
-              [payload.local_sale_ref || "-"]
-            ),
-            color: "success",
-          });
-          frappe.utils.play_sound("submit");
-          if (onSuccess) {
-            onSuccess();
-          }
-        })
-        .catch((error) => {
-          evntBus.$emit("show_mesage", {
-            text: __(
-              "Edge Relay commit failed: {0}. Direct cloud fallback is disabled for relay-enabled profiles.",
-              [error.message || "Unknown error"]
-            ),
-            color: "error",
-          });
-          frappe.utils.play_sound("error");
-        });
     },
     set_full_amount(idx) {
       this.invoice_doc.payments.forEach((payment) => {
@@ -1823,36 +1544,6 @@ export default {
         this.current_role = this.get_current_role();
         this.get_mpesa_modes();
       });
-      evntBus.$on("relay_status_changed", (statusPayload) => {
-        this.relay_status = {
-          enabled: !!statusPayload.enabled,
-          connected: !!statusPayload.connected,
-          status: statusPayload.status || "",
-          effective_connected:
-            typeof statusPayload.effective_connected === "boolean"
-              ? !!statusPayload.effective_connected
-              : !!statusPayload.connected,
-          connectivity_mode: statusPayload.connectivity_mode || "cloud_checked",
-          allow_cloud_fallback_when_relay_down: !!statusPayload.allow_cloud_fallback_when_relay_down,
-          cloud_connected:
-            typeof statusPayload.cloud_connected === "boolean"
-              ? !!statusPayload.cloud_connected
-              : !!statusPayload.connected,
-          profile_relay_url: statusPayload.profile_relay_url || "",
-          relay_url: statusPayload.relay_url || "",
-        };
-      });
-      evntBus.$on("cloud_status_changed", (payload) => {
-        const cloudPayload = payload && typeof payload === "object" ? payload : {};
-        this.cloud_status = {
-          navigator_online:
-            typeof cloudPayload.navigator_online === "boolean" ? !!cloudPayload.navigator_online : true,
-          server_online: !!cloudPayload.server_online,
-          http_status: cloudPayload.http_status || null,
-          checked_at: cloudPayload.checked_at || "",
-          message: cloudPayload.message || "",
-        };
-      });
       evntBus.$on("add_the_new_address", (data) => {
         this.addresses.push(data);
         this.$forceUpdate();
@@ -1896,8 +1587,6 @@ export default {
     evntBus.$off("set_customer_info_to_edit");
     evntBus.$off("update_invoice_coupons");
     evntBus.$off("set_mpesa_payment");
-    evntBus.$off("relay_status_changed");
-    evntBus.$off("cloud_status_changed");
   },
 
   destroyed() {
