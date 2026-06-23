@@ -848,7 +848,7 @@ export default {
             if (print) {
               vm.load_print_page();
             }
-            evntBus.$emit("set_last_invoice", vm.invoice_doc.name);
+            evntBus.$emit("set_last_invoice", r.message.name);
             evntBus.$emit("show_mesage", {
               text: __("Payment successful. Invoice {0} submitted.", [r.message.name]),
               color: "success",

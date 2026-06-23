@@ -149,7 +149,7 @@ def submit_invoice(invoice, data):
         "posa_allow_submissions_in_background_job",
     )
 
-    if allow_background_submission and not has_sales_order:
+    if allow_background_submission and not has_sales_order and not invoice_doc.is_return:
         invoices_list = frappe.get_all(
             "Sales Invoice",
             filters={
