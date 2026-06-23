@@ -7,3 +7,4 @@ posawesome.patches.v2026_05_12_add_pos_role_workflow_fields
 posawesome.patches.v2026_05_12_add_pos_order_lookup_fields
 posawesome.patches.v2026_05_12_add_quotation_relay_field
 posawesome.patches.v2026_05_12_group_pos_profile_relay_fields
+posawesome.patches.v2026_06_23_provision_sa_cashier_flow #1

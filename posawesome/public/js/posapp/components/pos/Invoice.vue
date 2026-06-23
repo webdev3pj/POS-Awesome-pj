@@ -983,10 +983,12 @@ export default {
       return !(this.simplified_sa_cashier_ui_enabled && this.is_sales_associate_role);
     },
     show_order_name_field() {
-      return this.token_workflow_enabled && this.is_sales_associate_role;
+      return this.token_workflow_enabled && this.invoiceType === "Order";
     },
     save_new_label() {
-      return this.token_workflow_enabled ? __("Save Order") : __("Save/New");
+      return this.token_workflow_enabled && this.invoiceType === "Order"
+        ? __("Save Order")
+        : __("Save/New");
     },
     can_use_quotation_actions() {
       if (!this.token_workflow_enabled) return false;
@@ -1157,7 +1159,7 @@ export default {
     },
     handle_save_new() {
       this.current_role = this.get_current_role();
-      if (this.is_sales_associate_role) {
+      if (this.token_workflow_enabled && this.invoiceType === "Order") {
         return this.save_sales_order_token_and_reset();
       }
       return this.new_invoice();
