@@ -82,22 +82,22 @@
 
 <script>
 import { evntBus } from '../../bus';
-import ItemsSelector from './ItemsSelector.vue';
-import Invoice from './Invoice.vue';
-import OpeningDialog from './OpeningDialog.vue';
-import Payments from './Payments.vue';
-import PosOffers from './PosOffers.vue';
-import PosCoupons from './PosCoupons.vue';
-import Drafts from './Drafts.vue';
-import SalesOrders from "./SalesOrders.vue";
-import Quotations from "./Quotations.vue";
-import ClosingDialog from './ClosingDialog.vue';
-import NewAddress from './NewAddress.vue';
-import Variants from './Variants.vue';
-import Returns from './Returns.vue';
-import MpesaPayments from './Mpesa-Payments.vue';
-import WorkflowTicketRail from './WorkflowTicketRail.vue';
-import FulfillmentWorkspace from './FulfillmentWorkspace.vue';
+import ItemsSelector from './catalog/ItemsSelector.vue';
+import Invoice from './checkout/Invoice.vue';
+import OpeningDialog from './dialogs/OpeningDialog.vue';
+import Payments from './checkout/Payments.vue';
+import PosOffers from './catalog/PosOffers.vue';
+import PosCoupons from './catalog/PosCoupons.vue';
+import Drafts from './documents/Drafts.vue';
+import SalesOrders from "./documents/SalesOrders.vue";
+import Quotations from "./documents/Quotations.vue";
+import ClosingDialog from './dialogs/ClosingDialog.vue';
+import NewAddress from './checkout/customer/NewAddress.vue';
+import Variants from './catalog/Variants.vue';
+import Returns from './documents/Returns.vue';
+import MpesaPayments from './checkout/Mpesa-Payments.vue';
+import WorkflowTicketRail from './workflow/WorkflowTicketRail.vue';
+import FulfillmentWorkspace from './fulfillment/FulfillmentWorkspace.vue';
 import { resolveCurrentRole } from '../../utils/posRole';
 
 export default {

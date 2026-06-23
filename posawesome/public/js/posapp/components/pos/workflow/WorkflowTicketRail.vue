@@ -104,9 +104,9 @@
 </template>
 
 <script>
-import { evntBus } from '../../bus';
-import WorkflowTicketRow from './workflow/WorkflowTicketRow.vue';
-import { workflowStatusColor } from './workflow/workflowDisplay';
+import { evntBus } from '../../../bus';
+import WorkflowTicketRow from './WorkflowTicketRow.vue';
+import { workflowStatusColor } from './workflowDisplay';
 
 export default {
   components: {

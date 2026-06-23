@@ -48,8 +48,8 @@
 </template>
 
 <script>
-import { evntBus } from '../../bus';
-import format from '../../format';
+import { evntBus } from '../../../bus';
+import format from '../../../format';
 export default {
   // props: ["draftsDialog"],
   mixins: [format],

@@ -537,9 +537,9 @@
 </template>
 
 <script>
-import { evntBus } from "../../bus";
-import format from "../../format";
-import { resolveCurrentRole } from "../../utils/posRole";
+import { evntBus } from "../../../bus";
+import format from "../../../format";
+import { resolveCurrentRole } from "../../../utils/posRole";
 
 export default {
   name: "FulfillmentWorkspace",

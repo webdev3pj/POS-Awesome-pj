@@ -130,9 +130,9 @@
 </template>
 
 <script>
-import { evntBus } from '../../bus';
-import format from '../../format';
-import { OPERATIONAL_ROLES, resolveCurrentRole, setAdminTestRole } from '../../utils/posRole';
+import { evntBus } from '../../../bus';
+import format from '../../../format';
+import { OPERATIONAL_ROLES, resolveCurrentRole, setAdminTestRole } from '../../../utils/posRole';
 export default {
   mixins: [format],
   props: ['dialog'],

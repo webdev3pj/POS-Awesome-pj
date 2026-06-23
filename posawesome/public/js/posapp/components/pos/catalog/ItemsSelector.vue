@@ -171,8 +171,8 @@
 </template>
 
 <script>
-import { evntBus } from "../../bus";
-import format from "../../format";
+import { evntBus } from "../../../bus";
+import format from "../../../format";
 import _ from "lodash";
 export default {
   mixins: [format],

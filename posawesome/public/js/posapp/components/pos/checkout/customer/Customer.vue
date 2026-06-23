@@ -59,7 +59,7 @@
 </template>
 
 <script>
-import { evntBus } from '../../bus';
+import { evntBus } from '../../../../bus';
 import UpdateCustomer from './UpdateCustomer.vue';
 export default {
   data: () => ({

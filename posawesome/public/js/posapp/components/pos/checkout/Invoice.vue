@@ -888,10 +888,10 @@
 </template>
 
 <script>
-import { evntBus } from "../../bus";
-import format from "../../format";
-import Customer from "./Customer.vue";
-import { resolveCurrentRole } from "../../utils/posRole";
+import { evntBus } from "../../../bus";
+import format from "../../../format";
+import Customer from "./customer/Customer.vue";
+import { resolveCurrentRole } from "../../../utils/posRole";
 import salesOrderTokenFlow from "./flows/salesOrderTokenFlow";
 import quotationFlow from "./flows/quotationFlow";
 

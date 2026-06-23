@@ -77,7 +77,7 @@
 </template>
 
 <script>
-import { evntBus } from '../../bus';
+import { evntBus } from '../../../../bus';
 export default {
   data: () => ({
     addressDialog: false,

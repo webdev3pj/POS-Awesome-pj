@@ -341,8 +341,8 @@
 <script>
 import { evntBus } from "../../bus";
 import format from "../../format";
-import Customer from "../pos/Customer.vue";
-import UpdateCustomer from "../pos/UpdateCustomer.vue";
+import Customer from "../pos/checkout/customer/Customer.vue";
+import UpdateCustomer from "../pos/checkout/customer/UpdateCustomer.vue";
 
 export default {
   mixins: [format],
