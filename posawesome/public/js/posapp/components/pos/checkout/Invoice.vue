@@ -1504,6 +1504,34 @@ export default {
       evntBus.$emit("fetch_customer_details");
     },
 
+    get_order_delivery_date_from_items(items = []) {
+      const dates = (items || [])
+        .map((item) => String(item.posa_delivery_date || item.delivery_date || "").trim())
+        .filter(Boolean);
+      if (!dates.length) return "";
+
+      return dates.sort((left, right) => {
+        const leftTime = Date.parse(left);
+        const rightTime = Date.parse(right);
+        if (!Number.isNaN(leftTime) && !Number.isNaN(rightTime)) {
+          return leftTime - rightTime;
+        }
+        return left.localeCompare(right);
+      })[0];
+    },
+
+    set_order_delivery_date_from_items(doc = {}) {
+      if (!doc || doc.posa_delivery_date || this.invoiceType !== "Order") {
+        return doc;
+      }
+
+      const deliveryDate = this.get_order_delivery_date_from_items(doc.items || this.items);
+      if (deliveryDate) {
+        doc.posa_delivery_date = deliveryDate;
+      }
+      return doc;
+    },
+
     get_invoice_doc() {
       let doc = {};
       if (this.invoice_doc.name) {
@@ -1534,6 +1562,7 @@ export default {
       doc.posa_delivery_charges = this.selcted_delivery_charges.name;
       doc.posa_delivery_charges_rate = this.delivery_charges_rate || 0;
       doc.posting_date = this.posting_date;
+      this.set_order_delivery_date_from_items(doc);
       return doc;
     },
 
@@ -1644,6 +1673,7 @@ export default {
       doc.update_stock = 1;
       doc.is_pos = 1;
       doc.payments = this.get_payments();
+      this.set_order_delivery_date_from_items(doc);
       return doc;
     },
 
@@ -1838,7 +1868,9 @@ export default {
         return;
       }
       if (this.invoice_doc.doctype == "Sales Order") {
-        const invoice_doc = await this.process_invoice_from_order();
+        const invoice_doc = this.set_order_delivery_date_from_items(
+          await this.process_invoice_from_order()
+        );
         evntBus.$emit("show_payment", "true");
         evntBus.$emit("send_invoice_doc_payment", invoice_doc);
       } else if (this.invoice_doc.doctype == "Sales Invoice") {
@@ -1859,17 +1891,19 @@ export default {
           },
         });
         if (sales_invoice_item_doc.sales_order) {
-          const invoice_doc = await this.process_invoice_from_order();
+          const invoice_doc = this.set_order_delivery_date_from_items(
+            await this.process_invoice_from_order()
+          );
           evntBus.$emit("show_payment", "true");
           evntBus.$emit("send_invoice_doc_payment", invoice_doc);
         } else {
           evntBus.$emit("show_payment", "true");
-          const invoice_doc = this.process_invoice();
+          const invoice_doc = this.set_order_delivery_date_from_items(this.process_invoice());
           evntBus.$emit("send_invoice_doc_payment", invoice_doc);
         }
       } else {
         evntBus.$emit("show_payment", "true");
-        const invoice_doc = this.process_invoice();
+        const invoice_doc = this.set_order_delivery_date_from_items(this.process_invoice());
         evntBus.$emit("send_invoice_doc_payment", invoice_doc);
       }
     },
