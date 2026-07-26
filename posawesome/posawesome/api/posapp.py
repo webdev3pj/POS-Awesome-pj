@@ -6,7 +6,7 @@ from __future__ import unicode_literals
 import json
 import frappe
 import copy
-from frappe.utils import nowdate, flt, cstr, getdate
+from frappe.utils import add_days, cint, date_diff, nowdate, flt, cstr, getdate
 from frappe import _
 from erpnext.accounts.doctype.sales_invoice.sales_invoice import get_bank_cash_account
 from erpnext.stock.get_item_details import get_item_details
@@ -911,22 +911,200 @@ def get_available_credit(customer, company):
 
 
 @frappe.whitelist()
-def get_draft_invoices(pos_opening_shift):
+def get_draft_invoices(
+    pos_opening_shift=None, pos_profile=None, search_value=None, days_back=14
+):
+    pos_profile = _resolve_draft_pos_profile(pos_opening_shift, pos_profile)
+    days_back = min(max(cint(days_back) or 14, 1), 14)
+
+    filters = {
+        "pos_profile": pos_profile,
+        "docstatus": 0,
+        "posa_is_printed": 0,
+        "posting_date": [">=", add_days(nowdate(), -days_back)],
+    }
+
+    or_filters = []
+    if search_value:
+        search = "%{0}%".format(cstr(search_value).strip())
+        or_filters = [
+            ["Sales Invoice", "name", "like", search],
+            ["Sales Invoice", "customer", "like", search],
+            ["Sales Invoice", "customer_name", "like", search],
+        ]
+
     invoices_list = frappe.get_list(
         "Sales Invoice",
-        filters={
-            "posa_pos_opening_shift": pos_opening_shift,
-            "docstatus": 0,
-            "posa_is_printed": 0,
-        },
+        filters=filters,
+        or_filters=or_filters,
         fields=["name"],
         limit_page_length=0,
-        order_by="modified desc",
+        order_by="posting_date desc, modified desc",
     )
+
     data = []
     for invoice in invoices_list:
-        data.append(frappe.get_cached_doc("Sales Invoice", invoice["name"]))
+        invoice_doc = frappe.get_doc("Sales Invoice", invoice["name"])
+        _reprice_draft_invoice_for_recall(invoice_doc)
+
+        row = invoice_doc.as_dict()
+        row["posa_held_age_days"] = date_diff(nowdate(), row.get("posting_date"))
+        data.append(row)
+
     return data
+
+
+def _resolve_draft_pos_profile(pos_opening_shift=None, pos_profile=None):
+    pos_profile = cstr(pos_profile).strip()
+    shift_profile = None
+
+    if pos_opening_shift:
+        shift_profile = frappe.db.get_value(
+            "POS Opening Shift", pos_opening_shift, "pos_profile"
+        )
+
+    if pos_profile and shift_profile and pos_profile != shift_profile:
+        frappe.throw(_("Opening shift does not belong to POS Profile {0}").format(pos_profile))
+
+    pos_profile = pos_profile or shift_profile
+    if not pos_profile:
+        frappe.throw(_("POS Profile is required to fetch held invoices"))
+
+    return pos_profile
+
+
+def _get_effective_invoice_price_list(invoice_doc):
+    if invoice_doc.get("selling_price_list"):
+        return invoice_doc.selling_price_list
+
+    if invoice_doc.get("pos_profile"):
+        return frappe.db.get_value(
+            "POS Profile", invoice_doc.pos_profile, "selling_price_list"
+        )
+
+    return None
+
+
+def _reprice_draft_invoice_for_recall(invoice_doc):
+    price_list = _get_effective_invoice_price_list(invoice_doc)
+    if not price_list:
+        return invoice_doc
+
+    for item in invoice_doc.get("items", []):
+        if not item.get("item_code"):
+            continue
+
+        _reprice_draft_invoice_item(invoice_doc, item, price_list)
+
+    try:
+        invoice_doc.flags.ignore_permissions = True
+        invoice_doc.set_missing_values()
+        invoice_doc.calculate_taxes_and_totals()
+    except Exception:
+        frappe.log_error(
+            frappe.get_traceback(),
+            _("Failed to recalculate held invoice {0}").format(invoice_doc.name),
+        )
+
+    return invoice_doc
+
+
+def _reprice_draft_invoice_item(invoice_doc, item, price_list):
+    selected_uom = item.get("uom") or item.get("stock_uom")
+    conversion_factor = _get_uom_conversion_factor(item.item_code, selected_uom)
+    if not conversion_factor:
+        conversion_factor = item.get("conversion_factor") or 1
+
+    args = frappe._dict(
+        {
+            "item_code": item.item_code,
+            "customer": invoice_doc.customer,
+            "doctype": "Sales Invoice",
+            "company": invoice_doc.company,
+            "conversion_rate": invoice_doc.get("conversion_rate") or 1,
+            "qty": item.get("qty") or 0,
+            "price_list_rate": item.get("price_list_rate") or 0,
+            "conversion_factor": conversion_factor,
+            "child_docname": item.get("name"),
+            "cost_center": item.get("cost_center"),
+            "currency": invoice_doc.currency,
+            "pos_profile": invoice_doc.pos_profile,
+            "uom": selected_uom,
+            "stock_uom": item.get("stock_uom"),
+            "tax_category": invoice_doc.get("tax_category"),
+            "transaction_type": "selling",
+            "update_stock": invoice_doc.get("update_stock"),
+            "selling_price_list": price_list,
+            "price_list": price_list,
+            "warehouse": item.get("warehouse") or invoice_doc.get("set_warehouse"),
+            "has_batch_no": item.get("has_batch_no"),
+            "serial_no": item.get("serial_no"),
+            "batch_no": item.get("batch_no"),
+            "is_stock_item": item.get("is_stock_item"),
+        }
+    )
+
+    try:
+        details = get_item_details(args, invoice_doc.as_dict(), overwrite_warehouse=False)
+    except Exception:
+        frappe.log_error(
+            frappe.get_traceback(),
+            _("Failed to reprice held invoice item {0}").format(item.item_code),
+        )
+        return
+
+    current_price = details.get("price_list_rate")
+    if current_price is None:
+        current_price = details.get("rate")
+
+    if current_price is not None:
+        item.price_list_rate = flt(current_price)
+
+    item.uom = selected_uom
+    item.conversion_factor = flt(
+        details.get("conversion_factor") or conversion_factor or item.get("conversion_factor") or 1
+    )
+
+    if details.get("has_pricing_rule"):
+        item.rate = flt(details.get("rate") or item.price_list_rate)
+        item.discount_percentage = flt(details.get("discount_percentage"))
+        item.discount_amount = flt(details.get("discount_amount"))
+    elif flt(item.get("discount_percentage")):
+        item.rate = flt(
+            item.price_list_rate
+            - ((item.price_list_rate * flt(item.discount_percentage)) / 100)
+        )
+        item.discount_amount = flt(item.price_list_rate - item.rate)
+    elif flt(item.get("discount_amount")):
+        item.rate = flt(item.price_list_rate - flt(item.discount_amount))
+        if item.price_list_rate:
+            item.discount_percentage = flt(
+                (flt(item.discount_amount) * 100) / item.price_list_rate
+            )
+    else:
+        item.rate = flt(details.get("rate") or item.price_list_rate)
+        item.discount_percentage = 0
+        item.discount_amount = 0
+
+    item.stock_qty = flt(item.get("qty")) * flt(item.conversion_factor)
+    item.amount = flt(item.get("qty")) * flt(item.rate)
+    item.base_rate = flt(item.rate) * flt(invoice_doc.get("conversion_rate") or 1)
+    item.base_amount = flt(item.amount) * flt(invoice_doc.get("conversion_rate") or 1)
+
+
+def _get_uom_conversion_factor(item_code, uom):
+    if not item_code or not uom:
+        return None
+
+    stock_uom = frappe.db.get_value("Item", item_code, "stock_uom")
+    if stock_uom and stock_uom == uom:
+        return 1
+
+    return frappe.db.get_value(
+        "UOM Conversion Detail",
+        {"parent": item_code, "uom": uom},
+        "conversion_factor",
+    )
 
 
 @frappe.whitelist()

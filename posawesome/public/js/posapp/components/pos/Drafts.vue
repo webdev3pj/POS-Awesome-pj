@@ -14,10 +14,21 @@
           <v-container>
             <v-row no-gutters>
               <v-col cols="12" class="pa-1">
+                <v-text-field
+                  v-model="draftSearch"
+                  :label="__('Search held invoices')"
+                  prepend-inner-icon="mdi-magnify"
+                  clearable
+                  dense
+                  outlined
+                  hide-details
+                  class="mb-2"
+                ></v-text-field>
                 <template>
                   <v-data-table
                     :headers="headers"
                     :items="dialog_data"
+                    :search="draftSearch"
                     item-key="name"
                     class="elevation-1"
                     :single-select="singleSelect"
@@ -30,6 +41,9 @@
                     <template v-slot:item.grand_total="{ item }">
                       {{ currencySymbol(item.currency) }}
                       {{ formtCurrency(item.grand_total) }}
+                    </template>
+                    <template v-slot:item.posa_held_age_days="{ item }">
+                      {{ item.posa_held_age_days || 0 }}
                     </template>
                   </v-data-table>
                 </template>
@@ -57,7 +71,8 @@ export default {
     draftsDialog: false,
     singleSelect: true,
     selected: [],
-    dialog_data: {},
+    draftSearch: '',
+    dialog_data: [],
     headers: [
       {
         text: __('Customer'),
@@ -84,6 +99,12 @@ export default {
         sortable: true,
       },
       {
+        text: __('Age'),
+        value: 'posa_held_age_days',
+        align: 'end',
+        sortable: true,
+      },
+      {
         text: __('Amount'),
         value: 'grand_total',
         align: 'end',
@@ -95,19 +116,23 @@ export default {
   methods: {
     close_dialog() {
       this.draftsDialog = false;
+      this.selected = [];
     },
 
     submit_dialog() {
       if (this.selected.length > 0) {
         evntBus.$emit('load_invoice', this.selected[0]);
         this.draftsDialog = false;
+        this.selected = [];
       }
     },
   },
   created: function () {
     evntBus.$on('open_drafts', (data) => {
       this.draftsDialog = true;
-      this.dialog_data = data;
+      this.selected = [];
+      this.draftSearch = '';
+      this.dialog_data = Array.isArray(data) ? data : [];
     });
   },
 };

@@ -1742,6 +1742,8 @@ export default {
         method: "posawesome.posawesome.api.posapp.get_draft_invoices",
         args: {
           pos_opening_shift: this.pos_opening_shift.name,
+          pos_profile: this.pos_profile.name,
+          days_back: 14,
         },
         async: false,
         callback: function (r) {
