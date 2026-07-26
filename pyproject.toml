@@ -1,0 +1,26 @@
+[build-system]
+requires = ["setuptools>=61.0", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "posawesome"
+authors = [
+    { name = "Yousef Restom", email = "youssef@totrox.com" },
+]
+description = "POS Awesome"
+readme = "README.md"
+requires-python = ">=3.10"
+dynamic = ["version", "dependencies"]
+
+[tool.setuptools]
+packages = { find = {} }
+include-package-data = true
+zip-safe = false
+
+[tool.setuptools.dynamic]
+version = { attr = "posawesome.__version__" }
+dependencies = { file = ["requirements.txt"] }
+
+[tool.bench.frappe-dependencies]
+frappe = ">=14.0.0,<15.0.0"
+erpnext = ">=14.0.0,<15.0.0"
